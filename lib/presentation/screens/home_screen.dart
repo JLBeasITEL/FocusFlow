@@ -1,3 +1,4 @@
+import 'package:app_tareas/presentation/screens/gestor_rutinas_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -7,46 +8,92 @@ import '../../models/tarea.dart';
 import '../widgets/add_tarea_modal.dart';
 import '../../providers/rutina_provider.dart';
 import '../widgets/rutina_card.dart';
-import '../widgets/add_rutina_modal.dart';
+import 'rutina_form_screen.dart';
 
-class HomeScreen extends ConsumerWidget {
+// 1. Transformación a ConsumerStatefulWidget para manejar estado interno
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
-  // --- DEGRADADOS Y FONDOS ---
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  int _currentIndex = 0; // Rastreador de la pestaña actual
+
+  @override
+  void initState() {
+    super.initState();
+    // 2. Inicialización del controlador con el TickerProvider
+    _tabController = TabController(length: 2, vsync: this);
+    
+    // Escuchador de la animación para cambios instantáneos al deslizar
+    _tabController.animation?.addListener(() {
+      final int proximoIndex = _tabController.animation!.value.round();
+      if (_currentIndex != proximoIndex) {
+        setState(() {
+          _currentIndex = proximoIndex;
+        });
+      }
+    });
+
+    // Escuchador extra para asegurar cambios al hacer clic en los nombres de las pestañas
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        if (_currentIndex != _tabController.index) {
+          setState(() {
+            _currentIndex = _tabController.index;
+          });
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  // --- MÉTODOS DE ESTILO (DEGRADADOS Y COLORES) ---
   Gradient _getDegradadoFondo(TemaApp tema) {
-    if (tema == TemaApp.clasico) {
-      // Fondo blanco puro para el tema original
-      return const LinearGradient(
-        colors: [Colors.white, Colors.white] 
-      );
-    } else if (tema == TemaApp.brisaMarina) {
+    if (tema == TemaApp.clasico) return const LinearGradient(colors: [Colors.white, Colors.white]);
+    if (tema == TemaApp.brisaMarina) {
       return const LinearGradient(
         begin: Alignment.topCenter, end: Alignment.bottomCenter, 
         colors: [Color(0xFFF0F8FF), Color(0xFF9FB8D0)]
       );
-    } else if (tema == TemaApp.atardecerMinimalista) {
+    }
+    if (tema == TemaApp.atardecerMinimalista) {
       return const LinearGradient(
         begin: Alignment.topCenter, end: Alignment.bottomCenter, 
         colors: [Color(0xFFFFF9F5), Color(0xFFE5B270)]
       );
     }
-    // Zen Clásico
     return const LinearGradient(
       begin: Alignment.topCenter, end: Alignment.bottomCenter, 
       colors: [Color(0xFFF2F7F2), Color(0xFF8BA888)]
     );
   }
 
-  // --- COLORES PRINCIPALES ---
   Color _getColorPrincipal(TemaApp tema) {
-    if (tema == TemaApp.clasico) return Colors.black87; // Negro original
+    if (tema == TemaApp.clasico) return Colors.black87; 
     if (tema == TemaApp.brisaMarina) return const Color(0xFF1E3A8A); 
     if (tema == TemaApp.atardecerMinimalista) return const Color(0xFFC05621); 
     return const Color(0xFF276749); 
   }
 
+  // --- COLOR SÓLIDO PARA LA BARRA SUPERIOR ---
+  Color _getColorFondoAppBar(TemaApp tema) {
+    if (tema == TemaApp.clasico) return Colors.white;
+    if (tema == TemaApp.brisaMarina) return const Color(0xFFF0F8FF);
+    if (tema == TemaApp.atardecerMinimalista) return const Color(0xFFFFF9F5);
+    return const Color(0xFFF2F7F2); // Zen
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final tareasOriginales = ref.watch(tareaProvider);
     final tipoOrden = ref.watch(ordenProvider);
     final temaActual = ref.watch(temaProvider);
@@ -74,176 +121,198 @@ class HomeScreen extends ConsumerWidget {
 
     final colorPrincipal = _getColorPrincipal(temaActual);
     final degradadoFondo = _getDegradadoFondo(temaActual);
+    final colorFondoAppBar = _getColorFondoAppBar(temaActual); 
 
-    return DefaultTabController(
-  length: 2, // Le decimos que habrá 2 pestañas
-  child: Scaffold(
-    // El FAB se queda exactamente igual, flotando sobre todo
-    floatingActionButton: Builder(
-  builder: (fabContext) {
-    // Usamos fabContext para leer la pestaña actual sin errores
-    return FloatingActionButton.extended(
-      onPressed: () {
-        final int index = DefaultTabController.of(fabContext).index;
-        
-        showModalBottomSheet(
-          context: context, // El context original para abrir el modal
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (_) => index == 0 ? const AddTareaModal() : const AddRutinaModal(),
-        );
-      },
-      elevation: 4,
-      backgroundColor: colorPrincipal,
-      icon: const Icon(Icons.add_rounded, color: Colors.white),
-      label: Text(
-        // Cambia el texto del botón dependiendo de la pestaña
-        DefaultTabController.of(fabContext).index == 0 ? 'Nueva Tarea' : 'Nueva Rutina', 
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-      ),
-    );
-  }
-),
-    
-    // Mantenemos tu contenedor con el degradado de fondo
-    body: Container(
-      decoration: BoxDecoration(gradient: degradadoFondo),
-      child: NestedScrollView(
-        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-          return [
-            SliverAppBar(
-              floating: true,
-              pinned: true, // Fijamos el AppBar para que las pestañas no desaparezcan al scrollear
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              // Cambié "Mis Tareas" por el nombre de la app, ya que ahora engloba tareas y rutinas
-              title: Text('FocusFlow', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: -0.5, color: colorPrincipal, fontSize: 24)),
-              
-              // Tus menús originales se quedan intactos
-              actions: [
-                PopupMenuButton<TemaApp>(
-                  icon: Icon(Icons.palette_rounded, color: colorPrincipal),
-                  tooltip: 'Cambiar Tema',
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  onSelected: (TemaApp result) => ref.read(temaProvider.notifier).cambiarTema(result),
-                  itemBuilder: (BuildContext context) => <PopupMenuEntry<TemaApp>>[
-                    const PopupMenuItem<TemaApp>(value: TemaApp.clasico, child: Row(children: [Icon(Icons.format_paint, size: 20, color: Colors.black87), SizedBox(width: 12), Text('Original (Blanco)')])),
-                    const PopupMenuItem<TemaApp>(value: TemaApp.zenClasico, child: Row(children: [Icon(Icons.spa, size: 20, color: Color(0xFF5A855C)), SizedBox(width: 12), Text('Zen Clásico (Verde)')])),
-                    const PopupMenuItem<TemaApp>(value: TemaApp.brisaMarina, child: Row(children: [Icon(Icons.water_drop, size: 20, color: Color(0xFF3182CE)), SizedBox(width: 12), Text('Brisa Marina (Azul)')])),
-                    const PopupMenuItem<TemaApp>(value: TemaApp.atardecerMinimalista, child: Row(children: [Icon(Icons.wb_twilight, size: 20, color: Color(0xFFDD6B20)), SizedBox(width: 12), Text('Atardecer (Naranja)')])),
-                  ],
-                ),
-                PopupMenuButton<TipoOrden>(
-                  icon: Icon(Icons.sort_rounded, color: colorPrincipal),
-                  tooltip: 'Ordenar',
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  onSelected: (TipoOrden result) => ref.read(ordenProvider.notifier).cambiarOrden(result),
-                  itemBuilder: (BuildContext context) => <PopupMenuEntry<TipoOrden>>[
-                    const PopupMenuItem<TipoOrden>(value: TipoOrden.creacion, child: Row(children: [Icon(Icons.format_list_bulleted, size: 20, color: Colors.grey), SizedBox(width: 12), Text('Orden original')])),
-                    const PopupMenuItem<TipoOrden>(value: TipoOrden.alfabetico, child: Row(children: [Icon(Icons.sort_by_alpha, size: 20, color: Colors.blueGrey), SizedBox(width: 12), Text('Alfabético (A-Z)')])),
-                    const PopupMenuItem<TipoOrden>(value: TipoOrden.urgencia, child: Row(children: [Icon(Icons.flag, size: 20, color: Colors.redAccent), SizedBox(width: 12), Text('Mayor urgencia')])),
-                    const PopupMenuItem<TipoOrden>(value: TipoOrden.fecha, child: Row(children: [Icon(Icons.event_available, size: 20, color: Colors.orangeAccent), SizedBox(width: 12), Text('Próximas a vencer')])),
-                  ],
-                ),
-                const SizedBox(width: 8),
-              ],
-              
-              bottom: TabBar(
-                // 1. Hacemos que el texto inactivo se note más apagado en el tema clásico
-                labelColor: colorPrincipal,
-                unselectedLabelColor: temaActual == TemaApp.clasico 
-                    ? Colors.grey.shade400 
-                    : colorPrincipal.withOpacity(0.5),
-                    
-                indicatorSize: TabBarIndicatorSize.tab,
-                
-                // 2. Modificamos el diseño de la pestaña activa (Indicator)
-                indicator: BoxDecoration(
-                  // En el clásico usamos blanco puro, en los demás transparencia
-                  color: temaActual == TemaApp.clasico 
-                      ? Colors.white 
-                      : Colors.white.withOpacity(0.6), 
-                  
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(15),
-                    topRight: Radius.circular(15),
-                  ),
-                  
-                  // 3. EL TRUCO VISUAL: Un borde sutil solo para el tema clásico
-                  border: temaActual == TemaApp.clasico
-                      ? Border(
-                          top: BorderSide(color: Colors.grey.shade300, width: 1.5),
-                          left: BorderSide(color: Colors.grey.shade300, width: 1.5),
-                          right: BorderSide(color: Colors.grey.shade300, width: 1.5),
-                          // NO ponemos borde abajo para que se "fusione" con el contenido
-                        )
-                      : null, 
-                  
-                  // 4. Una sombra suave hacia arriba para darle relieve de carpeta real
-                  boxShadow: temaActual == TemaApp.clasico
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
-                            blurRadius: 4,
-                            offset: const Offset(0, -3), // Sombra apuntando hacia arriba
-                          )
-                        ]
-                      : null,
-                ),
-                tabs: const [
-                  Tab(icon: Icon(Icons.check_circle_outline), text: 'Tareas'),
-                  Tab(icon: Icon(Icons.repeat_rounded), text: 'Rutinas'),
-                ],
-              ),
-            ),
-          ];
-        },
-        
-        // EL CONTENIDO DE LAS PESTAÑAS
-        body: TabBarView(
-          children: [
-            // --- PESTAÑA 1: TAREAS ---
-            tareas.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(temaActual == TemaApp.clasico ? Icons.task_alt : Icons.spa_outlined, size: 80, color: colorPrincipal.withOpacity(0.3)),
-                        const SizedBox(height: 16),
-                        Text(temaActual == TemaApp.clasico ? 'Todo al día' : 'Mente en calma', style: TextStyle(fontSize: 18, color: colorPrincipal.withOpacity(0.6), fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                    itemCount: tareas.length,
-                    itemBuilder: (context, index) {
-                      return TareaCard(tarea: tareas[index], tema: temaActual);
-                    },
-                  ),
-
-            // Busca el "Cascarón temporal" de Rutinas y cámbialo por esto:
-            Consumer(
-              builder: (context, ref, child) {
-                final listaRutinas = ref.watch(rutinaProvider);
-                return listaRutinas.isEmpty
-                    ? Center(child: Text('No hay rutinas aún', style: TextStyle(color: colorPrincipal)))
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                        itemCount: listaRutinas.length,
-                        itemBuilder: (context, index) => RutinaCard(
-                          rutina: listaRutinas[index],
-                          colorTema: colorPrincipal,
-                        ),
-                      );
-              },
-            ),
+    return Scaffold(
+      backgroundColor: colorFondoAppBar, // Base unificada para que combine con la hora y batería
+      
+      // 1. APPBAR TRADICIONAL (Ya no usamos SliverAppBar)
+      appBar: AppBar(
+        backgroundColor: colorFondoAppBar,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: Text('FocusFlow', style: TextStyle(fontWeight: FontWeight.bold, color: colorPrincipal, fontSize: 24)),
+        actions: [
+          PopupMenuButton<TemaApp>(
+            icon: Icon(Icons.palette_rounded, color: colorPrincipal),
+            tooltip: 'Cambiar Tema',
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            onSelected: (TemaApp result) => ref.read(temaProvider.notifier).cambiarTema(result),
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<TemaApp>>[
+              const PopupMenuItem<TemaApp>(value: TemaApp.clasico, child: Row(children: [Icon(Icons.format_paint, size: 20, color: Colors.black87), SizedBox(width: 12), Text('Original (Blanco)')])),
+              const PopupMenuItem<TemaApp>(value: TemaApp.zenClasico, child: Row(children: [Icon(Icons.spa, size: 20, color: Color(0xFF5A855C)), SizedBox(width: 12), Text('Zen Clásico (Verde)')])),
+              const PopupMenuItem<TemaApp>(value: TemaApp.brisaMarina, child: Row(children: [Icon(Icons.water_drop, size: 20, color: Color(0xFF3182CE)), SizedBox(width: 12), Text('Brisa Marina (Azul)')])),
+              const PopupMenuItem<TemaApp>(value: TemaApp.atardecerMinimalista, child: Row(children: [Icon(Icons.wb_twilight, size: 20, color: Color(0xFFDD6B20)), SizedBox(width: 12), Text('Atardecer (Naranja)')])),
+            ],
+          ),
+          PopupMenuButton<TipoOrden>(
+            icon: Icon(Icons.sort_rounded, color: colorPrincipal),
+            tooltip: 'Ordenar',
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            onSelected: (TipoOrden result) => ref.read(ordenProvider.notifier).cambiarOrden(result),
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<TipoOrden>>[
+              const PopupMenuItem<TipoOrden>(value: TipoOrden.creacion, child: Row(children: [Icon(Icons.format_list_bulleted, size: 20, color: Colors.grey), SizedBox(width: 12), Text('Orden original')])),
+              const PopupMenuItem<TipoOrden>(value: TipoOrden.alfabetico, child: Row(children: [Icon(Icons.sort_by_alpha, size: 20, color: Colors.blueGrey), SizedBox(width: 12), Text('Alfabético (A-Z)')])),
+              const PopupMenuItem<TipoOrden>(value: TipoOrden.urgencia, child: Row(children: [Icon(Icons.flag, size: 20, color: Colors.redAccent), SizedBox(width: 12), Text('Mayor urgencia')])),
+              const PopupMenuItem<TipoOrden>(value: TipoOrden.fecha, child: Row(children: [Icon(Icons.event_available, size: 20, color: Colors.orangeAccent), SizedBox(width: 12), Text('Próximas a vencer')])),
+            ],
+          ),
+          IconButton(
+            icon: Icon(Icons.mode_edit_outline_rounded, color: colorPrincipal),
+            tooltip: 'Configurar Horario Semanal',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => GestorRutinasScreen(colorTema: colorPrincipal))),
+          ),
+          const SizedBox(width: 8),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: colorPrincipal,
+          indicatorColor: colorPrincipal,
+          tabs: const [
+            Tab(icon: Icon(Icons.check_circle_outline), text: 'Tareas'),
+            Tab(icon: Icon(Icons.repeat_rounded), text: 'Rutinas'),
           ],
         ),
       ),
-    ),
-  ),
-);
+
+      // 2. BOTÓN FLOTANTE INTACTO
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          if (_currentIndex == 0) {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) => const AddTareaModal(),
+            );
+          } else {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const RutinaFormScreen()),
+            );
+          }
+        },
+        elevation: 4,
+        backgroundColor: colorPrincipal,
+        icon: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 150),
+          transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+          child: Icon(
+            _currentIndex == 0 ? Icons.add_task_rounded : Icons.alarm_add_rounded,
+            key: ValueKey<int>(_currentIndex), 
+            color: Colors.white,
+          ),
+        ),
+        label: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 150),
+          transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+          child: Text(
+            _currentIndex == 0 ? 'Nueva Tarea' : 'Nuevo hábito',
+            key: ValueKey<int>(_currentIndex), 
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+      
+      // 3. CUERPO PRINCIPAL LIMPIO (Sin NestedScrollView)
+      body: Container(
+        decoration: BoxDecoration(gradient: degradadoFondo),
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            // PESTAÑA TAREAS
+            tareas.isEmpty
+                ? Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withOpacity(0.6))))
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), // Ligero respiro superior
+                    itemCount: tareas.length,
+                    itemBuilder: (context, index) => TareaCard(tarea: tareas[index], tema: temaActual),
+                  ),
+            // PESTAÑA RUTINAS
+            const _SeccionRutinasHoy(), 
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Widget extraído para mantener limpio el build principal
+class _SeccionRutinasHoy extends ConsumerWidget {
+  const _SeccionRutinasHoy();
+
+  // Función de apoyo para obtener el color según el tema (Igual a la de HomeScreen)
+  Color _getPrimaryColor(TemaApp tema) {
+    switch (tema) {
+      case TemaApp.clasico:
+        return Colors.black87;
+      case TemaApp.brisaMarina:
+        return const Color(0xFF1E3A8A); // Azul
+      case TemaApp.atardecerMinimalista:
+        return const Color(0xFFC05621); // Naranja
+      case TemaApp.zenClasico:
+      default:
+        return const Color(0xFF276749); // Verde
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final listaCompleta = ref.watch(rutinaProvider);
+    final temaActual = ref.watch(temaProvider);
+    
+    // Ahora el color principal se adapta dinámicamente a los 4 temas
+    final colorPrincipal = _getPrimaryColor(temaActual);
+    
+    final int diaActual = DateTime.now().weekday - 1; 
+    final rutinasDeHoy = listaCompleta.where((r) => r.horarios.containsKey(diaActual) && r.activa).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Hoy es ${DateFormat('EEEE', 'es_ES').format(DateTime.now())}', 
+                style: TextStyle(
+                  fontSize: 26, 
+                  fontWeight: FontWeight.bold, 
+                  color: colorPrincipal // Aplicado al título "Hoy es..."
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                rutinasDeHoy.isEmpty 
+                    ? 'No hay hábitos programados.' 
+                    : 'Tienes ${rutinasDeHoy.length} hábitos para hoy.',
+                style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: rutinasDeHoy.isEmpty
+              ? Center(
+                  child: Icon(
+                    Icons.event_available_rounded, 
+                    size: 80, 
+                    color: colorPrincipal.withOpacity(0.15) // Aplicado al icono de fondo vacío
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: rutinasDeHoy.length,
+                  itemBuilder: (context, index) => RutinaCard(
+                    rutina: rutinasDeHoy[index], 
+                    colorTema: colorPrincipal // Pasado a la tarjeta para iconos y checkbox
+                  ),
+                ),
+        ),
+      ],
+    );
   }
 }
 

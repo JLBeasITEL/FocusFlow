@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/rutina.dart';
 import '../../providers/rutina_provider.dart';
+import '../screens/rutina_form_screen.dart'; 
+import '../../models/rutina.dart';
 
 class RutinaCard extends ConsumerWidget {
   final Rutina rutina;
@@ -20,80 +21,70 @@ class RutinaCard extends ConsumerWidget {
       elevation: activa ? 4 : 0,
       color: activa ? Colors.white : Colors.grey.shade100.withOpacity(0.8),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Row(
           children: [
-            // Icono
+            // 1. ZONA IZQUIERDA: Checkbox e Ícono
+            Checkbox(
+              value: rutina.completada,
+              activeColor: colorTema,
+              onChanged: activa 
+                  ? (_) => ref.read(rutinaProvider.notifier).toggleCompletada(rutina.id)
+                  : null,
+            ),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: colorFuerte.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(IconData(rutina.iconoCode, fontFamily: 'MaterialIcons'), size: 30, color: colorFuerte),
+              child: Icon(
+                IconData(rutina.iconoCode, fontFamily: 'MaterialIcons'),
+                size: 26,
+                color: colorFuerte,
+              ),
             ),
-            const SizedBox(width: 16),
-            
-            // Información
+            const SizedBox(width: 12), // Espacio separador
+
+            // 2. ZONA CENTRAL: Textos y hora
+            // Al quitar los días, la tarjeta queda mucho más limpia
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center, // Centramos verticalmente
                 children: [
                   Text(
                     rutina.titulo,
                     style: TextStyle(
-                      fontSize: 17,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
+                      decoration: rutina.completada ? TextDecoration.lineThrough : null,
                       color: activa ? Colors.black87 : Colors.grey,
-                      decoration: activa ? null : TextDecoration.lineThrough,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis, 
                   ),
+                  const SizedBox(height: 4),
                   Text(
-                    rutina.horaDian.format(context),
-                    style: TextStyle(fontSize: 15, color: colorFuerte, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  // Indicador de días
-                  Row(
-                    children: ['L', 'M', 'M', 'J', 'V', 'S', 'D'].asMap().entries.map((entry) {
-                      bool diaActivo = rutina.diasSemana[entry.key];
-                      return Container(
-                        margin: const EdgeInsets.only(right: 4),
-                        width: 20,
-                        height: 20,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: diaActivo && activa ? colorFuerte : Colors.grey.shade300,
-                        ),
-                        child: Text(
-                          entry.value,
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: diaActivo && activa ? Colors.white : Colors.grey.shade600),
-                        ),
-                      );
-                    }).toList(),
+                    // Leemos el día actual para saber qué hora mostrar
+                    rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--',
+                    style: TextStyle(fontSize: 14, color: colorFuerte, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
             ),
 
-            // Switch y Racha
-            Column(
-              children: [
-                Switch(
-                  value: activa,
-                  activeColor: colorTema,
-                  onChanged: (_) => ref.read(rutinaProvider.notifier).toggleActiva(rutina.id),
-                ),
-                if (activa && rutina.racha > 0)
-                  Row(
-                    children: [
-                      const Text('🔥', style: TextStyle(fontSize: 12)),
-                      Text('${rutina.racha}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
-                    ],
-                  ),
-              ],
-            )
+            // 3. ZONA DERECHA: Rachas (Se eliminó el botón de editar)
+            if (activa && rutina.racha > 0) ...[
+              const SizedBox(width: 4),
+              const Text('🔥', style: TextStyle(fontSize: 14)),
+              const SizedBox(width: 2),
+              Text(
+                '${rutina.racha}', 
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 16)
+              ),
+              const SizedBox(width: 12), // Un pequeño espacio final para separar del borde del Card
+            ],
           ],
         ),
       ),
