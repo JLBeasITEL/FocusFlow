@@ -5,6 +5,9 @@ import 'dart:ui';
 import '../../providers/tarea_provider.dart';
 import '../../models/tarea.dart';
 import '../widgets/add_tarea_modal.dart';
+import '../../providers/rutina_provider.dart';
+import '../widgets/rutina_card.dart';
+import '../widgets/add_rutina_modal.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -72,16 +75,51 @@ class HomeScreen extends ConsumerWidget {
     final colorPrincipal = _getColorPrincipal(temaActual);
     final degradadoFondo = _getDegradadoFondo(temaActual);
 
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(gradient: degradadoFondo),
-        child: CustomScrollView(
-          slivers: [
+    return DefaultTabController(
+  length: 2, // Le decimos que habrá 2 pestañas
+  child: Scaffold(
+    // El FAB se queda exactamente igual, flotando sobre todo
+    floatingActionButton: Builder(
+  builder: (fabContext) {
+    // Usamos fabContext para leer la pestaña actual sin errores
+    return FloatingActionButton.extended(
+      onPressed: () {
+        final int index = DefaultTabController.of(fabContext).index;
+        
+        showModalBottomSheet(
+          context: context, // El context original para abrir el modal
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => index == 0 ? const AddTareaModal() : const AddRutinaModal(),
+        );
+      },
+      elevation: 4,
+      backgroundColor: colorPrincipal,
+      icon: const Icon(Icons.add_rounded, color: Colors.white),
+      label: Text(
+        // Cambia el texto del botón dependiendo de la pestaña
+        DefaultTabController.of(fabContext).index == 0 ? 'Nueva Tarea' : 'Nueva Rutina', 
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+      ),
+    );
+  }
+),
+    
+    // Mantenemos tu contenedor con el degradado de fondo
+    body: Container(
+      decoration: BoxDecoration(gradient: degradadoFondo),
+      child: NestedScrollView(
+        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+          return [
             SliverAppBar(
               floating: true,
-              backgroundColor: Colors.transparent, 
+              pinned: true, // Fijamos el AppBar para que las pestañas no desaparezcan al scrollear
+              backgroundColor: Colors.transparent,
               elevation: 0,
-              title: Text('Mis Tareas', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: -0.5, color: colorPrincipal, fontSize: 24)),
+              // Cambié "Mis Tareas" por el nombre de la app, ya que ahora engloba tareas y rutinas
+              title: Text('FocusFlow', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: -0.5, color: colorPrincipal, fontSize: 24)),
+              
+              // Tus menús originales se quedan intactos
               actions: [
                 PopupMenuButton<TemaApp>(
                   icon: Icon(Icons.palette_rounded, color: colorPrincipal),
@@ -89,28 +127,15 @@ class HomeScreen extends ConsumerWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   onSelected: (TemaApp result) => ref.read(temaProvider.notifier).cambiarTema(result),
                   itemBuilder: (BuildContext context) => <PopupMenuEntry<TemaApp>>[
-                    // NUEVA OPCIÓN EN EL MENÚ
-                    const PopupMenuItem<TemaApp>(
-                      value: TemaApp.clasico,
-                      child: Row(children: [Icon(Icons.format_paint, size: 20, color: Colors.black87), SizedBox(width: 12), Text('Original (Blanco)')]),
-                    ),
-                    const PopupMenuItem<TemaApp>(
-                      value: TemaApp.zenClasico,
-                      child: Row(children: [Icon(Icons.spa, size: 20, color: Color(0xFF5A855C)), SizedBox(width: 12), Text('Zen Clásico (Verde)')]),
-                    ),
-                    const PopupMenuItem<TemaApp>(
-                      value: TemaApp.brisaMarina,
-                      child: Row(children: [Icon(Icons.water_drop, size: 20, color: Color(0xFF3182CE)), SizedBox(width: 12), Text('Brisa Marina (Azul)')]),
-                    ),
-                    const PopupMenuItem<TemaApp>(
-                      value: TemaApp.atardecerMinimalista,
-                      child: Row(children: [Icon(Icons.wb_twilight, size: 20, color: Color(0xFFDD6B20)), SizedBox(width: 12), Text('Atardecer (Naranja)')]),
-                    ),
+                    const PopupMenuItem<TemaApp>(value: TemaApp.clasico, child: Row(children: [Icon(Icons.format_paint, size: 20, color: Colors.black87), SizedBox(width: 12), Text('Original (Blanco)')])),
+                    const PopupMenuItem<TemaApp>(value: TemaApp.zenClasico, child: Row(children: [Icon(Icons.spa, size: 20, color: Color(0xFF5A855C)), SizedBox(width: 12), Text('Zen Clásico (Verde)')])),
+                    const PopupMenuItem<TemaApp>(value: TemaApp.brisaMarina, child: Row(children: [Icon(Icons.water_drop, size: 20, color: Color(0xFF3182CE)), SizedBox(width: 12), Text('Brisa Marina (Azul)')])),
+                    const PopupMenuItem<TemaApp>(value: TemaApp.atardecerMinimalista, child: Row(children: [Icon(Icons.wb_twilight, size: 20, color: Color(0xFFDD6B20)), SizedBox(width: 12), Text('Atardecer (Naranja)')])),
                   ],
                 ),
                 PopupMenuButton<TipoOrden>(
                   icon: Icon(Icons.sort_rounded, color: colorPrincipal),
-                  tooltip: 'Ordenar tareas',
+                  tooltip: 'Ordenar',
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   onSelected: (TipoOrden result) => ref.read(ordenProvider.notifier).cambiarOrden(result),
                   itemBuilder: (BuildContext context) => <PopupMenuEntry<TipoOrden>>[
@@ -122,50 +147,103 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
               ],
+              
+              bottom: TabBar(
+                // 1. Hacemos que el texto inactivo se note más apagado en el tema clásico
+                labelColor: colorPrincipal,
+                unselectedLabelColor: temaActual == TemaApp.clasico 
+                    ? Colors.grey.shade400 
+                    : colorPrincipal.withOpacity(0.5),
+                    
+                indicatorSize: TabBarIndicatorSize.tab,
+                
+                // 2. Modificamos el diseño de la pestaña activa (Indicator)
+                indicator: BoxDecoration(
+                  // En el clásico usamos blanco puro, en los demás transparencia
+                  color: temaActual == TemaApp.clasico 
+                      ? Colors.white 
+                      : Colors.white.withOpacity(0.6), 
+                  
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(15),
+                    topRight: Radius.circular(15),
+                  ),
+                  
+                  // 3. EL TRUCO VISUAL: Un borde sutil solo para el tema clásico
+                  border: temaActual == TemaApp.clasico
+                      ? Border(
+                          top: BorderSide(color: Colors.grey.shade300, width: 1.5),
+                          left: BorderSide(color: Colors.grey.shade300, width: 1.5),
+                          right: BorderSide(color: Colors.grey.shade300, width: 1.5),
+                          // NO ponemos borde abajo para que se "fusione" con el contenido
+                        )
+                      : null, 
+                  
+                  // 4. Una sombra suave hacia arriba para darle relieve de carpeta real
+                  boxShadow: temaActual == TemaApp.clasico
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 4,
+                            offset: const Offset(0, -3), // Sombra apuntando hacia arriba
+                          )
+                        ]
+                      : null,
+                ),
+                tabs: const [
+                  Tab(icon: Icon(Icons.check_circle_outline), text: 'Tareas'),
+                  Tab(icon: Icon(Icons.repeat_rounded), text: 'Rutinas'),
+                ],
+              ),
             ),
-            
+          ];
+        },
+        
+        // EL CONTENIDO DE LAS PESTAÑAS
+        body: TabBarView(
+          children: [
+            // --- PESTAÑA 1: TAREAS ---
             tareas.isEmpty
-                ? SliverFillRemaining(
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(temaActual == TemaApp.clasico ? Icons.task_alt : Icons.spa_outlined, size: 80, color: colorPrincipal.withOpacity(0.3)),
-                          const SizedBox(height: 16),
-                          Text(temaActual == TemaApp.clasico ? 'Todo al día' : 'Mente en calma', style: TextStyle(fontSize: 18, color: colorPrincipal.withOpacity(0.6), fontWeight: FontWeight.w500)),
-                        ],
-                      ),
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(temaActual == TemaApp.clasico ? Icons.task_alt : Icons.spa_outlined, size: 80, color: colorPrincipal.withOpacity(0.3)),
+                        const SizedBox(height: 16),
+                        Text(temaActual == TemaApp.clasico ? 'Todo al día' : 'Mente en calma', style: TextStyle(fontSize: 18, color: colorPrincipal.withOpacity(0.6), fontWeight: FontWeight.w500)),
+                      ],
                     ),
                   )
-                : SliverPadding(
+                : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          return TareaCard(tarea: tareas[index], tema: temaActual);
-                        },
-                        childCount: tareas.length,
-                      ),
-                    ),
+                    itemCount: tareas.length,
+                    itemBuilder: (context, index) {
+                      return TareaCard(tarea: tareas[index], tema: temaActual);
+                    },
                   ),
+
+            // Busca el "Cascarón temporal" de Rutinas y cámbialo por esto:
+            Consumer(
+              builder: (context, ref, child) {
+                final listaRutinas = ref.watch(rutinaProvider);
+                return listaRutinas.isEmpty
+                    ? Center(child: Text('No hay rutinas aún', style: TextStyle(color: colorPrincipal)))
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                        itemCount: listaRutinas.length,
+                        itemBuilder: (context, index) => RutinaCard(
+                          rutina: listaRutinas[index],
+                          colorTema: colorPrincipal,
+                        ),
+                      );
+              },
+            ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (_) => const AddTareaModal(),
-          ); 
-        },
-        elevation: 4,
-        backgroundColor: colorPrincipal, 
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text('Nueva Tarea', style: TextStyle(color: Colors.white)),
-      ),
-    );
+    ),
+  ),
+);
   }
 }
 
