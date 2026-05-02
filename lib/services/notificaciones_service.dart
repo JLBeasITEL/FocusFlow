@@ -197,5 +197,49 @@ class NotificacionesService {
     print('🚫 Alarmas canceladas para ID: $idBase');
   }
 
-  
+  // NUEVO MÉTODO EXCLUSIVO PARA RUTINAS
+  Future<void> programarAlertaRutina({
+    required int id,
+    required String titulo,
+    required String body,
+    required DateTime fechaVisual,
+  }) async {
+    // Convertimos la fecha normal a la fecha con zona horaria que requiere el plugin
+    final tz.TZDateTime fechaSistema = tz.TZDateTime.from(fechaVisual, tz.getLocation('America/Mexico_City'));
+
+    print('🕒 Agendando rutina para que suene a las: $fechaVisual');
+    
+    try {
+      await _plugin.zonedSchedule( // Cambia _plugin por el nombre de tu variable si es distinto
+        id,
+        titulo,
+        body,
+        fechaSistema,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'rutinas_channel', // Un canal separado para las rutinas
+            'Alertas de Hábitos',
+            importance: Importance.max,
+            priority: Priority.high,
+            color: Color(0xFF276749),
+            fullScreenIntent: true, 
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.alarmClock, 
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      print('✅ Alarma de RUTINA registrada con éxito.');
+    } catch (e) {
+      print('❌ ERROR AL AGENDAR RUTINA: $e');
+    }
+  }  
+
+  // NUEVO MÉTODO: Cancela alertas usando un ID numérico (exclusivo para rutinas)
+  Future<void> cancelarAlertaRutina(int id) async {
+    try {
+      await _plugin.cancel(id); // Usa la variable de tu plugin (suele ser _plugin)
+    } catch (e) {
+      print('❌ Error al cancelar la alerta de rutina: $e');
+    }
+  }
 }
