@@ -7,7 +7,7 @@ import '../../providers/rutina_provider.dart';
 class RutinaFormScreen extends ConsumerStatefulWidget {
   final Rutina? rutinaAEditar;
 
-  const RutinaFormScreen({Key? key, this.rutinaAEditar}) : super(key: key);
+  const RutinaFormScreen({super.key, this.rutinaAEditar});
 
   @override
   ConsumerState<RutinaFormScreen> createState() => _RutinaFormScreenState();
@@ -21,7 +21,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
   Map<int, TimeOfDay> _horarios = {}; 
   
   TimeOfDay _horaFija = const TimeOfDay(hour: 8, minute: 0);
-  List<bool> _diasFijos = [false, false, false, false, false, false, false];
+  final List<bool> _diasFijos = [false, false, false, false, false, false, false];
 
   int _iconoSeleccionado = Icons.fitness_center.codePoint;
 
@@ -211,7 +211,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
               child: ExpansionTile(
                 tilePadding: EdgeInsets.zero,
                 leading: CircleAvatar(
-                  backgroundColor: Colors.deepPurple.withOpacity(0.1),
+                  backgroundColor: Colors.deepPurple.withValues(alpha: 0.1),
                   child: Icon(IconData(_iconoSeleccionado, fontFamily: 'MaterialIcons'), color: Colors.deepPurple),
                 ),
                 title: const Text('Ícono', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -225,7 +225,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                       return GestureDetector(
                         onTap: () => setState(() => _iconoSeleccionado = icono.codePoint),
                         child: CircleAvatar(
-                          backgroundColor: seleccionado ? Colors.deepPurple.withOpacity(0.2) : Colors.grey.shade200,
+                          backgroundColor: seleccionado ? Colors.deepPurple.withValues(alpha: 0.2) : Colors.grey.shade200,
                           child: Icon(icono, color: seleccionado ? Colors.deepPurple : Colors.grey),
                         ),
                       );

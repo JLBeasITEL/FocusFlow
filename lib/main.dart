@@ -5,21 +5,20 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'services/notificaciones_service.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
+// 1. Creamos una llave global para navegar desde cualquier parte (incluso en segundo plano)
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
-  // 1. Asegura que Flutter esté listo para comandos nativos
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 2. Inicializa el motor de alarmas de Android (El despertador)
   await AndroidAlarmManager.initialize();
-
-  // 3. Configura el idioma de fechas
   await initializeDateFormatting('es', null);
   
-  // 4. Configura el canal de notificaciones visuales
-  await NotificacionesService().init(); 
+  // Es vital pasar la llave aquí
+  await NotificacionesService().init(navigatorKey); 
 
   runApp(
-    const ProviderScope(
+    ProviderScope(
       child: MyApp(),
     ),
   );
@@ -31,8 +30,8 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FocusFlow',
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,

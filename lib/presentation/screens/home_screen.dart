@@ -222,7 +222,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           children: [
             // PESTAÑA TAREAS
             tareas.isEmpty
-                ? Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withOpacity(0.6))))
+                ? Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6))))
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), // Ligero respiro superior
                     itemCount: tareas.length,
@@ -251,7 +251,6 @@ class _SeccionRutinasHoy extends ConsumerWidget {
       case TemaApp.atardecerMinimalista:
         return const Color(0xFFC05621); // Naranja
       case TemaApp.zenClasico:
-      default:
         return const Color(0xFF276749); // Verde
     }
   }
@@ -299,7 +298,7 @@ class _SeccionRutinasHoy extends ConsumerWidget {
                   child: Icon(
                     Icons.event_available_rounded, 
                     size: 80, 
-                    color: colorPrincipal.withOpacity(0.15) // Aplicado al icono de fondo vacío
+                    color: colorPrincipal.withValues(alpha: 0.15) // Aplicado al icono de fondo vacío
                   ),
                 )
               : ListView.builder(
@@ -337,8 +336,8 @@ class _TareaCardState extends ConsumerState<TareaCard> {
     
     // Si es el tema clásico, las tareas son blancas puro. Si no, toman el tinte pastel del tema.
     final colorTarjeta = tarea.esCompletada 
-        ? Colors.white.withOpacity(0.7) 
-        : (widget.tema == TemaApp.clasico ? Colors.white : colorBase.withOpacity(0.25)); 
+        ? Colors.white.withValues(alpha: 0.7) 
+        : (widget.tema == TemaApp.clasico ? Colors.white : colorBase.withValues(alpha: 0.25)); 
 
     // --- NUEVA LÓGICA: Evaluamos si está atrasada en tiempo real ---
     final bool estaAtrasada = !tarea.esCompletada && 
@@ -352,7 +351,7 @@ class _TareaCardState extends ConsumerState<TareaCard> {
         borderRadius: BorderRadius.circular(24), 
         border: Border.all(
           // En el tema clásico los bordes son un poco más sutiles si no hay urgencia alta
-          color: tarea.esCompletada ? Colors.transparent : colorBase.withOpacity(widget.tema == TemaApp.clasico ? 0.6 : 0.4),
+          color: tarea.esCompletada ? Colors.transparent : colorBase.withValues(alpha: widget.tema == TemaApp.clasico ? 0.6 : 0.4),
           width: 1.5,
         ),
       ),
@@ -390,11 +389,11 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                             padding: const EdgeInsets.only(top: 4),
                             child: Row(
                               children: [
-                                Icon(Icons.access_time, size: 14, color: colorBase.withOpacity(0.9)),
+                                Icon(Icons.access_time, size: 14, color: colorBase.withValues(alpha: 0.9)),
                                 const SizedBox(width: 4),
                                 Text(
                                   DateFormat('EEEE, d MMM • HH:mm', 'es').format(tarea.fechaLimite!), 
-                                  style: TextStyle(color: colorBase.withOpacity(0.9), fontSize: 13, fontWeight: FontWeight.w600)
+                                  style: TextStyle(color: colorBase.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w600)
                                 ),
                               ],
                             ),
@@ -405,7 +404,7 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                         : Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             // En el tema clásico, agregamos un poco de transparencia a la píldora de urgencia
-                            decoration: BoxDecoration(color: widget.tema == TemaApp.clasico ? colorBase.withOpacity(0.2) : colorBase, borderRadius: BorderRadius.circular(12)),
+                            decoration: BoxDecoration(color: widget.tema == TemaApp.clasico ? colorBase.withValues(alpha: 0.2) : colorBase, borderRadius: BorderRadius.circular(12)),
                             child: Text(
                               _getLabelUrgencia(tarea.urgencia), 
                               style: TextStyle(color: widget.tema == TemaApp.clasico ? colorBase : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)
@@ -467,7 +466,7 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0), 
                   child: Container(
-                    color: Colors.white.withOpacity(0.2), 
+                    color: Colors.white.withValues(alpha: 0.2), 
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [

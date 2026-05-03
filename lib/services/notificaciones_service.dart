@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:app_tareas/presentation/screens/pantalla_alarma.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:flutter/material.dart'; 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -6,7 +7,8 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import '../models/tarea.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'dart:math';
+import 'package:flutter/scheduler.dart' hide Priority;
+
 
 class NotificacionesService {
   static final NotificacionesService _instancia = NotificacionesService._interno();
@@ -15,67 +17,113 @@ class NotificacionesService {
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   
-  // ID de canal centralizado para evitar problemas de compatibilidad
-  static const String canalIdGlobal = 'canal_tareas_pro_v3';
+  // Llave global para poder navegar a la pantalla de alarma en segundo plano
+  static late GlobalKey<NavigatorState> _navigatorKey;
+  
+  // IDs de los canales separados
+  static const String canalRecordatoriosId = 'canal_recordatorios_v3';
+  static const String canalAlarmasId = 'canal_alarmas_v3';
 
-  Future<void> init() async {
+  // Ahora init() recibe la llave de navegación de main.dart
+  Future<void> init(GlobalKey<NavigatorState> key) async {
+    _navigatorKey = key;
     print('🔧 Iniciando servicio de notificaciones con ZonedSchedule...');
     tz.initializeTimeZones();
     
     try {
       var zonaDetectada = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(zonaDetectada.toString()));
-      print('🌎 Zona horaria detectada: $zonaDetectada');
     } catch (e) {
       tz.setLocalLocation(tz.getLocation('America/Mexico_City')); 
-      print('⚠️ Zona horaria forzada a America/Mexico_City debido a error: $e');
     }
 
     const AndroidInitializationSettings androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const InitializationSettings initSettings = InitializationSettings(android: androidInit);
     
-    // Crear el canal de alta prioridad de forma explícita
-    final AndroidNotificationChannel channel = const AndroidNotificationChannel(
-      canalIdGlobal,
-      'Alertas de Tareas',
+    // 1. Canal de RECORDATORIOS (Notificación normal)
+    final AndroidNotificationChannel canalRecordatorios = const AndroidNotificationChannel(
+      canalRecordatoriosId,
+      'Recordatorios',
+      importance: Importance.high,
+      description: 'Avisos previos (1 hora antes) de tareas y rutinas',
+      playSound: true,
+      enableVibration: true,
+    );
+
+    // 2. Canal de ALARMAS (Pantalla Completa)
+    final AndroidNotificationChannel canalAlarmas = const AndroidNotificationChannel(
+      canalAlarmasId,
+      'Alarmas Urgentes',
       importance: Importance.max,
-      description: 'Canal principal para recordatorios exactos',
+      description: 'Avisos a la hora exacta que encienden la pantalla',
       playSound: true,
       enableVibration: true,
     );
 
     await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+        ?.createNotificationChannel(canalRecordatorios);
+    await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(canalAlarmas);
 
-    await _plugin.initialize(initSettings);
+    // Inicializamos el plugin y configuramos qué hacer al recibir el evento de pantalla completa
+    await _plugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        // Escuchamos si la notificación es del tipo "alarma" estando la app en segundo plano
+        if (response.payload != null && response.payload!.startsWith('alarma|')) {
+          _manejarNavegacionAlarma(response.payload!);
+        }
+      },
+    );
 
-    print('🔐 Solicitando permisos básicos de Android...');
+    // --- NUEVO: Verificar si la app se abrió por una notificación (Cold Start) ---
+    final NotificationAppLaunchDetails? details = await _plugin.getNotificationAppLaunchDetails();
+    if (details != null && details.didNotificationLaunchApp) {
+      if (details.notificationResponse?.payload != null) {
+        _manejarNavegacionAlarma(details.notificationResponse!.payload!);
+      }
+    }
+
     if (Platform.isAndroid) {
       await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
       await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestExactAlarmsPermission();
     }
-    
-    print('✅ Inicialización del servicio completa.');
   }
 
-  // --- AUTOMATIZACIÓN DE PERMISOS ESPECIALES (EL ESCUDO) ---
+  // --- NUEVA FUNCIÓN: Navegación Segura ---
+  void _manejarNavegacionAlarma(String payload) {
+    if (payload.startsWith('alarma|')) {
+      final partes = payload.split('|');
+      if (partes.length >= 3) {
+        final titulo = partes[1];
+        final cuerpo = partes[2];
+
+        // Usamos SchedulerBinding para esperar a que el Navigator esté listo
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          _navigatorKey.currentState?.push(
+            MaterialPageRoute(
+              builder: (_) => PantallaAlarma(titulo: titulo, cuerpo: cuerpo),
+            ),
+          );
+        });
+      }
+    }
+  }
+
+  // --- AUTOMATIZACIÓN DE PERMISOS ESPECIALES ---
   Future<void> solicitarPermisosEspeciales() async {
     if (!Platform.isAndroid) return;
-    print('🔍 Verificando permisos agresivos de batería y alarmas...');
-
     final statusAlarma = await Permission.scheduleExactAlarm.status;
     if (statusAlarma.isDenied) {
-      print('⚠️ Permiso de alarma exacta denegado. Abriendo diálogo...');
       await Permission.scheduleExactAlarm.request(); 
     }
-
     final statusBateria = await Permission.ignoreBatteryOptimizations.status;
     if (!statusBateria.isGranted) {
-      print('⚠️ Batería optimizada. Abriendo diálogo para lista blanca...');
       await Permission.ignoreBatteryOptimizations.request();
     }
   }
 
+  // --- ALARMAS PARA TAREAS ---
   Future<void> programarAlertaDefinitiva(Tarea tarea) async {
     final int idBase = tarea.id.hashCode.abs() % 100000;
     await cancelarAlerta(tarea.id);
@@ -84,109 +132,89 @@ class NotificacionesService {
 
     final ahoraReal = DateTime.now(); 
     final ahoraTz = tz.TZDateTime.now(tz.local);
-    final random = Random(); // 🎲 Inicializamos el generador aleatorio
 
-    print('📅 Calculando alertas (ID: $idBase) para "${tarea.titulo}"...');
-
-    // --- 1. FECHA LÍMITE ---
+    // --- 1. FECHA LÍMITE (PANTALLA COMPLETA) ---
     if (tarea.fechaLimite!.isAfter(ahoraReal)) {
       final cuantoFalta = tarea.fechaLimite!.difference(ahoraReal);
       final tzLimite = ahoraTz.add(cuantoFalta);
       
-      final opcionesLimite = [
-        {'titulo': '🚨 ¡Se acabó el tiempo!', 'cuerpo': 'Tu tarea "${tarea.titulo}" acaba de vencer.'},
-        {'titulo': '⏰ Tiempo agotado', 'cuerpo': 'La fecha límite para "${tarea.titulo}" ha llegado.'},
-        {'titulo': '🛑 Límite alcanzado', 'cuerpo': 'Es la hora cero para entregar "${tarea.titulo}".'},
-        {'titulo': '🔔 Fin del plazo', 'cuerpo': 'El tiempo programado para "${tarea.titulo}" ha terminado.'},
-        {'titulo': '🏁 Meta final', 'cuerpo': 'Se cumplió el plazo de "${tarea.titulo}". ¡Ojalá la hayas terminado!'},
-      ];
-
-      // Elegimos una opción al azar (del 0 al 4)
-      var seleccion = opcionesLimite[random.nextInt(opcionesLimite.length)];
-      String tituloLimite = seleccion['titulo']!;
-      String cuerpoLimite = seleccion['cuerpo']!;
+      String tituloLimite = '⏰ Tiempo agotado';
+      String cuerpoLimite = 'La fecha límite para "${tarea.titulo}" ha llegado.';
       
-      // Mantenemos la regla especial: si es urgencia máxima, sobrescribe el azar
       if (tarea.urgencia == 4) {
          tituloLimite = '🔥 ¡URGENTE: TIEMPO AGOTADO!';
          cuerpoLimite = 'La tarea prioritaria "${tarea.titulo}" ha llegado a su límite.';
       }
 
-      await _programarNotificacion(idBase + 2, tituloLimite, cuerpoLimite, tzLimite, tarea.fechaLimite!);
-    } else {
-      print('⚠️ La fecha límite (${tarea.fechaLimite}) ya pasó. No se programa.');
+      await _programarNotificacion(idBase + 2, tituloLimite, cuerpoLimite, tzLimite, tarea.fechaLimite!, esAlarmaFullScreen: true);
     }
 
-    // --- 2. RECORDATORIO (1 hora antes) ---
+    // --- 2. RECORDATORIO 1 HORA ANTES (NOTIFICACIÓN NORMAL) ---
     final fechaRecordatorio = tarea.fechaLimite!.subtract(const Duration(minutes: 60));
     if (fechaRecordatorio.isAfter(ahoraReal)) {
       final cuantoFalta = fechaRecordatorio.difference(ahoraReal);
       final tzRecordatorio = ahoraTz.add(cuantoFalta);
       
-      final opcionesRecordatorio = [
-        {'titulo': '⏳ Queda 1 hora', 'cuerpo': 'El tiempo vuela. Solo falta una hora para entregar "${tarea.titulo}".'},
-        {'titulo': '⏱️ Tic tac...', 'cuerpo': 'En 60 minutos vence "${tarea.titulo}". ¡Tú puedes!'},
-        {'titulo': '🏃 Recta final', 'cuerpo': 'Última hora para terminar "${tarea.titulo}". ¡Acelera el paso!'},
-        {'titulo': '🔔 Último aviso', 'cuerpo': 'Se acerca la hora de entrega para "${tarea.titulo}".'},
-        {'titulo': '👀 No lo olvides', 'cuerpo': 'Falta menos de una hora para el límite de "${tarea.titulo}".'},
-      ];
-
-      var seleccion = opcionesRecordatorio[random.nextInt(opcionesRecordatorio.length)];
-
-      await _programarNotificacion(idBase + 1, seleccion['titulo']!, seleccion['cuerpo']!, tzRecordatorio, fechaRecordatorio);
+      await _programarNotificacion(idBase + 1, '⏳ Queda 1 hora', 'En 60 minutos vence "${tarea.titulo}". ¡Tú puedes!', tzRecordatorio, fechaRecordatorio, esAlarmaFullScreen: false);
     }
 
-    // --- 3. URGENCIA (Alerta de inicio) ---
+    // --- 3. URGENCIA / INICIO (PANTALLA COMPLETA) ---
     if (tarea.horasEstimadas != null && tarea.horasEstimadas! > 0) {
       final fechaUrgencia = tarea.fechaLimite!.subtract(Duration(hours: tarea.horasEstimadas!));
       if (fechaUrgencia.isAfter(ahoraReal)) {
         final cuantoFalta = fechaUrgencia.difference(ahoraReal);
         final tzUrgencia = ahoraTz.add(cuantoFalta);
         
-        final opcionesInicio = [
-          {'titulo': '🚀 Es hora de empezar', 'cuerpo': 'Calculaste ${tarea.horasEstimadas} hrs. ¡Deberías empezar "${tarea.titulo}" justo ahora!'},
-          {'titulo': '🛠️ ¡Manos a la obra!', 'cuerpo': 'Para terminar a tiempo "${tarea.titulo}", necesitas iniciar en este momento.'},
-          {'titulo': '💡 Momento de actuar', 'cuerpo': 'Es el momento ideal para comenzar "${tarea.titulo}". ¡Mucho éxito!'},
-          {'titulo': '⚙️ Engranajes en marcha', 'cuerpo': 'Tu estimado es de ${tarea.horasEstimadas} hrs. Inicia "${tarea.titulo}" para no atrasarte.'},
-          {'titulo': '🎯 Objetivo a la vista', 'cuerpo': 'Comienza a trabajar en "${tarea.titulo}" ahora para cumplir con tu meta a tiempo.'},
-        ];
-
-        var seleccion = opcionesInicio[random.nextInt(opcionesInicio.length)];
-
-        await _programarNotificacion(idBase, seleccion['titulo']!, seleccion['cuerpo']!, tzUrgencia, fechaUrgencia);
+        await _programarNotificacion(idBase, '🚀 Es hora de empezar', 'Deberías empezar "${tarea.titulo}" justo ahora para cumplir el estimado.', tzUrgencia, fechaUrgencia, esAlarmaFullScreen: true);
       }
     }
   }
 
-  // --- FUNCIÓN INTERNA DE AGENDAMIENTO ---
-  Future<void> _programarNotificacion(int id, String titulo, String body, tz.TZDateTime fechaSistema, DateTime fechaVisual) async {
-    print('🕒 Agendando notificación para que suene a las: $fechaVisual');
-    
+  // --- FUNCIÓN INTERNA ---
+  Future<void> _programarNotificacion(int id, String titulo, String body, tz.TZDateTime fechaSistema, DateTime fechaVisual, {required bool esAlarmaFullScreen}) async {
     try {
+      final AndroidNotificationDetails detalles = esAlarmaFullScreen
+          ? const AndroidNotificationDetails(canalAlarmasId, 'Alarmas Urgentes', importance: Importance.max, priority: Priority.max, color: Color(0xFF276749), fullScreenIntent: true)
+          : const AndroidNotificationDetails(canalRecordatoriosId, 'Recordatorios', importance: Importance.high, priority: Priority.high, color: Color(0xFF276749), fullScreenIntent: false);
+
       await _plugin.zonedSchedule(
-        id,
-        titulo,
-        body,
-        fechaSistema,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            canalIdGlobal, // Usamos el canal explícito
-            'Alertas de Tareas',
-            importance: Importance.max,
-            priority: Priority.high,
-            color: Color(0xFF276749),
-            fullScreenIntent: true, 
-          ),
-        ),
-        // alarmClock es el modo más agresivo para saltar la suspensión nativa
+        id, titulo, body, fechaSistema,
+        NotificationDetails(android: detalles),
         androidScheduleMode: AndroidScheduleMode.alarmClock, 
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        payload: esAlarmaFullScreen ? 'alarma|$titulo|$body' : null,
       );
-      print('✅ Alarma registrada con éxito en el sistema (Modo AlarmClock).');
     } catch (e) {
       print('❌ ERROR AL AGENDAR ALARMA: $e');
     }
   }
+
+  // --- ALARMAS PARA RUTINAS ---
+  Future<void> programarAlertaRutina({
+    required int id,
+    required String titulo,
+    required String body,
+    required DateTime fechaVisual,
+    bool esAlarmaFullScreen = true, 
+  }) async {
+    final tz.TZDateTime fechaSistema = tz.TZDateTime.from(fechaVisual, tz.getLocation('America/Mexico_City'));
+    
+    try {
+      final AndroidNotificationDetails detalles = esAlarmaFullScreen
+          ? const AndroidNotificationDetails(canalAlarmasId, 'Alarmas Urgentes', importance: Importance.max, priority: Priority.max, color: Color(0xFF276749), fullScreenIntent: true)
+          : const AndroidNotificationDetails(canalRecordatoriosId, 'Recordatorios', importance: Importance.high, priority: Priority.high, color: Color(0xFF276749), fullScreenIntent: false);
+
+      await _plugin.zonedSchedule(
+        id, titulo, body, fechaSistema,
+        NotificationDetails(android: detalles),
+        androidScheduleMode: AndroidScheduleMode.alarmClock, 
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        payload: esAlarmaFullScreen ? 'alarma|$titulo|$body' : null,
+      );
+    } catch (e) {
+      print('❌ ERROR AL AGENDAR RUTINA: $e');
+    }
+  }  
 
   // --- MÉTODOS DE UTILIDAD Y LIMPIEZA ---
   Future<void> cancelarAlerta(String id) async {
@@ -194,52 +222,11 @@ class NotificacionesService {
     await _plugin.cancel(idBase);
     await _plugin.cancel(idBase + 1);
     await _plugin.cancel(idBase + 2);
-    print('🚫 Alarmas canceladas para ID: $idBase');
   }
 
-  // NUEVO MÉTODO EXCLUSIVO PARA RUTINAS
-  Future<void> programarAlertaRutina({
-    required int id,
-    required String titulo,
-    required String body,
-    required DateTime fechaVisual,
-  }) async {
-    // Convertimos la fecha normal a la fecha con zona horaria que requiere el plugin
-    final tz.TZDateTime fechaSistema = tz.TZDateTime.from(fechaVisual, tz.getLocation('America/Mexico_City'));
-
-    print('🕒 Agendando rutina para que suene a las: $fechaVisual');
-    
-    try {
-      await _plugin.zonedSchedule( // Cambia _plugin por el nombre de tu variable si es distinto
-        id,
-        titulo,
-        body,
-        fechaSistema,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'rutinas_channel', // Un canal separado para las rutinas
-            'Alertas de Hábitos',
-            importance: Importance.max,
-            priority: Priority.high,
-            color: Color(0xFF276749),
-            fullScreenIntent: true, 
-          ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.alarmClock, 
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      );
-      print('✅ Alarma de RUTINA registrada con éxito.');
-    } catch (e) {
-      print('❌ ERROR AL AGENDAR RUTINA: $e');
-    }
-  }  
-
-  // NUEVO MÉTODO: Cancela alertas usando un ID numérico (exclusivo para rutinas)
   Future<void> cancelarAlertaRutina(int id) async {
     try {
-      await _plugin.cancel(id); // Usa la variable de tu plugin (suele ser _plugin)
-    } catch (e) {
-      print('❌ Error al cancelar la alerta de rutina: $e');
-    }
+      await _plugin.cancel(id); 
+    } catch (e) {}
   }
 }

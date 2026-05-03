@@ -168,7 +168,7 @@ class _AddRutinaModalState extends ConsumerState<AddRutinaModal> {
                 tilePadding: EdgeInsets.zero,
                 // Muestra el ícono que está actualmente seleccionado
                 leading: CircleAvatar(
-                  backgroundColor: Colors.deepPurple.withOpacity(0.1),
+                  backgroundColor: Colors.deepPurple.withValues(alpha: 0.1),
                   child: Icon(IconData(_iconoSeleccionado, fontFamily: 'MaterialIcons'), color: Colors.deepPurple),
                 ),
                 title: const Text('Ícono de la rutina', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -187,7 +187,7 @@ class _AddRutinaModalState extends ConsumerState<AddRutinaModal> {
                           // pero en este caso es mejor dejar que el usuario lo vea cambiar.
                         },
                         child: CircleAvatar(
-                          backgroundColor: seleccionado ? Colors.deepPurple.withOpacity(0.2) : Colors.grey.shade100,
+                          backgroundColor: seleccionado ? Colors.deepPurple.withValues(alpha: 0.2) : Colors.grey.shade100,
                           child: Icon(icono, color: seleccionado ? Colors.deepPurple : Colors.grey),
                         ),
                       );

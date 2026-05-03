@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/rutina_provider.dart';
-import '../screens/rutina_form_screen.dart'; 
 import '../../models/rutina.dart';
 
 class RutinaCard extends ConsumerWidget {
@@ -19,7 +18,7 @@ class RutinaCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       elevation: activa ? 4 : 0,
-      color: activa ? Colors.white : Colors.grey.shade100.withOpacity(0.8),
+      color: activa ? Colors.white : Colors.grey.shade100.withValues(alpha: 0.8),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Row(
@@ -35,7 +34,7 @@ class RutinaCard extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: colorFuerte.withOpacity(0.1),
+                color: colorFuerte.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(

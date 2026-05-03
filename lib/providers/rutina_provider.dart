@@ -57,22 +57,24 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       final proximaFecha = _calcularProximaFecha(diaIndex, hora);
       final fechaUnaHoraAntes = proximaFecha.subtract(const Duration(hours: 1));
 
-      // Aviso 1 hora antes (solo si aún no pasa)
+      // Aviso 1 hora antes (NOTIFICACIÓN NORMAL)
       if (fechaUnaHoraAntes.isAfter(ahora)) {
         NotificacionesService().programarAlertaRutina(
           id: rutina.id.hashCode + diaIndex + 1000,
           titulo: 'Preparación de hábito',
           body: 'Tu hábito "${rutina.titulo}" comienza en 1 hora.',
           fechaVisual: fechaUnaHoraAntes,
+          esAlarmaFullScreen: false, // <--- AÑADE ESTA LÍNEA
         );
       }
 
-      // Aviso a la hora exacta
+      // Aviso a la hora exacta (PANTALLA COMPLETA)
       NotificacionesService().programarAlertaRutina(
         id: rutina.id.hashCode + diaIndex,
         titulo: '¡Es hora de tu hábito!',
         body: 'Es momento de: ${rutina.titulo}',
         fechaVisual: proximaFecha,
+        esAlarmaFullScreen: true, // <--- AÑADE ESTA LÍNEA
       );
     });
   }
