@@ -4,13 +4,17 @@ import 'package:flutter/services.dart';
 import '../../providers/tarea_provider.dart'; 
 
 class PantallaAlarma extends ConsumerWidget {
+  final int idAlarma;
   final String titulo;
   final String cuerpo;
+  final int iconoCode;
 
   const PantallaAlarma({
     super.key,
+    required this.idAlarma,
     required this.titulo,
     required this.cuerpo,
+    required this.iconoCode,
   });
 
   @override
@@ -64,8 +68,11 @@ class PantallaAlarma extends ConsumerWidget {
                   shape: BoxShape.circle,
                   color: accentColor.withValues(alpha: 0.15),
                 ),
+                // Si viene un ícono, lo armamos. Si es 0, usamos la campana genérica
                 child: Icon(
-                  Icons.notifications_active_rounded,
+                  iconoCode != 0 
+                      ? IconData(iconoCode, fontFamily: 'MaterialIcons') 
+                      : Icons.notifications_active_rounded,
                   size: 100,
                   color: accentColor,
                 ),

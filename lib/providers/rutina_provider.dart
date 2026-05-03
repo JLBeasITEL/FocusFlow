@@ -3,7 +3,7 @@ import 'package:flutter/material.dart'; // Necesario para TimeOfDay
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/rutina.dart';
-import '../services/notificaciones_service.dart'; // Importación del servicio
+import '../services/notificaciones_service.dart'; 
 
 class RutinaNotifier extends Notifier<List<Rutina>> {
   static const String _storageKey = 'lista_rutinas_v2';
@@ -57,24 +57,28 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       final proximaFecha = _calcularProximaFecha(diaIndex, hora);
       final fechaUnaHoraAntes = proximaFecha.subtract(const Duration(hours: 1));
 
-      // Aviso 1 hora antes (NOTIFICACIÓN NORMAL)
+      // Aviso 1 hora antes
       if (fechaUnaHoraAntes.isAfter(ahora)) {
         NotificacionesService().programarAlertaRutina(
           id: rutina.id.hashCode + diaIndex + 1000,
           titulo: 'Preparación de hábito',
           body: 'Tu hábito "${rutina.titulo}" comienza en 1 hora.',
           fechaVisual: fechaUnaHoraAntes,
-          esAlarmaFullScreen: false, // <--- AÑADE ESTA LÍNEA
+          iconoCode: rutina.iconoCode, // <-- AQUÍ LE PASAMOS TU ENTERO
+          esAlarmaFullScreen: false,
+          esInsistente: false,
         );
       }
 
-      // Aviso a la hora exacta (PANTALLA COMPLETA)
+      // Aviso a la hora exacta
       NotificacionesService().programarAlertaRutina(
         id: rutina.id.hashCode + diaIndex,
         titulo: '¡Es hora de tu hábito!',
         body: 'Es momento de: ${rutina.titulo}',
         fechaVisual: proximaFecha,
-        esAlarmaFullScreen: true, // <--- AÑADE ESTA LÍNEA
+        iconoCode: rutina.iconoCode, // <-- AQUÍ TAMBIÉN
+        esAlarmaFullScreen: true,
+        esInsistente: true,
       );
     });
   }
