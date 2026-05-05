@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
-import '../../providers/tarea_provider.dart'; 
+
+// Importamos el archivo correcto que controla los temas
+import '../../providers/tema_provider.dart'; 
 
 class PantallaAlarma extends ConsumerWidget {
   final int idAlarma;
@@ -44,6 +46,7 @@ class PantallaAlarma extends ConsumerWidget {
         accentColor = const Color(0xFFE29578); // Terracota claro
         break;
       case TemaApp.clasico:
+      default: // Siempre es buena práctica poner un default
         bgColor = const Color(0xFFF8F9FA); // Gris casi blanco
         textColor = const Color(0xFF212529);
         accentColor = const Color(0xFF276749); // Tu verde original

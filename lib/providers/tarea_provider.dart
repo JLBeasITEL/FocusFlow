@@ -102,18 +102,5 @@ class OrdenNotifier extends Notifier<TipoOrden> {
     state = nuevo;
   }
 }
+
 final ordenProvider = NotifierProvider<OrdenNotifier, TipoOrden>(() => OrdenNotifier());
-
-
-enum TemaApp { clasico, zenClasico, brisaMarina, atardecerMinimalista }
-
-class TemaNotifier extends Notifier<TemaApp> {
-  @override
-  TemaApp build() => TemaApp.clasico; // Estado inicial
-
-  // Método moderno para cambiar el estado
-  void cambiarTema(TemaApp nuevo) {
-    state = nuevo;
-  }
-}
-final temaProvider = NotifierProvider<TemaNotifier, TemaApp>(() => TemaNotifier());

@@ -240,4 +240,45 @@ class NotificacionesService {
   Future<void> cancelarAlertaRutina(int id) async {
     try { await _plugin.cancel(id); } catch (e) {}
   }
+
+  // --- SEMBRAR RECORDATORIOS CADA HORA ---
+  Future<void> programarRecordatoriosSecundarios(int idBase, String titulo, DateTime horaAlarma) async {
+    // Programamos, por ejemplo, 3 recordatorios (1 hora, 2 horas y 3 horas después)
+    // Evitamos programar más para que Android no bloquee la app por exceso de alarmas
+    for (int i = 1; i <= 3; i++) {
+      final fechaRecordatorio = horaAlarma.add(Duration(hours: i));
+      final int idRecordatorio = idBase + (i * 10000); // ID único pero fácil de rastrear
+      
+      final tz.TZDateTime fechaSistema = tz.TZDateTime.from(fechaRecordatorio, tz.local);
+
+      try {
+        await _plugin.zonedSchedule(
+          idRecordatorio,
+          'Sigue pendiente: $titulo',
+          'No olvides registrar este hábito para no perder tu racha.',
+          fechaSistema,
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              canalRecordatoriosId, // Usamos tu canal discreto
+              'Recordatorios Horarios',
+              importance: Importance.high,
+              priority: Priority.high,
+            ),
+          ),
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, // Seguro para batería
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        );
+      } catch (e) {
+        print('❌ Error agendando recordatorio secundario: $e');
+      }
+    }
+  }
+
+  // --- DESTRUIR RECORDATORIOS CUANDO SE COMPLETA EL HÁBITO ---
+  Future<void> cancelarRecordatoriosSecundarios(int idBase) async {
+    for (int i = 1; i <= 3; i++) {
+      await _plugin.cancel(idBase + (i * 10000));
+    }
+    print('🧹 Recordatorios secundarios cancelados para ID: $idBase');
+  }
 }

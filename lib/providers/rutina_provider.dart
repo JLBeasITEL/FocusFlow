@@ -45,6 +45,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     for (int i = 0; i < 7; i++) {
       NotificacionesService().cancelarAlertaRutina(rutina.id.hashCode + i); // Exacta
       NotificacionesService().cancelarAlertaRutina(rutina.id.hashCode + i + 1000); // 1 hora antes
+      NotificacionesService().cancelarRecordatoriosSecundarios(rutina.id.hashCode + i); // NUEVO: Limpiamos los secundarios
     }
 
     // 2. Si la rutina no está activa, terminamos aquí
@@ -79,6 +80,13 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         iconoCode: rutina.iconoCode, // <-- AQUÍ TAMBIÉN
         esAlarmaFullScreen: true,
         esInsistente: true,
+      );
+
+      // NUEVO: Sembramos los avisos para las siguientes 3 horas si no se completa
+      NotificacionesService().programarRecordatoriosSecundarios(
+        rutina.id.hashCode + diaIndex,
+        rutina.titulo,
+        proximaFecha,
       );
     });
   }
@@ -138,6 +146,16 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           r,
     ];
     _guardarRutinas();
+
+    // NUEVO: Destruir notificaciones de seguimiento si el hábito fue completado
+    final rutinaActualizada = state.firstWhere((r) => r.id == id);
+    if (rutinaActualizada.completada) {
+      final ahora = DateTime.now();
+      final diaIndex = ahora.weekday - 1; // Dart: Lunes es 1 -> diaIndex 0
+      
+      final int idBase = id.hashCode + diaIndex;
+      NotificacionesService().cancelarRecordatoriosSecundarios(idBase);
+    }
   }
 
   void incrementarRacha(String id) {
@@ -156,6 +174,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     for (int i = 0; i < 7; i++) {
       NotificacionesService().cancelarAlertaRutina(id.hashCode + i);
       NotificacionesService().cancelarAlertaRutina(id.hashCode + i + 1000);
+      NotificacionesService().cancelarRecordatoriosSecundarios(id.hashCode + i); // NUEVO: Limpiamos los secundarios
     }
   }
 }

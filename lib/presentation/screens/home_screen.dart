@@ -9,6 +9,7 @@ import '../widgets/add_tarea_modal.dart';
 import '../../providers/rutina_provider.dart';
 import '../widgets/rutina_card.dart';
 import 'rutina_form_screen.dart';
+import '../../providers/tema_provider.dart';
 
 // 1. Transformación a ConsumerStatefulWidget para manejar estado interno
 class HomeScreen extends ConsumerStatefulWidget {
