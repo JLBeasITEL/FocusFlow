@@ -5,7 +5,7 @@ import '../../models/rutina.dart';
 import '../../providers/rutina_provider.dart';
 
 class AddRutinaModal extends ConsumerStatefulWidget {
-  const AddRutinaModal({Key? key}) : super(key: key);
+  const AddRutinaModal({super.key});
 
   @override
   ConsumerState<AddRutinaModal> createState() => _AddRutinaModalState();

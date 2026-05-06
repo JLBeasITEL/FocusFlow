@@ -32,7 +32,7 @@ class NotificacionesService {
       tz.setLocalLocation(tz.getLocation('America/Mexico_City')); 
     }
 
-    const AndroidInitializationSettings androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const AndroidInitializationSettings androidInit = AndroidInitializationSettings('app_icon');
     const InitializationSettings initSettings = InitializationSettings(android: androidInit);
     
     final AndroidNotificationChannel canalRecordatorios = const AndroidNotificationChannel(
@@ -191,6 +191,7 @@ class NotificacionesService {
         payload: esAlarmaFullScreen ? 'alarma|$id|$titulo|$body' : null, 
       );
     } catch (e) {
+      // ignore: avoid_print
       print('❌ ERROR: $e');
     }
   }
@@ -220,6 +221,7 @@ class NotificacionesService {
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         payload: esAlarmaFullScreen ? payloadData : null, 
       );
+    // ignore: empty_catches
     } catch (e) {}
   }
 
@@ -227,7 +229,9 @@ class NotificacionesService {
   Future<void> apagarSonidoAlarma(int id) async {
     try {
       if (id != 0) await _plugin.cancel(id); 
-    } catch (e) {}
+    } catch (e) {
+      // ignore: empty_catches
+    }
   }
 
   Future<void> cancelarAlerta(String id) async {
@@ -238,6 +242,7 @@ class NotificacionesService {
   }
 
   Future<void> cancelarAlertaRutina(int id) async {
+    // ignore: empty_catches
     try { await _plugin.cancel(id); } catch (e) {}
   }
 
@@ -269,6 +274,7 @@ class NotificacionesService {
           uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         );
       } catch (e) {
+        // ignore: avoid_print
         print('❌ Error agendando recordatorio secundario: $e');
       }
     }
@@ -279,6 +285,7 @@ class NotificacionesService {
     for (int i = 1; i <= 3; i++) {
       await _plugin.cancel(idBase + (i * 10000));
     }
+    // ignore: avoid_print
     print('🧹 Recordatorios secundarios cancelados para ID: $idBase');
   }
 }

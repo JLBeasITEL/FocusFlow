@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 
 // Importamos el archivo correcto que controla los temas
 import '../../providers/tema_provider.dart'; 
+import '../../services/notificaciones_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class PantallaAlarma extends ConsumerWidget {
   final int idAlarma;
@@ -46,6 +48,7 @@ class PantallaAlarma extends ConsumerWidget {
         accentColor = const Color(0xFFE29578); // Terracota claro
         break;
       case TemaApp.clasico:
+      // ignore: unreachable_switch_default
       default: // Siempre es buena práctica poner un default
         bgColor = const Color(0xFFF8F9FA); // Gris casi blanco
         textColor = const Color(0xFF212529);
@@ -120,8 +123,19 @@ class PantallaAlarma extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(20),
                     ),
                   ),
-                  onPressed: () {
-                    // Cierra la aplicación por completo y restaura el bloqueo
+                  onPressed: () async {
+                    try {
+                      // 1. Cancelamos la notificación/alarma a nivel nativo usando su ID (asegúrate de que sea un int)
+                      await FlutterLocalNotificationsPlugin().cancel(idAlarma);
+                      
+                      // 2. OPCIONAL: Si por alguna razón no tienes el ID exacto, puedes usar 'cancelAll()' 
+                      // para detener cualquier sonido de la app que esté sonando:
+                      // await FlutterLocalNotificationsPlugin().cancelAll();
+                    } catch (e) {
+                      print('Error al detener la alarma: $e');
+                    }
+
+                    // 3. Cierra la aplicación por completo y restaura el bloqueo
                     SystemNavigator.pop();
                   },
                   child: const Text(

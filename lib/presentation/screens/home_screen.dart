@@ -10,6 +10,9 @@ import '../../providers/rutina_provider.dart';
 import '../widgets/rutina_card.dart';
 import 'rutina_form_screen.dart';
 import '../../providers/tema_provider.dart';
+// 1. Importamos la librería de permisos
+import 'package:permission_handler/permission_handler.dart'; 
+import 'dart:async';
 
 // 1. Transformación a ConsumerStatefulWidget para manejar estado interno
 class HomeScreen extends ConsumerStatefulWidget {
@@ -49,6 +52,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         }
       }
     });
+
+    // 2. Llamamos a la función de permisos justo al abrir la pantalla
+    _solicitarPermisosDeBateria();
+  }
+
+  // 3. Definimos la función para solicitar los permisos especiales de Android
+  Future<void> _solicitarPermisosDeBateria() async {
+    // Permiso vital para que las notificaciones puedan existir
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
+    // Permiso para evitar que Android mate los servicios en segundo plano por la batería
+    if (await Permission.ignoreBatteryOptimizations.isDenied) {
+      await Permission.ignoreBatteryOptimizations.request();
+    }
+    
+    // Permiso para programar alarmas exactas (Requerido en Android 12 y superior)
+    if (await Permission.scheduleExactAlarm.isDenied) {
+      await Permission.scheduleExactAlarm.request();
+    }
   }
 
   @override
@@ -329,6 +352,51 @@ class TareaCard extends ConsumerStatefulWidget {
 class _TareaCardState extends ConsumerState<TareaCard> {
   bool _isExpanded = false; 
   bool _showOverlayMenu = false;
+  Timer? _timerAtraso; // 1. Creamos la variable del temporizador
+
+  @override
+  void initState() {
+    super.initState();
+    _programarRevisarAtraso(); // 2. Lo iniciamos al crear la tarjeta
+  }
+
+  // Si la tarea se edita (ej. le cambias la fecha), reiniciamos el temporizador
+  @override
+  void didUpdateWidget(TareaCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tarea.fechaLimite != widget.tarea.fechaLimite || 
+        oldWidget.tarea.esCompletada != widget.tarea.esCompletada) {
+      _timerAtraso?.cancel();
+      _programarRevisarAtraso();
+    }
+  }
+
+  void _programarRevisarAtraso() {
+    final tarea = widget.tarea;
+    // Solo programamos si la tarea no está completada y tiene fecha límite
+    if (!tarea.esCompletada && tarea.fechaLimite != null) {
+      final ahora = DateTime.now();
+      
+      // Si la fecha límite aún está en el futuro...
+      if (tarea.fechaLimite!.isAfter(ahora)) {
+        // Calculamos cuánto falta exactamente
+        final diferencia = tarea.fechaLimite!.difference(ahora);
+        
+        // Programamos una alarma interna para redibujar justo en ese segundo
+        _timerAtraso = Timer(diferencia, () {
+          if (mounted) {
+            setState(() {}); // Esto hace aparecer el letrero "ATRASADO"
+          }
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _timerAtraso?.cancel(); // 3. Destruimos el temporizador si la tarjeta desaparece
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -47,7 +47,9 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
 
       if (!_esFlexible && r.horarios.isNotEmpty) {
         _horaFija = r.horarios.values.first;
-        r.horarios.keys.forEach((day) => _diasFijos[day] = true);
+        for (var day in r.horarios.keys) {
+          _diasFijos[day] = true;
+        }
       }
     }
   }
@@ -140,7 +142,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold)),
               subtitle: const Text('Desactiva para usar la misma hora siempre'),
               value: _esFlexible,
-              activeColor: Colors.deepPurple,
+              activeThumbColor: Colors.deepPurple,
               onChanged: (val) => setState(() => _esFlexible = val),
             ),
             const Divider(),
@@ -195,12 +197,15 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                   ) : null,
                   onChanged: (val) {
                     setState(() {
-                      if (val!) _horarios[idx] = const TimeOfDay(hour: 8, minute: 0);
-                      else _horarios.remove(idx);
+                      if (val!) {
+                        _horarios[idx] = const TimeOfDay(hour: 8, minute: 0);
+                      } else {
+                        _horarios.remove(idx);
+                      }
                     });
                   },
                 );
-              }).toList(),
+              }),
             ],
 
             const SizedBox(height: 25),
