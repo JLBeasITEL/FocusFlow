@@ -44,6 +44,7 @@ dependencies:
   permission_handler: ^12.0.1
   android_alarm_manager_plus: ^5.0.0
   flutter_launcher_icons: ^0.14.4
+  wakelock_plus: ^1.6.0
 
 dev_dependencies:
   flutter_test:

@@ -288,4 +288,39 @@ class NotificacionesService {
     // ignore: avoid_print
     print('🧹 Recordatorios secundarios cancelados para ID: $idBase');
   }
+
+// --- FUNCIÓN PARA POSPONER ALARMAS (INFALIBLE Y EN BUCLE) ---
+  Future<void> posponerAlerta(int idAlarma, String titulo, String cuerpo, int minutos) async {
+    // 1. Calculamos la nueva hora sumando los minutos a la hora actual
+    final tz.TZDateTime nuevaHora = tz.TZDateTime.now(tz.local).add(Duration(minutes: minutos));
+
+    // 2. El payload correcto
+    final String datosPayload = 'alarma|$idAlarma|$titulo|$cuerpo|0'; 
+
+    try {
+      await _plugin.zonedSchedule(
+        idAlarma,
+        titulo,
+        cuerpo.isEmpty ? 'Pospuesto' : cuerpo,
+        nuevaHora,
+        NotificationDetails( // <-- IMPORTANTE: Se quitó el 'const' aquí
+          android: AndroidNotificationDetails(
+            canalAlarmasId, 
+            'Alarmas de Urgencia',
+            importance: Importance.max,
+            priority: Priority.high,
+            fullScreenIntent: true,
+            playSound: true,
+            additionalFlags: Int32List.fromList(<int>[4]), // <--- ESTO HACE QUE SUENE SIN PARAR
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.alarmClock,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        payload: datosPayload,
+      );
+      print('✅ Alarma pospuesta exitosamente para dentro de $minutos minutos');
+    } catch (e) {
+      print('❌ Error al posponer la alarma: $e');
+    }
+  }
 }
