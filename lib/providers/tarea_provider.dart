@@ -16,14 +16,43 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     return []; 
   }
 
-  // --- CARGAR DATOS ---
+  // --- CARGAR DATOS Y LIMPIEZA AUTOMÁTICA ---
   Future<void> _cargarTareas() async {
     final prefs = await SharedPreferences.getInstance();
     final String? tareasJson = prefs.getString(_storageKey);
 
     if (tareasJson != null) {
       final List<dynamic> listaDecodificada = jsonDecode(tareasJson);
-      state = listaDecodificada.map((item) => Tarea.fromJson(item)).toList();
+      List<Tarea> tareasCargadas = listaDecodificada.map((item) => Tarea.fromJson(item)).toList();
+
+      // ==============================================================
+      // LÓGICA DE LIMPIEZA ANTI-CARRERAS
+      // Para hacer la prueba forzada, descomenta la línea de MODO PRUEBA
+      // y comenta la de MODO NORMAL.
+      // ==============================================================
+      
+      final hoy = DateTime.now().toIso8601String().split('T')[0]; // <-- MODO NORMAL
+      
+      final ultimoDiaLimpieza = prefs.getString('ultimo_dia_limpieza_tareas');
+
+      if (ultimoDiaLimpieza != hoy) {
+        // 1. Filtramos para eliminar las completadas de ayer
+        tareasCargadas = tareasCargadas.where((tarea) => !tarea.esCompletada).toList();
+        
+        // 2. Registramos que ya limpiamos hoy
+        await prefs.setString('ultimo_dia_limpieza_tareas', hoy);
+        
+        // 3. Asignamos la lista limpia al estado de la aplicación
+        state = tareasCargadas;
+        
+        // 4. ¡CRÍTICO! Guardamos en la base de datos para borrar las viejas para siempre
+        _guardarTareas();
+        
+        print('🧹 Limpieza de tareas completadas ejecutada correctamente (Día: $hoy)');
+      } else {
+        // Si ya se limpió hoy, simplemente cargamos las tareas normales
+        state = tareasCargadas;
+      }
     }
   }
 
@@ -38,17 +67,10 @@ class TareaNotifier extends Notifier<List<Tarea>> {
 
   // --- MÉTODOS DE ACCIÓN ---
 
-  // Cambiamos 'void' por 'Future<void>' y agregamos 'async'
   Future<void> addTarea(Tarea tarea) async {
-    
-    // 1. ANTES de guardar la tarea, verificamos y pedimos los permisos especiales
     await NotificacionesService().solicitarPermisosEspeciales();
-
-    // 2. Ahora sí, guardamos la tarea en la memoria y en el teléfono
     state = [...state, tarea];
     _guardarTareas(); 
-    
-    // 3. Programamos la alarma (ahora con la seguridad de que Android nos dejará)
     NotificacionesService().programarAlertaDefinitiva(tarea);
   }
 
@@ -57,8 +79,7 @@ class TareaNotifier extends Notifier<List<Tarea>> {
       for (final tarea in state)
         if (tarea.id == id) tarea.copyWith(esCompletada: !tarea.esCompletada) else tarea,
     ];
-    
-    _guardarTareas(); // Guardamos el cambio de estado
+    _guardarTareas(); 
     
     final tareaModificada = state.firstWhere((t) => t.id == id);
     if (tareaModificada.esCompletada) {
@@ -73,15 +94,19 @@ class TareaNotifier extends Notifier<List<Tarea>> {
       for (final t in state)
         if (t.id == tareaActualizada.id) tareaActualizada else t,
     ];
-    _guardarTareas(); // Guardamos la edición
+    _guardarTareas(); 
     NotificacionesService().programarAlertaDefinitiva(tareaActualizada);
   }
 
   void deleteTarea(String id) {
     state = state.where((t) => t.id != id).toList();
-    _guardarTareas(); // Guardamos la eliminación
+    _guardarTareas(); 
     NotificacionesService().cancelarAlerta(id);
   }
+
+  // Esta función se queda vacía para no romper el código de home_screen.dart
+  // La limpieza ahora ocurre de forma segura dentro de _cargarTareas()
+  Future<void> limpiarTareasCompletadasAlCambiarDeDia() async { }
 }
 
 // 2. El Provider moderno (NotifierProvider)
@@ -95,9 +120,8 @@ enum TipoOrden { creacion, alfabetico, urgencia, fecha }
 
 class OrdenNotifier extends Notifier<TipoOrden> {
   @override
-  TipoOrden build() => TipoOrden.creacion; // Estado inicial
+  TipoOrden build() => TipoOrden.creacion; 
 
-  // Método moderno para cambiar el estado
   void cambiarOrden(TipoOrden nuevo) {
     state = nuevo;
   }

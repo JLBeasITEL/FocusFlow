@@ -60,9 +60,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
     _solicitarPermisosDeBateria();
 
-    // NUEVO: Sincronización silenciosa de rutinas al abrir la app
+    // --- SINCRONIZACIÓN AUTOMÁTICA AL ABRIR LA APP ---
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // 1. Resincroniza alarmas
       _resincronizarRutinasSilenciosamente();
+      
+      // 2. Verifica si se perdieron rachas de hábitos
+      ref.read(rutinaProvider.notifier).verificarRachasPerdidas();
+
+      // 3. LIMPIEZA DE TAREAS: Borra las completadas de ayer
+      ref.read(tareaProvider.notifier).limpiarTareasCompletadasAlCambiarDeDia();
     });
   }
 
@@ -272,19 +279,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
     List<Tarea> tareas = List.from(tareasOriginales);
 
-    switch (tipoOrden) {
-      case TipoOrden.alfabetico: tareas.sort((a, b) => a.titulo.toLowerCase().compareTo(b.titulo.toLowerCase())); break;
-      case TipoOrden.urgencia: tareas.sort((a, b) => b.urgencia.compareTo(a.urgencia)); break;
-      case TipoOrden.fecha:
-        tareas.sort((a, b) {
+    // NUEVA LÓGICA DE ORDENAMIENTO (Completadas siempre al final)
+    tareas.sort((a, b) {
+      // 1. Prioridad Máxima: Estado de completado
+      // Si una está completada y la otra no, la no completada va primero
+      if (a.esCompletada != b.esCompletada) {
+        return a.esCompletada ? 1 : -1; 
+      }
+
+      // 2. Si ambas tienen el mismo estado (ambas completadas o ambas pendientes), 
+      // aplicamos el orden seleccionado por el usuario en el menú
+      switch (tipoOrden) {
+        case TipoOrden.alfabetico: 
+          return a.titulo.toLowerCase().compareTo(b.titulo.toLowerCase());
+        case TipoOrden.urgencia: 
+          return b.urgencia.compareTo(a.urgencia);
+        case TipoOrden.fecha:
           if (a.fechaLimite == null && b.fechaLimite == null) return 0;
           if (a.fechaLimite == null) return 1; 
           if (b.fechaLimite == null) return -1;
           return a.fechaLimite!.compareTo(b.fechaLimite!); 
-        });
-        break;
-      case TipoOrden.creacion: break;
-    }
+        case TipoOrden.creacion: 
+          return 0; // Mantiene el orden en el que se crearon
+      }
+    });
 
     final colorPrincipal = _getColorPrincipal(temaActual);
     final degradadoFondo = _getDegradadoFondo(temaActual);
