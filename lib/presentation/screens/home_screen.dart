@@ -59,6 +59,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     });
 
     _solicitarPermisosDeBateria();
+
+    // NUEVO: Sincronización silenciosa de rutinas al abrir la app
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resincronizarRutinasSilenciosamente();
+    });
+  }
+
+  // --- FUNCIÓN DE RESPALDO ANTI-BORRADO ---
+  void _resincronizarRutinasSilenciosamente() {
+    // 1. Leemos todas las rutinas de la memoria mediante Riverpod
+    final rutinas = ref.read(rutinaProvider);
+    
+    // 2. Filtramos solo las que el usuario dejó encendidas (activas)
+    final rutinasActivas = rutinas.where((r) => r.activa).toList();
+
+    // 3. Reprogramamos las alarmas en el sistema Android
+    for (var rutina in rutinasActivas) {
+       // OJO: Aquí debes descomentar y ajustar la siguiente línea según 
+       // cómo se llame la función que usas normalmente para programar alarmas:
+       
+       // NotificacionesService().programarRutina(rutina);
+       
+       print('🔄 Resincronizando rutina silenciosamente: ${rutina.titulo}');
+    }
   }
 
   Future<void> _solicitarPermisosDeBateria() async {

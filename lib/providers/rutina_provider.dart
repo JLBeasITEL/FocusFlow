@@ -22,11 +22,13 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       final List<dynamic> listaDecodificada = jsonDecode(rutinasJson);
       final List<Rutina> rutinas = listaDecodificada.map((item) => Rutina.fromJson(item)).toList();
 
-      // Comprobamos si cambió el día para reiniciar el checklist diario
       final hoy = DateTime.now().toIso8601String().split('T')[0];
       state = rutinas.map((r) {
-        if (r.fechaCompletada != hoy) {
-          return r.copyWith(completada: false, fechaCompletada: hoy);
+        // CORRECCIÓN CLAVE: Solo desmarcamos la rutina si cambió el día.
+        // NO sobrescribimos la "fechaCompletada" aquí, porque necesitamos 
+        // recordar en qué día se hizo realmente para calcular la racha.
+        if (r.fechaCompletada != hoy && r.completada) {
+          return r.copyWith(completada: false);
         }
         return r;
       }).toList();
@@ -45,7 +47,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     for (int i = 0; i < 7; i++) {
       NotificacionesService().cancelarAlertaRutina(rutina.id.hashCode + i); // Exacta
       NotificacionesService().cancelarAlertaRutina(rutina.id.hashCode + i + 1000); // 1 hora antes
-      NotificacionesService().cancelarRecordatoriosSecundarios(rutina.id.hashCode + i); // NUEVO: Limpiamos los secundarios
+      NotificacionesService().cancelarRecordatoriosSecundarios(rutina.id.hashCode + i); // Limpiamos los secundarios
     }
 
     // 2. Si la rutina no está activa, terminamos aquí
@@ -65,7 +67,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           titulo: 'Preparación de hábito',
           body: 'Tu hábito "${rutina.titulo}" comienza en 1 hora.',
           fechaVisual: fechaUnaHoraAntes,
-          iconoCode: rutina.iconoCode, // <-- AQUÍ LE PASAMOS TU ENTERO
+          iconoCode: rutina.iconoCode,
           esAlarmaFullScreen: false,
           esInsistente: false,
         );
@@ -77,12 +79,12 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         titulo: '¡Es hora de tu hábito!',
         body: 'Es momento de: ${rutina.titulo}',
         fechaVisual: proximaFecha,
-        iconoCode: rutina.iconoCode, // <-- AQUÍ TAMBIÉN
+        iconoCode: rutina.iconoCode,
         esAlarmaFullScreen: true,
         esInsistente: true,
       );
 
-      // NUEVO: Sembramos los avisos para las siguientes 3 horas si no se completa
+      // Sembramos los avisos para las siguientes 3 horas si no se completa
       NotificacionesService().programarRecordatoriosSecundarios(
         rutina.id.hashCode + diaIndex,
         rutina.titulo,
@@ -109,7 +111,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   void addRutina(Rutina rutina) {
     state = [...state, rutina];
     _guardarRutinas();
-    _gestionarNotificacionesRutina(rutina); // Programar al crear
+    _gestionarNotificacionesRutina(rutina); 
   }
 
   void editarRutina(Rutina rutinaEditada) {
@@ -118,7 +120,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         if (r.id == rutinaEditada.id) rutinaEditada else r,
     ];
     _guardarRutinas();
-    _gestionarNotificacionesRutina(rutinaEditada); // Actualizar al editar
+    _gestionarNotificacionesRutina(rutinaEditada); 
   }
 
   void toggleActiva(String id) {
@@ -129,7 +131,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     _guardarRutinas();
     
     final rutinaActualizada = state.firstWhere((r) => r.id == id);
-    _gestionarNotificacionesRutina(rutinaActualizada); // Reprogramar o limpiar
+    _gestionarNotificacionesRutina(rutinaActualizada); 
   }
 
   void toggleCompletada(String id) {
@@ -140,18 +142,18 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           r.copyWith(
             completada: !r.completada,
             racha: !r.completada ? r.racha + 1 : (r.racha > 0 ? r.racha - 1 : 0),
-            fechaCompletada: hoy,
+            // CORRECCIÓN: Si marca la tarea, guarda hoy. Si la desmarca (error del usuario), la borramos.
+            fechaCompletada: !r.completada ? hoy : null,
           )
         else
           r,
     ];
     _guardarRutinas();
 
-    // NUEVO: Destruir notificaciones de seguimiento si el hábito fue completado
     final rutinaActualizada = state.firstWhere((r) => r.id == id);
     if (rutinaActualizada.completada) {
       final ahora = DateTime.now();
-      final diaIndex = ahora.weekday - 1; // Dart: Lunes es 1 -> diaIndex 0
+      final diaIndex = ahora.weekday - 1; 
       
       final int idBase = id.hashCode + diaIndex;
       NotificacionesService().cancelarRecordatoriosSecundarios(idBase);
@@ -170,11 +172,66 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     state = state.where((r) => r.id != id).toList();
     _guardarRutinas();
     
-    // Al eliminar, borramos los rastros de sus alarmas
     for (int i = 0; i < 7; i++) {
       NotificacionesService().cancelarAlertaRutina(id.hashCode + i);
       NotificacionesService().cancelarAlertaRutina(id.hashCode + i + 1000);
-      NotificacionesService().cancelarRecordatoriosSecundarios(id.hashCode + i); // NUEVO: Limpiamos los secundarios
+      NotificacionesService().cancelarRecordatoriosSecundarios(id.hashCode + i); 
+    }
+  }
+
+  // --- FUNCIÓN PARA ROMPER RACHAS PERDIDAS ---
+  void verificarRachasPerdidas() {
+    final ahora = DateTime.now();
+    // Quitamos horas y minutos para comparar solo los días exactos
+    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
+
+    bool huboCambios = false;
+
+    state = state.map((rutina) {
+      if (rutina.racha == 0 || rutina.fechaCompletada == null || rutina.fechaCompletada!.isEmpty) {
+        return rutina;
+      }
+
+      DateTime ultima;
+      try {
+        ultima = DateTime.parse(rutina.fechaCompletada!);
+      } catch (e) {
+        return rutina; 
+      }
+
+      final fechaUltima = DateTime(ultima.year, ultima.month, ultima.day);
+
+      // Si la completó hoy mismo o ayer, la racha está a salvo (el ciclo for no entrará)
+      if (fechaUltima.isAtSameMomentAs(hoy)) {
+         return rutina;
+      }
+
+      int diasPasados = hoy.difference(fechaUltima).inDays;
+      bool perdioRacha = false;
+
+      // Revisamos día por día hacia atrás, desde "ayer" hasta la fechaUltima
+      for (int i = 1; i < diasPasados; i++) {
+        final diaRevision = hoy.subtract(Duration(days: i));
+        final diaSemana = diaRevision.weekday - 1; // 0 = Lunes, 6 = Domingo
+
+        // Si encontramos un día que tocaba hacerla, y está vacío...
+        if (rutina.horarios.containsKey(diaSemana)) {
+          perdioRacha = true;
+          break; // La racha se rompe inmediatamente
+        }
+      }
+
+      if (perdioRacha) {
+        huboCambios = true;
+        return rutina.copyWith(racha: 0); 
+      }
+
+      return rutina;
+    }).toList();
+
+    if (huboCambios) {
+      // CORRECCIÓN: Usamos la función de guardado real de este Provider
+      _guardarRutinas(); 
     }
   }
 }
