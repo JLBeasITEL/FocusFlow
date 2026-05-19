@@ -63,25 +63,26 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
         bgColor = const Color(0xFFF4F1EA); 
         textColor = const Color(0xFF4A4A4A);
         accentColor = const Color(0xFF7B9E87); 
-        snoozeColor = const Color(0xFF5A7A65); // Verde oscuro
+        snoozeColor = const Color(0xFF5A7A65); 
         break;
       case TemaApp.brisaMarina:
         bgColor = const Color(0xFFE8F1F5); 
         textColor = const Color(0xFF2C3E50);
         accentColor = const Color(0xFF5D9B9B); 
-        snoozeColor = const Color(0xFF1B4965); // Azul profundo
+        snoozeColor = const Color(0xFF1B4965); 
         break;
       case TemaApp.atardecerMinimalista:
         bgColor = const Color(0xFFFFF5E6); 
         textColor = const Color(0xFF5C4A3D);
         accentColor = const Color(0xFFE07A5F); 
-        snoozeColor = const Color(0xFFAC6B53); // Terracota oscuro
+        snoozeColor = const Color(0xFFAC6B53); 
         break;
-      default: 
-        bgColor = const Color(0xFF1E1E1E); 
-        textColor = Colors.white;
-        accentColor = Colors.orangeAccent;
-        snoozeColor = Colors.orange.shade900; 
+      case TemaApp.clasico:
+      // --- NUEVA PALETA PARA EL TEMA CLÁSICO ---
+        bgColor = Colors.white; // Fondo limpio como el HomeScreen
+        textColor = Colors.black87; // Texto elegante oscuro
+        accentColor = Colors.teal; // Acento principal de las tareas
+        snoozeColor = Colors.teal.shade700; // Un verde/azulado oscuro para el botón posponer
         break;
     }
 

@@ -1,4 +1,5 @@
 import 'package:app_tareas/presentation/screens/gestor_rutinas_screen.dart';
+import 'package:app_tareas/presentation/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -132,8 +133,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.sticky_note_2_outlined, size: 80, color: colorPrincipal.withValues(alpha: 0.2)),
-            const SizedBox(height: 16),
+            //Icon(Icons.sticky_note_2_outlined, size: 80, color: colorPrincipal.withValues(alpha: 0.2)),
+            const SizedBox(height: 250),
             Text('Tu tablero está vacío.', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6), fontSize: 16)),
             Text('Agrega un post-it rápido.', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.4), fontSize: 14)),
           ],
@@ -275,20 +276,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     final tareasOriginales = ref.watch(tareaProvider);
     final tipoOrden = ref.watch(ordenProvider);
     final temaActual = ref.watch(temaProvider);
-    final notasGuardadas = ref.watch(notaProvider); // Obtenemos las notas de la memoria
+    final notasGuardadas = ref.watch(notaProvider); 
 
     List<Tarea> tareas = List.from(tareasOriginales);
 
-    // NUEVA LÓGICA DE ORDENAMIENTO (Completadas siempre al final)
+    // LÓGICA DE ORDENAMIENTO (Mantiene las completadas al final)
     tareas.sort((a, b) {
-      // 1. Prioridad Máxima: Estado de completado
-      // Si una está completada y la otra no, la no completada va primero
       if (a.esCompletada != b.esCompletada) {
         return a.esCompletada ? 1 : -1; 
       }
-
-      // 2. Si ambas tienen el mismo estado (ambas completadas o ambas pendientes), 
-      // aplicamos el orden seleccionado por el usuario en el menú
       switch (tipoOrden) {
         case TipoOrden.alfabetico: 
           return a.titulo.toLowerCase().compareTo(b.titulo.toLowerCase());
@@ -300,13 +296,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           if (b.fechaLimite == null) return -1;
           return a.fechaLimite!.compareTo(b.fechaLimite!); 
         case TipoOrden.creacion: 
-          return 0; // Mantiene el orden en el que se crearon
+          return 0; 
       }
     });
 
     final colorPrincipal = _getColorPrincipal(temaActual);
     final degradadoFondo = _getDegradadoFondo(temaActual);
     final colorFondoAppBar = _getColorFondoAppBar(temaActual); 
+
+    // Lógica adaptativa para la marca de agua del loto
+    final String imagenFondo = temaActual == TemaApp.clasico 
+        ? 'assets/images/loto_gris.png' 
+        : 'assets/images/loto_blanco.png';
+
+    // Opacidad sutil ajustada para alta legibilidad
+    final double opacidadLoto = temaActual == TemaApp.clasico ? 0.20 : 0.35;
 
     return Scaffold(
       backgroundColor: colorFondoAppBar, 
@@ -315,20 +319,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         backgroundColor: colorFondoAppBar,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        title: Text('FocusFlow', style: TextStyle(fontWeight: FontWeight.bold, color: colorPrincipal, fontSize: 24)),
+        title: const Text('FocusFlow', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
+        foregroundColor: colorPrincipal,
         actions: [
-          PopupMenuButton<TemaApp>(
-            icon: Icon(Icons.palette_rounded, color: colorPrincipal),
-            tooltip: 'Cambiar Tema',
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            onSelected: (TemaApp result) => ref.read(temaProvider.notifier).cambiarTema(result),
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<TemaApp>>[
-              const PopupMenuItem<TemaApp>(value: TemaApp.clasico, child: Row(children: [Icon(Icons.format_paint, size: 20, color: Colors.black87), SizedBox(width: 12), Text('Original (Blanco)')])),
-              const PopupMenuItem<TemaApp>(value: TemaApp.zenClasico, child: Row(children: [Icon(Icons.spa, size: 20, color: Color(0xFF5A855C)), SizedBox(width: 12), Text('Zen Clásico (Verde)')])),
-              const PopupMenuItem<TemaApp>(value: TemaApp.brisaMarina, child: Row(children: [Icon(Icons.water_drop, size: 20, color: Color(0xFF3182CE)), SizedBox(width: 12), Text('Brisa Marina (Azul)')])),
-              const PopupMenuItem<TemaApp>(value: TemaApp.atardecerMinimalista, child: Row(children: [Icon(Icons.wb_twilight, size: 20, color: Color(0xFFDD6B20)), SizedBox(width: 12), Text('Atardecer (Naranja)')])),
-            ],
-          ),
           PopupMenuButton<TipoOrden>(
             icon: Icon(Icons.sort_rounded, color: colorPrincipal),
             tooltip: 'Ordenar',
@@ -346,12 +339,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             tooltip: 'Configurar Horario Semanal',
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => GestorRutinasScreen(colorTema: colorPrincipal))),
           ),
+          IconButton(
+            icon: Icon(Icons.more_vert_rounded, color: colorPrincipal),
+            tooltip: 'Configuraciones',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
+          ),
           const SizedBox(width: 8),
         ],
         bottom: TabBar(
           controller: _tabController,
           labelColor: colorPrincipal,
           indicatorColor: colorPrincipal,
+          unselectedLabelColor: colorPrincipal.withOpacity(0.5),
           tabs: const [
             Tab(icon: Icon(Icons.check_circle_outline), text: 'Tareas'),
             Tab(icon: Icon(Icons.repeat_rounded), text: 'Rutinas'),
@@ -393,19 +397,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       ),
       
       body: Container(
-        decoration: BoxDecoration(gradient: degradadoFondo),
+        decoration: BoxDecoration(
+          gradient: degradadoFondo, 
+          image: DecorationImage(
+            image: AssetImage(imagenFondo),
+            fit: BoxFit.scaleDown, 
+            alignment: Alignment.center,
+            colorFilter: ColorFilter.mode(
+              Colors.black.withOpacity(opacidadLoto), 
+              BlendMode.dstIn,
+            ),
+          ),
+        ),
         child: TabBarView(
           controller: _tabController,
           children: [
             tareas.isEmpty
-                ? Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6))))
+                ? Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withOpacity(0.6))))
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), 
                     itemCount: tareas.length,
                     itemBuilder: (context, index) => TareaCard(tarea: tareas[index], tema: temaActual),
                   ),
             const _SeccionRutinasHoy(), 
-            _buildTabNotas(colorPrincipal, notasGuardadas), // Le pasamos la lista segura
+            _buildTabNotas(colorPrincipal, notasGuardadas), 
           ],
         ),
       ),
@@ -655,9 +670,10 @@ class _SeccionRutinasHoy extends ConsumerWidget {
             ],
           ),
         ),
+        const SizedBox(height: 180),
         Expanded(
           child: rutinasDeHoy.isEmpty
-              ? Center(child: Icon(Icons.event_available_rounded, size: 80, color: colorPrincipal.withValues(alpha: 0.15)))
+              ? Center(child: Text('Cada que agregas un nuevo hábito a tu vida,\n te acercas más a la persona que quieres ser.', style: TextStyle(color: colorPrincipal.withOpacity(0.6))))
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: rutinasDeHoy.length,

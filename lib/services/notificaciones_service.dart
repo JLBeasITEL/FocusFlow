@@ -5,6 +5,7 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:flutter/material.dart'; 
 import 'package:flutter/scheduler.dart' hide Priority;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Importación crucial para leer los sonidos
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import '../models/tarea.dart';
@@ -18,8 +19,9 @@ class NotificacionesService {
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   static late GlobalKey<NavigatorState> _navigatorKey;
   
-  static const String canalRecordatoriosId = 'canal_recordatorios_v3';
-  static const String canalAlarmasId = 'canal_alarmas_v3';
+  // Cambiamos a v4 para forzar a Android a limpiar la caché anterior
+  static const String canalRecordatoriosId = 'canal_recordatorios_v4';
+  static const String canalAlarmasId = 'canal_alarmas_v4';
 
   Future<void> init(GlobalKey<NavigatorState> key) async {
     _navigatorKey = key;
@@ -34,21 +36,6 @@ class NotificacionesService {
 
     const AndroidInitializationSettings androidInit = AndroidInitializationSettings('app_icon');
     const InitializationSettings initSettings = InitializationSettings(android: androidInit);
-    
-    final AndroidNotificationChannel canalRecordatorios = const AndroidNotificationChannel(
-      canalRecordatoriosId, 'Recordatorios',
-      importance: Importance.high, playSound: true, enableVibration: true,
-    );
-
-    final AndroidNotificationChannel canalAlarmas = const AndroidNotificationChannel(
-      canalAlarmasId, 'Alarmas Urgentes',
-      importance: Importance.max, playSound: true, enableVibration: true,
-    );
-
-    await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(canalRecordatorios);
-    await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(canalAlarmas);
 
     await _plugin.initialize(
       initSettings,
@@ -78,13 +65,13 @@ class NotificacionesService {
       int id = 0;
       String titulo = '';
       String cuerpo = '';
-      int iconoCode = 0; // <-- NUEVA VARIABLE
+      int iconoCode = 0; 
 
-      if (partes.length >= 5) { // Si trae ícono
+      if (partes.length >= 5) { 
         id = int.tryParse(partes[1]) ?? 0;
         titulo = partes[2];
         cuerpo = partes[3];
-        iconoCode = int.tryParse(partes[4]) ?? 0; // Leemos el código
+        iconoCode = int.tryParse(partes[4]) ?? 0; 
       } else if (partes.length == 4) {
         id = int.tryParse(partes[1]) ?? 0;
         titulo = partes[2];
@@ -122,22 +109,20 @@ class NotificacionesService {
     final ahoraReal = DateTime.now(); 
     final ahoraTz = tz.TZDateTime.now(tz.local);
 
-    // 1. DETERMINAR EL NIVEL DE ALARMA SEGÚN URGENCIA
     bool usarPantallaCompleta = false;
     bool usarLoopInsistente = false;
 
-    if (tarea.urgencia == 4) { // Muy Alta
+    if (tarea.urgencia == 4) { 
       usarPantallaCompleta = true;
       usarLoopInsistente = true;
-    } else if (tarea.urgencia == 3) { // Alta
+    } else if (tarea.urgencia == 3) { 
       usarPantallaCompleta = true;
-      usarLoopInsistente = false; // Suena normal, pero abre la pantalla
-    } else { // Media (2) o Baja (1)
+      usarLoopInsistente = false; 
+    } else { 
       usarPantallaCompleta = false;
-      usarLoopInsistente = false; // Solo notificación discreta
+      usarLoopInsistente = false; 
     }
 
-    // 2. PROGRAMAR FECHA LÍMITE
     if (tarea.fechaLimite!.isAfter(ahoraReal)) {
       final tzLimite = ahoraTz.add(tarea.fechaLimite!.difference(ahoraReal));
       String titulo = tarea.urgencia == 4 ? '🔥 ¡URGENTE: TIEMPO AGOTADO!' : '⏰ Tiempo agotado';
@@ -149,7 +134,6 @@ class NotificacionesService {
       );
     }
 
-    // 3. RECORDATORIO 1 HORA ANTES (Siempre será discreto)
     final fechaRecordatorio = tarea.fechaLimite!.subtract(const Duration(minutes: 60));
     if (fechaRecordatorio.isAfter(ahoraReal)) {
       final tzRecordatorio = ahoraTz.add(fechaRecordatorio.difference(ahoraReal));
@@ -159,7 +143,6 @@ class NotificacionesService {
       );
     }
 
-    // 4. URGENCIA / INICIO (Usa la misma regla de urgencia que la fecha límite)
     if (tarea.horasEstimadas != null && tarea.horasEstimadas! > 0) {
       final fechaUrgencia = tarea.fechaLimite!.subtract(Duration(hours: tarea.horasEstimadas!));
       if (fechaUrgencia.isAfter(ahoraReal)) {
@@ -174,14 +157,27 @@ class NotificacionesService {
 
   Future<void> _programarNotificacion(int id, String titulo, String body, tz.TZDateTime fechaSistema, {required bool esAlarmaFullScreen, required bool esInsistente}) async {
     try {
+      // 1. Leemos los sonidos guardados
+      final prefs = await SharedPreferences.getInstance();
+      final sonidoNota = prefs.getString('sonido_notificacion') ?? 'default_nota';
+      final sonidoAlarma = prefs.getString('sonido_alarma') ?? 'default_alarma';
+
+      // 2. Elegimos qué sonido y canal usar
+      final String sonidoElegido = esAlarmaFullScreen ? sonidoAlarma : sonidoNota;
+      final String canalDinamicoId = esAlarmaFullScreen 
+          ? '${canalAlarmasId}_$sonidoAlarma' 
+          : '${canalRecordatoriosId}_$sonidoNota';
+
       final List<int>? flags = esInsistente ? <int>[4] : null;
 
       final AndroidNotificationDetails detalles = esAlarmaFullScreen
-          ? AndroidNotificationDetails(canalAlarmasId, 'Alarmas Urgentes', 
+          ? AndroidNotificationDetails(canalDinamicoId, 'Alarmas Urgentes', 
               importance: Importance.max, priority: Priority.max, color: const Color(0xFF276749), fullScreenIntent: true, 
+              playSound: true, sound: RawResourceAndroidNotificationSound(sonidoElegido), // <-- AQUÍ SE REPRODUCE EL SONIDO
               additionalFlags: flags != null ? Int32List.fromList(flags) : null)
-          : const AndroidNotificationDetails(canalRecordatoriosId, 'Recordatorios', 
-              importance: Importance.high, priority: Priority.high, color: Color(0xFF276749), fullScreenIntent: false);
+          : AndroidNotificationDetails(canalDinamicoId, 'Recordatorios', 
+              importance: Importance.high, priority: Priority.high, color: const Color(0xFF276749), fullScreenIntent: false,
+              playSound: true, sound: RawResourceAndroidNotificationSound(sonidoElegido)); // <-- AQUÍ SE REPRODUCE EL SONIDO
 
       await _plugin.zonedSchedule(
         id, titulo, body, fechaSistema,
@@ -191,7 +187,6 @@ class NotificacionesService {
         payload: esAlarmaFullScreen ? 'alarma|$id|$titulo|$body' : null, 
       );
     } catch (e) {
-      // ignore: avoid_print
       print('❌ ERROR: $e');
     }
   }
@@ -199,19 +194,26 @@ class NotificacionesService {
   Future<void> programarAlertaRutina({
     required int id, required String titulo, required String body, 
     required DateTime fechaVisual, 
-    int? iconoCode, // <-- AHORA ES UN ENTERO (int)
+    int? iconoCode, 
     bool esAlarmaFullScreen = true, bool esInsistente = true
   }) async {
     final tz.TZDateTime fechaSistema = tz.TZDateTime.from(fechaVisual, tz.getLocation('America/Mexico_City'));
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final sonidoNota = prefs.getString('sonido_notificacion') ?? 'default_nota';
+      final sonidoAlarma = prefs.getString('sonido_alarma') ?? 'default_alarma';
+
+      final String sonidoElegido = esAlarmaFullScreen ? sonidoAlarma : sonidoNota;
+      final String canalDinamicoId = esAlarmaFullScreen 
+          ? '${canalAlarmasId}_$sonidoAlarma' 
+          : '${canalRecordatoriosId}_$sonidoNota';
+
       final List<int>? flags = esInsistente ? <int>[4] : null;
 
-      // Quitamos el largeIcon, Android usará el logo por defecto
       final AndroidNotificationDetails detalles = esAlarmaFullScreen
-          ? AndroidNotificationDetails(canalAlarmasId, 'Alarmas Urgentes', importance: Importance.max, priority: Priority.max, color: const Color(0xFF276749), fullScreenIntent: true, additionalFlags: flags != null ? Int32List.fromList(flags) : null)
-          : const AndroidNotificationDetails(canalRecordatoriosId, 'Recordatorios', importance: Importance.high, priority: Priority.high, color: Color(0xFF276749), fullScreenIntent: false);
+          ? AndroidNotificationDetails(canalDinamicoId, 'Alarmas Urgentes', importance: Importance.max, priority: Priority.max, color: const Color(0xFF276749), fullScreenIntent: true, playSound: true, sound: RawResourceAndroidNotificationSound(sonidoElegido), additionalFlags: flags != null ? Int32List.fromList(flags) : null)
+          : AndroidNotificationDetails(canalDinamicoId, 'Recordatorios', importance: Importance.high, priority: Priority.high, color: const Color(0xFF276749), fullScreenIntent: false, playSound: true, sound: RawResourceAndroidNotificationSound(sonidoElegido));
 
-      // Enviamos el iconoCode oculto en el mensaje
       final String payloadData = esAlarmaFullScreen ? 'alarma|$id|$titulo|$body|${iconoCode ?? 0}' : '';
 
       await _plugin.zonedSchedule(
@@ -221,16 +223,16 @@ class NotificacionesService {
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         payload: esAlarmaFullScreen ? payloadData : null, 
       );
-    // ignore: empty_catches
-    } catch (e) {}
+    } catch (e) {
+       print('❌ Error agendando rutina: $e');
+    }
   }
 
-  // --- APAGAR Y CANCELAR ---
   Future<void> apagarSonidoAlarma(int id) async {
     try {
       if (id != 0) await _plugin.cancel(id); 
     } catch (e) {
-      // ignore: empty_catches
+      // Ignorar
     }
   }
 
@@ -242,17 +244,18 @@ class NotificacionesService {
   }
 
   Future<void> cancelarAlertaRutina(int id) async {
-    // ignore: empty_catches
-    try { await _plugin.cancel(id); } catch (e) {}
+    try { await _plugin.cancel(id); } catch (e) { // Ignorar
+    }
   }
 
-  // --- SEMBRAR RECORDATORIOS CADA HORA ---
   Future<void> programarRecordatoriosSecundarios(int idBase, String titulo, DateTime horaAlarma) async {
-    // Programamos, por ejemplo, 3 recordatorios (1 hora, 2 horas y 3 horas después)
-    // Evitamos programar más para que Android no bloquee la app por exceso de alarmas
+    final prefs = await SharedPreferences.getInstance();
+    final sonidoNota = prefs.getString('sonido_notificacion') ?? 'default_nota';
+    final canalDinamicoId = '${canalRecordatoriosId}_$sonidoNota';
+
     for (int i = 1; i <= 3; i++) {
       final fechaRecordatorio = horaAlarma.add(Duration(hours: i));
-      final int idRecordatorio = idBase + (i * 10000); // ID único pero fácil de rastrear
+      final int idRecordatorio = idBase + (i * 10000); 
       
       final tz.TZDateTime fechaSistema = tz.TZDateTime.from(fechaRecordatorio, tz.local);
 
@@ -262,56 +265,56 @@ class NotificacionesService {
           'Sigue pendiente: $titulo',
           'No olvides registrar este hábito para no perder tu racha.',
           fechaSistema,
-          const NotificationDetails(
+          NotificationDetails(
             android: AndroidNotificationDetails(
-              canalRecordatoriosId, // Usamos tu canal discreto
+              canalDinamicoId, 
               'Recordatorios Horarios',
               importance: Importance.high,
               priority: Priority.high,
+              playSound: true,
+              sound: RawResourceAndroidNotificationSound(sonidoNota),
             ),
           ),
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, // Seguro para batería
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, 
           uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         );
       } catch (e) {
-        // ignore: avoid_print
         print('❌ Error agendando recordatorio secundario: $e');
       }
     }
   }
 
-  // --- DESTRUIR RECORDATORIOS CUANDO SE COMPLETA EL HÁBITO ---
   Future<void> cancelarRecordatoriosSecundarios(int idBase) async {
     for (int i = 1; i <= 3; i++) {
       await _plugin.cancel(idBase + (i * 10000));
     }
-    // ignore: avoid_print
     print('🧹 Recordatorios secundarios cancelados para ID: $idBase');
   }
 
-// --- FUNCIÓN PARA POSPONER ALARMAS (INFALIBLE Y EN BUCLE) ---
   Future<void> posponerAlerta(int idAlarma, String titulo, String cuerpo, int minutos) async {
-    // 1. Calculamos la nueva hora sumando los minutos a la hora actual
     final tz.TZDateTime nuevaHora = tz.TZDateTime.now(tz.local).add(Duration(minutes: minutos));
-
-    // 2. El payload correcto
     final String datosPayload = 'alarma|$idAlarma|$titulo|$cuerpo|0'; 
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final sonidoAlarma = prefs.getString('sonido_alarma') ?? 'default_alarma';
+      final canalDinamicoId = '${canalAlarmasId}_$sonidoAlarma';
+
       await _plugin.zonedSchedule(
         idAlarma,
         titulo,
         cuerpo.isEmpty ? 'Pospuesto' : cuerpo,
         nuevaHora,
-        NotificationDetails( // <-- IMPORTANTE: Se quitó el 'const' aquí
+        NotificationDetails( 
           android: AndroidNotificationDetails(
-            canalAlarmasId, 
+            canalDinamicoId, 
             'Alarmas de Urgencia',
             importance: Importance.max,
             priority: Priority.high,
             fullScreenIntent: true,
             playSound: true,
-            additionalFlags: Int32List.fromList(<int>[4]), // <--- ESTO HACE QUE SUENE SIN PARAR
+            sound: RawResourceAndroidNotificationSound(sonidoAlarma),
+            additionalFlags: Int32List.fromList(<int>[4]), 
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.alarmClock,

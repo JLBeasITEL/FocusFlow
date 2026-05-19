@@ -71,6 +71,8 @@ flutter:
   assets:
     - assets/plastic_clip.png
     - assets/app_icon.png
+    - assets/images/loto_blanco.png
+    - assets/images/loto_gris.png
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
