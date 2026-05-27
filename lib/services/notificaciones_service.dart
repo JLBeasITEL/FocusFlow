@@ -222,6 +222,8 @@ class NotificacionesService {
         androidScheduleMode: AndroidScheduleMode.alarmClock, 
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         payload: esAlarmaFullScreen ? payloadData : null, 
+        // ESTA LÍNEA HACE QUE SE REPITA TODAS LAS SEMANAS INFINITAMENTE
+        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime, 
       );
     } catch (e) {
        print('❌ Error agendando rutina: $e');
@@ -277,6 +279,7 @@ class NotificacionesService {
           ),
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, 
           uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
         );
       } catch (e) {
         print('❌ Error agendando recordatorio secundario: $e');

@@ -66,10 +66,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       // 1. Resincroniza alarmas
       _resincronizarRutinasSilenciosamente();
       
-      // 2. Verifica si se perdieron rachas de hábitos
-      ref.read(rutinaProvider.notifier).verificarRachasPerdidas();
-
-      // 3. LIMPIEZA DE TAREAS: Borra las completadas de ayer
+      // 2. LIMPIEZA DE TAREAS: Borra las completadas de ayer
       ref.read(tareaProvider.notifier).limpiarTareasCompletadasAlCambiarDeDia();
     });
   }
@@ -171,104 +168,261 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     );
   }
 
-  // DIÁLOGO ANIMADO PARA CREAR/EDITAR
   void _mostrarDialogoNota({int? indexAEditar}) {
-    final notasActuales = ref.read(notaProvider);
+    final List<NotaPostIt> notasActuales = ref.read(notaProvider);
     final bool esNueva = indexAEditar == null;
-    final notaActual = esNueva ? null : notasActuales[indexAEditar];
+    final NotaPostIt? notaActual = esNueva ? null : notasActuales[indexAEditar];
+    
     final controller = TextEditingController(text: esNueva ? '' : notaActual!.texto);
-    final Color colorDialogo = esNueva ? const Color(0xFFFFF7D1) : notaActual!.color;
+    // Usa tu paleta nativa del archivo original
+    final Color colorDialogo = esNueva ? const Color(0xFFFDFBF7) : Color(notaActual!.colorValue);
+
+    bool modoEdicion = esNueva; 
+    TipoNota tipoActual = esNueva ? TipoNota.texto : notaActual!.tipo;
+    
+    List<ItemLista> itemsTemp = esNueva 
+        ? [] 
+        : notaActual!.elementosLista.map((e) => ItemLista(texto: e.texto, completado: e.completado)).toList();
+    
+    List<TextEditingController> controllersLista = itemsTemp.map((e) => TextEditingController(text: e.texto)).toList();
 
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Cerrar',
-      barrierColor: Colors.black.withValues(alpha: 0.6), 
+      barrierColor: Colors.black.withOpacity(0.6), 
       transitionDuration: const Duration(milliseconds: 400), 
       pageBuilder: (context, animation, secondaryAnimation) {
-        return Center(
-          child: SingleChildScrollView(
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.85,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: colorDialogo,
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10))],
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(8), topRight: Radius.circular(8),
-                    bottomLeft: Radius.circular(8), bottomRight: Radius.circular(40), 
+        
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return Center(
+              child: SingleChildScrollView(
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.85,
+                    clipBehavior: Clip.antiAlias, 
+                    decoration: BoxDecoration(
+                      color: colorDialogo,
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(8), topRight: Radius.circular(8),
+                        bottomLeft: Radius.circular(8), bottomRight: Radius.circular(40), 
+                      ),
+                    ),
+                    child: CustomPaint(
+                      painter: HojaLibretaPainter(),
+                      child: Stack(
+                        children: [
+                          
+                          // ÁREA DE CONTENIDO (TEXTO O LISTA)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 64.0, left: 54.0, right: 16.0, bottom: 80.0),
+                            child: tipoActual == TipoNota.texto 
+                              ? (modoEdicion
+                                  ? TextField(
+                                      controller: controller,
+                                      autofocus: true, 
+                                      maxLines: 8, minLines: 3,
+                                      style: const TextStyle(fontSize: 20, color: Colors.black87, fontWeight: FontWeight.w500, height: 1.4),
+                                      decoration: const InputDecoration(hintText: 'Escribe tu idea...', border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero),
+                                    )
+                                  : Text(notaActual!.texto, style: const TextStyle(fontSize: 20, color: Colors.black87, fontWeight: FontWeight.w500, height: 1.4))
+                                )
+                              : Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    for (int i = 0; i < itemsTemp.length; i++)
+                                      Padding(
+                                        padding: const EdgeInsets.only(bottom: 8.0),
+                                        child: Row(
+                                          children: [
+                                            SizedBox(
+                                              height: 24, width: 24,
+                                              child: Checkbox(
+                                                value: itemsTemp[i].completado,
+                                                activeColor: Colors.black87,
+                                                onChanged: (val) {
+                                                  setStateDialog(() => itemsTemp[i].completado = val!);
+                                                  if (!modoEdicion && !esNueva) {
+                                                    ref.read(notaProvider.notifier).editarNota(
+                                                      notaActual!.id, 
+                                                      notaActual.texto, 
+                                                      tipo: tipoActual, 
+                                                      elementosLista: itemsTemp
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: modoEdicion
+                                                ? TextField(
+                                                    controller: controllersLista[i],
+                                                    onChanged: (val) => itemsTemp[i].texto = val,
+                                                    textInputAction: TextInputAction.next, // Configura el botón del teclado como "Siguiente"
+                                                    onSubmitted: (val) {
+                                                      // Si el usuario presiona Enter estando en el último elemento de la lista, crea uno nuevo automáticamente
+                                                      if (i == itemsTemp.length - 1) {
+                                                        setStateDialog(() {
+                                                          itemsTemp.add(ItemLista(texto: ''));
+                                                          controllersLista.add(TextEditingController());
+                                                        });
+                                                      }
+                                                    },
+                                                    style: const TextStyle(fontSize: 18, color: Colors.black87, fontWeight: FontWeight.w500),
+                                                    decoration: const InputDecoration(hintText: 'Elemento...', border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero),
+                                                  )
+                                                : Text(
+                                                    itemsTemp[i].texto,
+                                                    style: TextStyle(
+                                                      fontSize: 18, fontWeight: FontWeight.w500,
+                                                      color: itemsTemp[i].completado ? Colors.black38 : Colors.black87,
+                                                      decoration: itemsTemp[i].completado ? TextDecoration.lineThrough : null,
+                                                    ),
+                                                  ),
+                                            ),
+                                            if (modoEdicion)
+                                              GestureDetector(
+                                                onTap: () => setStateDialog(() { itemsTemp.removeAt(i); controllersLista.removeAt(i); }),
+                                                child: const Icon(Icons.close, size: 20, color: Colors.black38),
+                                              )
+                                          ],
+                                        ),
+                                      ),
+                                    if (modoEdicion)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8.0),
+                                        child: InkWell(
+                                          onTap: () => setStateDialog(() { itemsTemp.add(ItemLista(texto: '')); controllersLista.add(TextEditingController()); }),
+                                          child: const Row(children: [Icon(Icons.add, color: Colors.black54), SizedBox(width: 8), Text('Agregar elemento', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold))]),
+                                        ),
+                                      )
+                                  ],
+                                ),
+                          ),
+
+                          // BOTONES EN ESQUINA SUPERIOR DERECHA
+                          Positioned(
+                            top: 8, right: 8,
+                            child: Row(
+                              children: [
+                                // BOTÓN SOLICITADO: 3 bolitas en vertical y líneas paralelas (Icons.format_list_bulleted)
+                                // Se muestra únicamente cuando el usuario está en modo de edición
+                                if (modoEdicion)
+                                  IconButton(
+                                    icon: Icon(tipoActual == TipoNota.texto ? Icons.format_list_bulleted : Icons.notes_rounded, color: Colors.black54),
+                                    tooltip: tipoActual == TipoNota.texto ? 'Convertir en Lista de Compras' : 'Convertir en Texto Libre',
+                                    onPressed: () {
+                                      setStateDialog(() {
+                                        if (tipoActual == TipoNota.texto) {
+                                          tipoActual = TipoNota.lista;
+                                          if (itemsTemp.isEmpty && controller.text.trim().isNotEmpty) {
+                                            final lineas = controller.text.split('\n').where((l) => l.trim().isNotEmpty);
+                                            for (var linea in lineas) {
+                                              itemsTemp.add(ItemLista(texto: linea.trim()));
+                                              controllersLista.add(TextEditingController(text: linea.trim()));
+                                            }
+                                          } else if (itemsTemp.isEmpty) {
+                                            itemsTemp.add(ItemLista(texto: '')); 
+                                            controllersLista.add(TextEditingController());
+                                          }
+                                        } else {
+                                          tipoActual = TipoNota.texto;
+                                          if (itemsTemp.isNotEmpty) {
+                                            controller.text = itemsTemp.map((e) => e.texto).join('\n');
+                                          }
+                                        }
+                                      });
+                                    },
+                                  ),
+                                
+                                // ICONO DE LÁPIZ (SOLO EN MODO PREVIEW EN NOTAS EXISTENTES)
+                                if (!esNueva && !modoEdicion)
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_rounded, color: Colors.black54), 
+                                    onPressed: () => setStateDialog(() => modoEdicion = true)
+                                  ),
+                              ],
+                            ),
+                          ),
+
+                          // BOTONES INFERIORES (CANCELAR / GUARDAR)
+                          Positioned(
+                            bottom: 16, right: 16,
+                            child: Row(
+                              children: [
+                                TextButton(
+                                  onPressed: () {
+                                    if (modoEdicion && !esNueva) {
+                                      setStateDialog(() {
+                                        modoEdicion = false;
+                                        controller.text = notaActual!.texto;
+                                        itemsTemp = notaActual.elementosLista.map((e) => ItemLista(texto: e.texto, completado: e.completado)).toList();
+                                        controllersLista = itemsTemp.map((e) => TextEditingController(text: e.texto)).toList();
+                                        tipoActual = notaActual.tipo;
+                                      });
+                                    } else { 
+                                      Navigator.pop(context); 
+                                    }
+                                  }, 
+                                  child: Text(modoEdicion ? 'Cancelar' : 'Cerrar', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.bold, fontSize: 16))
+                                ),
+                                if (modoEdicion) ...[
+                                  const SizedBox(width: 12),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.black87, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                                    onPressed: () {
+                                      itemsTemp.removeWhere((item) => item.texto.trim().isEmpty);
+                                      
+                                      if (!esNueva) {
+                                        ref.read(notaProvider.notifier).editarNota(
+                                          notaActual!.id, controller.text, tipo: tipoActual, elementosLista: itemsTemp
+                                        );
+                                      } else {
+                                        final math.Random random = math.Random();
+                                        // SOLUCIÓN A WARNING: Retorna el uso de tu paleta nativa _coloresPostIt
+                                        final colorAleatorio = _coloresPostIt[random.nextInt(_coloresPostIt.length)];
+                                        
+                                        final nueva = NotaPostIt( 
+                                          id: DateTime.now().millisecondsSinceEpoch.toString(), 
+                                          texto: controller.text, 
+                                          colorValue: colorAleatorio.value, 
+                                          rotacion: (random.nextDouble() - 0.5) * 0.1,
+                                          tipo: tipoActual,
+                                          elementosLista: itemsTemp
+                                        );
+                                        ref.read(notaProvider.notifier).agregarNota(nueva);
+                                      }
+                                      Navigator.pop(context);
+                                    },
+                                    child: Text(esNueva ? 'Guardar' : 'Guardar', style: const TextStyle(fontSize: 16)),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: controller,
-                      autofocus: true, maxLines: 8, minLines: 3,
-                      style: const TextStyle(fontSize: 20, color: Colors.black87, fontWeight: FontWeight.w500, height: 1.4),
-                      decoration: const InputDecoration(hintText: 'Escribe tu idea...', border: InputBorder.none),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold, fontSize: 16))),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black87, foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          ),
-                          onPressed: () {
-                            if (controller.text.trim().isNotEmpty) {
-                              if (!esNueva) {
-                                // Editar nota existente
-                                ref.read(notaProvider.notifier).editarNota(notaActual!.id, controller.text);
-                              } else {
-                                // Crear nueva nota con color aleatorio
-                                final math.Random random = math.Random();
-                                final colorAleatorio = _coloresPostIt[random.nextInt(_coloresPostIt.length)];
-                                final rotacionAleatoria = (random.nextDouble() - 0.5) * 0.1; 
-                                
-                                final nueva = NotaPostIt(
-                                  id: DateTime.now().millisecondsSinceEpoch.toString(), // ID Único
-                                  texto: controller.text, 
-                                  colorValue: colorAleatorio.value, // Guardamos el valor numérico del color
-                                  rotacion: rotacionAleatoria
-                                );
-                                ref.read(notaProvider.notifier).agregarNota(nueva);
-                              }
-                            }
-                            Navigator.pop(context);
-                          },
-                          child: Text(esNueva ? 'Pegar Nota' : 'Guardar', style: const TextStyle(fontSize: 16)),
-                        ),
-                      ],
-                    )
-                  ],
-                ),
-              ),
-            ),
-          ),
+              )
+            );
+          }
         );
       },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curve = CurvedAnimation(parent: animation, curve: Curves.easeOutBack);
-        return Transform.scale(
-          scale: curve.value, 
-          child: Opacity(
-            opacity: animation.value, 
-            child: Transform.rotate(
-              angle: (1.0 - animation.value) * (esNueva ? 0.1 : notaActual!.rotacion), 
-              child: child,
-            ),
-          ),
-        );
-      },
-    );
+        transitionBuilder: (context, animation, secondaryAnimation, child) {
+          final curve = CurvedAnimation(parent: animation, curve: Curves.easeOutBack);
+          return Transform.scale(
+            scale: curve.value, 
+            child: Opacity(opacity: animation.value, child: Transform.rotate(angle: (1.0 - animation.value) * (esNueva ? 0.1 : notaActual!.rotacion), child: child))
+          );
+        },
+      );
   }
 
   @override
@@ -432,77 +586,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 // LÓGICA DE PERSISTENCIA (OFFLINE) Y MODELO INTEGRADO
 // =====================================================================
 
-class NotaPostIt {
-  final String id; 
-  String texto;
-  int colorValue; // Ahora guardamos el valor numérico
-  double rotacion;
 
-  NotaPostIt({required this.id, required this.texto, required this.colorValue, required this.rotacion});
 
-  // Para poder usarlo en Flutter como Color
-  Color get color => Color(colorValue);
 
-  // Convierte la nota en un formato de texto que se pueda guardar en el teléfono
-  Map<String, dynamic> toMap() => {
-    'id': id,
-    'texto': texto,
-    'colorValue': colorValue,
-    'rotacion': rotacion,
-  };
-
-  // Reconstruye la nota desde el archivo del teléfono
-  factory NotaPostIt.fromMap(Map<String, dynamic> map) => NotaPostIt(
-    id: map['id'],
-    texto: map['texto'],
-    colorValue: map['colorValue'],
-    rotacion: map['rotacion'],
-  );
-}
-
-// EL "CEREBRO" QUE GUARDA Y CARGA
-class NotaNotifier extends StateNotifier<List<NotaPostIt>> {
-  NotaNotifier() : super([]) {
-    _cargarNotas(); // Cargar automáticamente al abrir la app
-  }
-
-  Future<void> _cargarNotas() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? notasString = prefs.getString('mis_notas_guardadas');
-    if (notasString != null) {
-      final List<dynamic> decoded = jsonDecode(notasString);
-      state = decoded.map((item) => NotaPostIt.fromMap(item)).toList();
-    }
-  }
-
-  Future<void> _guardarEnDisco() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(state.map((n) => n.toMap()).toList());
-    await prefs.setString('mis_notas_guardadas', encoded);
-  }
-
-  void agregarNota(NotaPostIt nueva) {
-    state = [nueva, ...state];
-    _guardarEnDisco();
-  }
-
-  void eliminarNota(String id) {
-    state = state.where((n) => n.id != id).toList();
-    _guardarEnDisco();
-  }
-
-  void editarNota(String id, String nuevoTexto) {
-    state = [
-      for (final n in state)
-        if (n.id == id) NotaPostIt(id: n.id, texto: nuevoTexto, colorValue: n.colorValue, rotacion: n.rotacion)
-        else n
-    ];
-    _guardarEnDisco();
-  }
-}
-
-// EL PROVEEDOR GLOBAL
-final notaProvider = StateNotifierProvider<NotaNotifier, List<NotaPostIt>>((ref) => NotaNotifier());
 
 // =====================================================================
 // WIDGET INTERACTIVO DE POST-IT CON EL CLIP DE IMAGEN
@@ -594,12 +680,55 @@ class _PostItCardState extends State<PostItCard> {
                     bottomLeft: const Radius.circular(2), bottomRight: Radius.circular(16 * factorEscala + 4), 
                   ),
                 ),
-                child: Text(
-                  widget.nota.texto,
-                  textAlign: tamanoLetra > 14 ? TextAlign.center : TextAlign.left,
-                  style: TextStyle(color: Colors.black87, fontSize: tamanoLetra, height: 1.2, fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.fade,
-                ),
+                child: widget.nota.tipo == TipoNota.lista
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Dibuja los primeros 3 elementos de la lista
+                        ...widget.nota.elementosLista.take(3).map((item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 2.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                item.completado ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                size: tamanoLetra + 2, // Ajusta el icono al tamaño de tu texto
+                                color: Colors.black54,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  item.texto,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: item.completado ? Colors.black38 : Colors.black87,
+                                    fontSize: tamanoLetra, 
+                                    height: 1.2, 
+                                    fontWeight: FontWeight.w600,
+                                    decoration: item.completado ? TextDecoration.lineThrough : null,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                        // Si hay más de 3 elementos, dibuja unos puntitos
+                        if (widget.nota.elementosLista.length > 3)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 18.0),
+                            child: Text('...', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold, fontSize: tamanoLetra)),
+                          ),
+                      ],
+                    )
+                  // Si no es lista, dibuja el texto normal exactamente como tú lo tenías
+                  : Text(
+                      widget.nota.texto,
+                      textAlign: tamanoLetra > 14 ? TextAlign.center : TextAlign.left,
+                      style: TextStyle(color: Colors.black87, fontSize: tamanoLetra, height: 1.2, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.fade,
+                    ),
               ),
             ),
             Positioned(
@@ -670,12 +799,37 @@ class _SeccionRutinasHoy extends ConsumerWidget {
             ],
           ),
         ),
-        const SizedBox(height: 180),
+        
+        // ELIMINAMOS EL SizedBox(height: 180) QUE ESTABA AQUÍ
+        
         Expanded(
           child: rutinasDeHoy.isEmpty
-              ? Center(child: Text('Cada que agregas un nuevo hábito a tu vida,\n te acercas más a la persona que quieres ser.', style: TextStyle(color: colorPrincipal.withOpacity(0.6))))
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center, // Enfoque de centrado horizontal para la columna
+                    children: [
+                      // Este espacio empuja el texto hacia abajo del loto central.
+                      // Si notas que queda muy abajo o muy arriba, puedes ajustar este número (ej. 100 o 140)
+                      const SizedBox(height: 120), 
+                      
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32), // Evita que el texto toque los bordes de la pantalla
+                        child: Text(
+                          'Cada que agregas un nuevo hábito a tu vida,\nte acercas más a la persona que quieres ser.', 
+                          textAlign: TextAlign.center, // Centra las líneas de texto entre sí
+                          style: TextStyle(
+                            color: colorPrincipal.withOpacity(0.6),
+                            fontSize: 15,
+                            height: 1.4, // Agrega un ligero espacio entre las dos líneas para mejorar la lectura
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
               : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.only(top: 16, bottom: 100, left: 16, right: 16),
                   itemCount: rutinasDeHoy.length,
                   itemBuilder: (context, index) => RutinaCard(rutina: rutinasDeHoy[index], colorTema: colorPrincipal),
                 ),
@@ -789,4 +943,153 @@ class _TareaCardState extends ConsumerState<TareaCard> {
   String _getLabelUrgencia(int urgencia) {
     switch (urgencia) { case 1: return 'BAJO'; case 2: return 'MEDIO'; case 3: return 'ALTO'; case 4: return 'MUY ALTO'; default: return '???'; }
   }
+
+  
+}
+
+// =========================================================================
+// BLOQUE FINAL DE NOTAS CON PERSISTENCIA COMPLETA (JSON Y SHARED_PREFERENCES)
+// =========================================================================
+
+enum TipoNota { texto, lista }
+
+class ItemLista {
+  String texto;
+  bool completado;
+  ItemLista({required this.texto, this.completado = false});
+
+  Map<String, dynamic> toMap() => {'texto': texto, 'completado': completado};
+  factory ItemLista.fromMap(Map<String, dynamic> map) => ItemLista(
+    texto: map['texto'] ?? '',
+    completado: map['completado'] ?? false,
+  );
+}
+
+class NotaPostIt {
+  final String id;
+  String texto;
+  int colorValue;
+  double rotacion;
+  TipoNota tipo;
+  List<ItemLista> elementosLista;
+
+  NotaPostIt({
+    required this.id,
+    required this.texto,
+    required this.colorValue,
+    required this.rotacion,
+    this.tipo = TipoNota.texto,
+    List<ItemLista>? elementosLista,
+  }) : elementosLista = elementosLista ?? [];
+
+  Color get color => Color(colorValue);
+
+  NotaPostIt copyWith({
+    String? texto,
+    int? colorValue,
+    TipoNota? tipo,
+    List<ItemLista>? elementosLista,
+  }) {
+    return NotaPostIt(
+      id: id,
+      texto: texto ?? this.texto,
+      colorValue: colorValue ?? this.colorValue,
+      rotacion: rotacion,
+      tipo: tipo ?? this.tipo,
+      elementosLista: elementosLista ?? this.elementosLista.map((e) => ItemLista(texto: e.texto, completado: e.completado)).toList(),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'texto': texto,
+    'colorValue': colorValue,
+    'rotacion': rotacion,
+    'tipo': tipo.name,
+    'elementosLista': elementosLista.map((e) => e.toMap()).toList(),
+  };
+
+  factory NotaPostIt.fromMap(Map<String, dynamic> map) => NotaPostIt(
+    id: map['id'] ?? '',
+    texto: map['texto'] ?? '',
+    colorValue: map['colorValue'] ?? 0xFFFFF7D1,
+    rotacion: (map['rotacion'] as num?)?.toDouble() ?? 0.0,
+    tipo: TipoNota.values.firstWhere((e) => e.name == map['tipo'], orElse: () => TipoNota.texto),
+    elementosLista: (map['elementosLista'] as List?)?.map((e) => ItemLista.fromMap(e as Map<String, dynamic>)).toList() ?? [],
+  );
+}
+
+class NotaNotifier extends StateNotifier<List<NotaPostIt>> {
+  NotaNotifier() : super([]) {
+    _cargarNotas();
+  }
+
+  static const String _storageKey = 'lista_notas_postit_v2';
+
+  Future<void> _cargarNotas() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? notasJson = prefs.getString(_storageKey);
+      if (notasJson != null) {
+        final List<dynamic> listaDecodificada = jsonDecode(notasJson);
+        state = listaDecodificada.map((item) => NotaPostIt.fromMap(item as Map<String, dynamic>)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error al cargar notas offline: $e');
+    }
+  }
+
+  Future<void> _guardarNotas(List<NotaPostIt> nuevasNotas) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String notasJson = jsonEncode(nuevasNotas.map((n) => n.toMap()).toList());
+      await prefs.setString(_storageKey, notasJson);
+    } catch (e) {
+      debugPrint('Error al persistir notas offline: $e');
+    }
+  }
+
+  void agregarNota(NotaPostIt nuevaNota) {
+    final nuevoEstado = [nuevaNota, ...state];
+    state = nuevoEstado;
+    _guardarNotas(nuevoEstado);
+  }
+
+  void eliminarNota(String id) {
+    final nuevoEstado = state.where((n) => n.id != id).toList();
+    state = nuevoEstado;
+    _guardarNotas(nuevoEstado);
+  }
+
+  void editarNota(String id, String nuevoTexto, {TipoNota? tipo, List<ItemLista>? elementosLista}) {
+    final nuevoEstado = [
+      for (final nota in state)
+        if (nota.id == id)
+          nota.copyWith(texto: nuevoTexto, tipo: tipo, elementosLista: elementosLista)
+        else
+          nota,
+    ];
+    state = nuevoEstado;
+    _guardarNotas(nuevoEstado);
+  }
+}
+
+final notaProvider = StateNotifierProvider<NotaNotifier, List<NotaPostIt>>((ref) {
+  return NotaNotifier();
+});
+
+class HojaLibretaPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paintLineas = Paint()..color = Colors.blueAccent.withOpacity(0.2)..strokeWidth = 1.5;
+    final paintMargen = Paint()..color = Colors.redAccent.withOpacity(0.4)..strokeWidth = 2.0;
+    const double margenIzquierdo = 44.0;
+    canvas.drawLine(Offset(margenIzquierdo, 0), Offset(margenIzquierdo, size.height), paintMargen);
+    const double interlineado = 28.0; 
+    for (double y = 92.0; y < size.height; y += interlineado) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paintLineas);
+    }
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

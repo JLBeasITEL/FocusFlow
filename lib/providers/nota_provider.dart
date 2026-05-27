@@ -6,23 +6,21 @@ class NotaNotifier extends StateNotifier<List<Nota>> {
 
   void agregarNota(Nota nuevaNota) {
     state = [nuevaNota, ...state];
-    // Aquí llamarías a: _repository.guardarNota(nuevaNota);
   }
 
   void eliminarNota(String id) {
     state = state.where((n) => n.id != id).toList();
-    // Aquí llamarías a: _repository.borrarNota(id);
   }
 
-  void editarNota(String id, String nuevoTexto) {
+  // Aquí incluimos los nuevos parámetros opcionales para las listas
+  void editarNota(String id, String nuevoTexto, {TipoNota? tipo, List<ItemLista>? elementosLista}) {
     state = [
       for (final nota in state)
         if (nota.id == id)
-          Nota(
-            id: nota.id,
+          nota.copyWith(
             texto: nuevoTexto,
-            colorValue: nota.colorValue,
-            rotacion: nota.rotacion,
+            tipo: tipo,
+            elementosLista: elementosLista,
           )
         else
           nota,
