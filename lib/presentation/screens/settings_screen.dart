@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/tema_provider.dart';
 import '../../providers/configuracion_provider.dart';
+import '../widgets/feedback_modal.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -64,14 +65,37 @@ class SettingsScreen extends ConsumerWidget {
             trailing: Icon(Icons.chevron_right, color: colorPrincipal.withValues(alpha: 0.5)),
             onTap: () => _showSoundDialog(context, ref, false, colorPrincipal, estiloTitulo),
           ),
-          // === AQUÍ AGREGAMOS LOS DERECHOS DE AUTOR ===
+
+          // === NUEVA SECCIÓN DE SOPORTE ===
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+            child: Divider(color: colorPrincipal.withValues(alpha: 0.2)),
+          ),
+          
+          _SectionHeader(title: 'Soporte', color: colorPrincipal),
+          ListTile(
+            leading: Icon(Icons.rate_review_outlined, color: colorPrincipal),
+            title: Text('Enviar feedback', style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.w600)),
+            subtitle: Text('Reporta un error o sugiere mejoras', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.7))),
+            trailing: Icon(Icons.chevron_right, color: colorPrincipal.withValues(alpha: 0.5)),
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true, // Importante para que el modal suba con el teclado
+                backgroundColor: Colors.transparent,
+                builder: (context) => const FeedbackModal(),
+              );
+            },
+          ),
+          
+          // === DERECHOS DE AUTOR ===
           Padding(
             padding: const EdgeInsets.only(top: 48.0, bottom: 24.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'FocusFlow v1.8.5',
+                  'FocusFlow v1.9.3',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,

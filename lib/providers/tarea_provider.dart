@@ -7,6 +7,8 @@ import '../services/notificaciones_service.dart';
 // 1. Usamos la sintaxis moderna 'Notifier' de Riverpod 2.0
 class TareaNotifier extends Notifier<List<Tarea>> {
   static const String _storageKey = 'lista_tareas_v1';
+  static const String _gruposKey = 'lista_grupos_v1';
+  List<String> _gruposGuardados = ['General'];
 
   @override
   List<Tarea> build() {
@@ -20,6 +22,11 @@ class TareaNotifier extends Notifier<List<Tarea>> {
   Future<void> _cargarTareas() async {
     final prefs = await SharedPreferences.getInstance();
     final String? tareasJson = prefs.getString(_storageKey);
+    final String? gruposJson = prefs.getString(_gruposKey);
+
+    if (gruposJson != null) {
+      _gruposGuardados = List<String>.from(jsonDecode(gruposJson));
+    }
 
     if (tareasJson != null) {
       final List<dynamic> listaDecodificada = jsonDecode(tareasJson);
@@ -107,6 +114,24 @@ class TareaNotifier extends Notifier<List<Tarea>> {
   // Esta función se queda vacía para no romper el código de home_screen.dart
   // La limpieza ahora ocurre de forma segura dentro de _cargarTareas()
   Future<void> limpiarTareasCompletadasAlCambiarDeDia() async { }
+
+  List<String> obtenerGruposExistentes() {
+    final gruposEnUso = state.map((t) => t.grupo).toSet();
+    // Combinamos los grupos guardados con los que están en uso
+    final todosLosGrupos = <String>{..._gruposGuardados, ...gruposEnUso}.toList();
+    if (!todosLosGrupos.contains('General')) {
+      todosLosGrupos.insert(0, 'General');
+    }
+    return todosLosGrupos;
+  }
+
+  Future<void> registrarGrupoPersistente(String nuevoGrupo) async {
+    if (!_gruposGuardados.contains(nuevoGrupo)) {
+      _gruposGuardados.add(nuevoGrupo);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_gruposKey, jsonEncode(_gruposGuardados));
+    }
+  }
 }
 
 // 2. El Provider moderno (NotifierProvider)

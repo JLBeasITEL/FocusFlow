@@ -17,6 +17,7 @@ class Tarea {
   final int? horasEstimadas; // NUEVO: ¿Cuánto tiempo te tomará hacerla?
   final int urgenciaBase; // La urgencia manual que eliges si no usas el auto-piloto
   final bool esCompletada;
+  final String grupo;
 
   Tarea({
     String? id,
@@ -25,7 +26,8 @@ class Tarea {
     this.fechaLimite,
     this.horasEstimadas,
     required this.urgenciaBase,
-    this.esCompletada = false,
+    this.esCompletada = false, 
+    this.grupo = 'General',
   }) : id = id ?? _uuid.v4();
 
   // --- MOTOR DE URGENCIA INTELIGENTE ---
@@ -67,6 +69,7 @@ class Tarea {
     int? horasEstimadas,
     int? urgenciaBase,
     bool? esCompletada,
+    String? grupo,
   }) {
     return Tarea(
       id: id ?? this.id,
@@ -76,6 +79,7 @@ class Tarea {
       horasEstimadas: horasEstimadas ?? this.horasEstimadas,
       urgenciaBase: urgenciaBase ?? this.urgenciaBase,
       esCompletada: esCompletada ?? this.esCompletada,
+      grupo: grupo ?? this.grupo,
     );
   }
 
@@ -88,6 +92,7 @@ class Tarea {
       'horasEstimadas': horasEstimadas, // Guardamos este nuevo dato
       'urgenciaBase': urgenciaBase,
       'esCompletada': esCompletada,
+      'grupo': grupo,
     };
   }
 
@@ -102,6 +107,7 @@ class Tarea {
       horasEstimadas: json['horasEstimadas'], // Leemos este nuevo dato
       urgenciaBase: json['urgencia'] ?? json['urgenciaBase'] ?? 1, // Retrocompatibilidad
       esCompletada: json['esCompletada'],
+      grupo: json['grupo'] ?? 'General',
     );
   }
 }

@@ -16,7 +16,8 @@ class AddTareaModal extends ConsumerStatefulWidget {
 class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   late TextEditingController _tituloController;
   late TextEditingController _descripcionController;
-  late TextEditingController _horasController; // Nuevo controlador
+  late TextEditingController _horasController;
+  late TextEditingController _grupoController;
   
   int _urgenciaBase = 1;
   DateTime? _fechaSeleccionada;
@@ -32,7 +33,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     _horasController = TextEditingController(
       text: widget.tareaAEditar?.horasEstimadas?.toString() ?? ''
     );
-    
+    _grupoController = TextEditingController(text: widget.tareaAEditar?.grupo ?? 'General');
     _urgenciaBase = widget.tareaAEditar?.urgenciaBase ?? 1;
     _fechaSeleccionada = widget.tareaAEditar?.fechaLimite;
     
@@ -49,6 +50,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     _tituloController.dispose();
     _descripcionController.dispose();
     _horasController.dispose();
+    _grupoController.dispose();
     super.dispose();
   }
 
@@ -82,6 +84,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
 
   void _guardarTarea() {
     final titulo = _tituloController.text.trim();
+
     if (titulo.isEmpty) return;
 
     DateTime? fechaFinal;
@@ -99,13 +102,28 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     final int? horas = int.tryParse(_horasController.text.trim());
     final String descripcion = _descripcionController.text.trim();
 
+    // --- INICIO DE SANITIZACIÓN DEL GRUPO ---
+    String grupoLimpio = _grupoController.text.trim();
+    
+    if (grupoLimpio.isEmpty) {
+      grupoLimpio = 'General';
+    } else {
+      // Forzamos a que solo la primera letra sea mayúscula (Ej: "TRabAjo" -> "Trabajo")
+      grupoLimpio = grupoLimpio[0].toUpperCase() + grupoLimpio.substring(1).toLowerCase();
+    }
+
+    //Registramos el grupo para que no desaparezca en el futuro
+    ref.read(tareaProvider.notifier).registrarGrupoPersistente(grupoLimpio);
+    // --- FIN DE SANITIZACIÓN ---
+
     if (widget.tareaAEditar != null) {
       final tareaModificada = widget.tareaAEditar!.copyWith(
         titulo: titulo,
         descripcion: descripcion.isEmpty ? null : descripcion,
         fechaLimite: fechaFinal,
         horasEstimadas: horas,
-        urgenciaBase: _urgenciaBase, // Cambio de nombre aquí
+        urgenciaBase: _urgenciaBase, 
+        grupo: grupoLimpio, // Usamos la variable ya limpia y sanitizada
       );
       ref.read(tareaProvider.notifier).updateTarea(tareaModificada);
     } else {
@@ -115,6 +133,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
         fechaLimite: fechaFinal,
         horasEstimadas: horas,
         urgenciaBase: _urgenciaBase, // Cambio de nombre aquí
+        grupo: grupoLimpio, // Se agrega para que la nueva tarea también tenga el grupo asignado
       );
       ref.read(tareaProvider.notifier).addTarea(nuevaTarea);
     }
@@ -161,6 +180,49 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black87, width: 2.0)),
               ),
             ),
+
+            // --- INICIO DEL NUEVO CAMPO DE GRUPO ---
+            const SizedBox(height: 16),
+            Consumer(
+              builder: (context, ref, child) {
+                // Le pedimos al provider la lista de grupos que ya existen
+                final gruposSugeridos = ref.read(tareaProvider.notifier).obtenerGruposExistentes();
+
+                return Autocomplete<String>(
+                  initialValue: TextEditingValue(text: _grupoController.text),
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return gruposSugeridos; // Muestra todos por defecto
+                    }
+                    return gruposSugeridos.where((String option) {
+                      return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                    });
+                  },
+                  onSelected: (String selection) {
+                    _grupoController.text = selection;
+                  },
+                  fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+                    // Mantener sincronizado el controlador interno
+                    controller.addListener(() {
+                      _grupoController.text = controller.text;
+                    });
+                    
+                    return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      decoration: InputDecoration(
+                        labelText: 'Grupo (Ej. Trabajo, Casa...)',
+                        prefixIcon: const Icon(Icons.folder_outlined, size: 20),
+                        filled: true, fillColor: Colors.grey.shade100,
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade400, width: 1.5)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black87, width: 2.0)),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+            // --- FIN DEL NUEVO CAMPO DE GRUPO ---
 
             if (_mostrarAvanzadas) ...[
               const SizedBox(height: 16),

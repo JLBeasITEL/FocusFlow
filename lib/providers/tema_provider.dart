@@ -3,7 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 // Definición central de tus temas. Como tu HomeScreen ya lo importa, 
 // reconocerá automáticamente las 4 opciones.
-enum TemaApp { clasico, zenClasico, brisaMarina, atardecerMinimalista }
+enum TemaApp { clasico, zenClasico, brisaMarina, atardecerMinimalista;
+
+  Object? get colorPrincipal => null; }
 
 class TemaNotifier extends Notifier<TemaApp> {
   static const String _temaKey = 'tema_seleccionado';

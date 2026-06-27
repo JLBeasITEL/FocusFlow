@@ -5,6 +5,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../providers/tema_provider.dart'; 
 import '../../services/notificaciones_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../screens/home_screen.dart';
 
 // Se cambia a ConsumerStatefulWidget únicamente para permitir la animación del slider
 class PantallaAlarma extends ConsumerStatefulWidget {
@@ -127,6 +128,7 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
               const SizedBox(height: 80),
               
               // --- BOTÓN ENTENDIDO (INTACTO SEGÚN TU CÓDIGO) ---
+              // --- BOTÓN ENTENDIDO MODIFICADO ---
               SizedBox(
                 width: double.infinity,
                 height: 64,
@@ -140,12 +142,23 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
                     ),
                   ),
                   onPressed: () async {
+                    // 1. Detenemos el sonido/notificación
                     try {
                       await FlutterLocalNotificationsPlugin().cancel(widget.idAlarma);
                     } catch (e) {
                       print('Error al detener la alarma: $e');
                     }
-                    SystemNavigator.pop();
+                    
+                    // 2. REEMPLAZO: En lugar de cerrar la app, forzamos abrir el HomeScreen
+                    // Esto además evita que el usuario pueda volver a la alarma presionando "Atrás"
+                    if (context.mounted) {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (context) => const HomeScreen(),
+                        ),
+                        (Route<dynamic> route) => false, // Elimina pantallas previas
+                      );
+                    }
                   },
                   child: const Text(
                     'Entendido',

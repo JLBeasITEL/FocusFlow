@@ -18,7 +18,8 @@ import 'rutina_form_screen.dart';
 import '../../providers/tema_provider.dart';
 import 'package:permission_handler/permission_handler.dart'; 
 import 'dart:async';
-// IMPORTANTE: Ya no necesitamos importar nota_provider.dart porque lo integramos aquí mismo
+import '../widgets/onboarding_permisos.dart';
+import '../../services/notificaciones_service.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -30,6 +31,8 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   int _currentIndex = 0; 
+  //Memoria de los grupos que el usuario ha minimizado
+  final Set<String> _gruposColapsados = {};
   
   // Paleta de 12 colores pastel
   final List<Color> _coloresPostIt = [
@@ -59,20 +62,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       }
     });
 
+    // Nota: Si este método solo pedía lo de la batería, eventualmente podrías 
+    // borrarlo, ya que el nuevo Onboarding lo pide en el "Paso 2". 
+    // Por ahora lo puedes dejar sin problemas.
     _solicitarPermisosDeBateria();
 
     // --- SINCRONIZACIÓN AUTOMÁTICA AL ABRIR LA APP ---
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // 1. Resincroniza alarmas
-      _resincronizarRutinasSilenciosamente();
+    WidgetsBinding.instance.addPostFrameCallback((_) async { 
+      // 1. LIMPIEZA NUCLEAR (Ejecución Única)
+      // Asegúrate de tener la función limpiarTodasLasAlarmasDelSistema en tu NotificacionesService
+      final prefs = await SharedPreferences.getInstance();
+      final borrado = prefs.getBool('fantasmas_borrados') ?? false;
       
-      // 2. LIMPIEZA DE TAREAS: Borra las completadas de ayer
+      if (!borrado) {
+        await NotificacionesService().limpiarTodasLasAlarmasDelSistema();
+        await prefs.setBool('fantasmas_borrados', true);
+        print('🧹 Limpieza nuclear ejecutada por única vez');
+      }
+
+      // 2. Resincronizamos con la lógica perfecta de tu Provider
+      await ref.read(rutinaProvider.notifier).resincronizarTodasLasAlarmas();
+      
+      // 3. LIMPIEZA DE TAREAS: Borra las completadas de ayer
       ref.read(tareaProvider.notifier).limpiarTareasCompletadasAlCambiarDeDia();
+
+      // 4. Lanzar el Onboarding interactivo de permisos
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          OnboardingPermisos.verificarYMostrar(context);
+        }
+      });
     });
   }
 
   // --- FUNCIÓN DE RESPALDO ANTI-BORRADO ---
-  void _resincronizarRutinasSilenciosamente() {
+  /*void _resincronizarRutinasSilenciosamente() {
     // 1. Leemos todas las rutinas de la memoria mediante Riverpod
     final rutinas = ref.read(rutinaProvider);
     
@@ -88,7 +112,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
        
        print('🔄 Resincronizando rutina silenciosamente: ${rutina.titulo}');
     }
-  }
+  } */
 
   Future<void> _solicitarPermisosDeBateria() async {
     if (await Permission.notification.isDenied) await Permission.notification.request();
@@ -568,11 +592,114 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           children: [
             tareas.isEmpty
                 ? Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withOpacity(0.6))))
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), 
-                    itemCount: tareas.length,
-                    itemBuilder: (context, index) => TareaCard(tarea: tareas[index], tema: temaActual),
-                  ),
+                : () {
+                    // 1. Agrupar las tareas
+                    final mapaGrupos = <String, List<Tarea>>{};
+                    for (var tarea in tareas) {
+                      if (!mapaGrupos.containsKey(tarea.grupo)) mapaGrupos[tarea.grupo] = [];
+                      mapaGrupos[tarea.grupo]!.add(tarea);
+                    }
+
+                    // 2. Ordenar los grupos (Asegurando que 'General' quede siempre hasta arriba)
+                    final listaGrupos = mapaGrupos.keys.toList();
+                    listaGrupos.sort((a, b) {
+                      if (a == 'General') return -1;
+                      if (b == 'General') return 1;
+                      return a.compareTo(b);
+                    });
+
+                    // 3. Dibujar la lista con Animaciones y Colores Dinámicos
+                    return ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                      itemCount: listaGrupos.length,
+                      itemBuilder: (context, index) {
+                        final grupo = listaGrupos[index];
+                        final tareasDelGrupo = mapaGrupos[grupo]!;
+                        final isColapsado = _gruposColapsados.contains(grupo);
+
+                        // --- COLOR DINÁMICO DEL TEMA ---
+                        // Extraemos el color de la interfaz de Flutter. 
+                        // (Si tu objeto 'temaActual' tiene una propiedad de color, por ejemplo 'temaActual.color',
+                        // puedes reemplazar esta variable directamente por ese valor).
+                        final colorTema = colorPrincipal;
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // --- CABECERA ANIMADA E INTERACTIVA ---
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                setState(() {
+                                  if (isColapsado) {
+                                    _gruposColapsados.remove(grupo); // Abrir
+                                  } else {
+                                    _gruposColapsados.add(grupo); // Minimizar
+                                  }
+                                });
+                              },
+                              child: Padding(
+                                padding: EdgeInsets.only(bottom: 12, top: index == 0 ? 0 : 24),
+                                child: Row(
+                                  children: [
+                                    // Ícono de carpeta con color dinámico
+                                    Icon(
+                                      isColapsado ? Icons.folder_rounded : Icons.folder_open_rounded,
+                                      size: 24,
+                                      color: colorTema,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      grupo,
+                                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                                    ),
+                                    const Spacer(),
+                                    
+                                    // Contador de tareas con fondo dinámico
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: colorTema.withOpacity(0.15), 
+                                        borderRadius: BorderRadius.circular(10)
+                                      ),
+                                      child: Text(
+                                        '${tareasDelGrupo.length}',
+                                        style: TextStyle(color: colorTema, fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    
+                                    // Flecha con rotación animada (180 grados al abrir/cerrar)
+                                    AnimatedRotation(
+                                      turns: isColapsado ? 0 : 0.5, 
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.easeInOut,
+                                      child: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            
+                            // --- LISTA DE TAREAS CON ANIMACIÓN DE EXPANSIÓN (AnimatedSize) ---
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 350), // Velocidad del despliegue
+                              curve: Curves.easeInOut, // Suavidad de la animación
+                              alignment: Alignment.topCenter,
+                              child: isColapsado
+                                  ? const SizedBox(width: double.infinity, height: 0) // Estado cerrado
+                                  : Column( // Estado abierto
+                                      children: tareasDelGrupo.map((tarea) => Padding(
+                                        padding: const EdgeInsets.only(bottom: 8.0),
+                                        child: TareaCard(tarea: tarea, tema: temaActual),
+                                      )).toList(),
+                                    ),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  }(),
             const _SeccionRutinasHoy(), 
             _buildTabNotas(colorPrincipal, notasGuardadas), 
           ],

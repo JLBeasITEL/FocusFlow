@@ -76,13 +76,25 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   }
 
   // --- LÓGICA DE NOTIFICACIONES PARA RUTINAS ---
-  // --- LÓGICA DE NOTIFICACIONES PARA RUTINAS ---
+
+  // NUEVO: Generador matemático de ID que NUNCA cambia entre sesiones
+  int _generarIdNumerico(String id) {
+    int hash = 0;
+    for (int i = 0; i < id.length; i++) {
+      hash = (31 * hash + id.codeUnitAt(i)) & 0x7FFFFFFF; // Límite seguro de 32-bits
+    }
+    return hash;
+  }
+
   Future<void> _gestionarNotificacionesRutina(Rutina rutina) async {
-    // 1. Limpiamos cualquier alarma previa de esta rutina (los 7 días)
+    // Usamos nuestro generador constante en lugar del .hashCode volátil
+    final int baseId = _generarIdNumerico(rutina.id);
+
+    // 1. APAGADO DE EMERGENCIA: Limpiamos cualquier alarma previa de esta rutina
     for (int i = 0; i < 7; i++) {
-      NotificacionesService().cancelarAlertaRutina(rutina.id.hashCode + i); // Exacta
-      NotificacionesService().cancelarAlertaRutina(rutina.id.hashCode + i + 1000); // 1 hora antes
-      NotificacionesService().cancelarRecordatoriosSecundarios(rutina.id.hashCode + i); // Limpiamos los secundarios
+      NotificacionesService().cancelarAlertaRutina(baseId + i); 
+      NotificacionesService().cancelarAlertaRutina(baseId + i + 1000); 
+      NotificacionesService().cancelarRecordatoriosSecundarios(baseId + i); 
     }
 
     // 2. Si la rutina no está activa, terminamos aquí
@@ -92,24 +104,26 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     final ahora = DateTime.now();
 
     rutina.horarios.forEach((diaIndex, hora) {
-      final proximaFecha = _calcularProximaFecha(diaIndex, hora);
+      DateTime proximaFecha = _calcularProximaFecha(diaIndex, hora);
       
-      // --- CORRECCIÓN: EVITAR NOTIFICACIONES FANTASMA ---
-      // Si el hábito ya se completó, no programamos las alarmas correspondientes al día de hoy.
+      // --- LA MAGIA ESTÁ AQUÍ ---
+      // Si ya se completó hoy, empujamos la fecha de inicio 7 días al futuro.
+      // Al programarla para la próxima semana, Android sobrescribe inmediatamente 
+      // la alarma de hoy, apagándola al instante pero manteniendo vivo el hábito.
       if (rutina.completada && 
           proximaFecha.year == ahora.year && 
           proximaFecha.month == ahora.month && 
           proximaFecha.day == ahora.day) {
-        return; // Salta a la siguiente iteración (actúa como un 'continue')
+        
+        proximaFecha = proximaFecha.add(const Duration(days: 7));
       }
-      // --------------------------------------------------
 
       final fechaUnaHoraAntes = proximaFecha.subtract(const Duration(hours: 1));
-
+      
       // Aviso 1 hora antes
       if (fechaUnaHoraAntes.isAfter(ahora)) {
         NotificacionesService().programarAlertaRutina(
-          id: rutina.id.hashCode + diaIndex + 1000,
+          id: baseId + diaIndex + 1000,
           titulo: 'Preparación de hábito',
           body: 'Tu hábito "${rutina.titulo}" comienza en 1 hora.',
           fechaVisual: fechaUnaHoraAntes,
@@ -121,7 +135,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
 
       // Aviso a la hora exacta
       NotificacionesService().programarAlertaRutina(
-        id: rutina.id.hashCode + diaIndex,
+        id: baseId + diaIndex,
         titulo: '¡Es hora de tu hábito!',
         body: 'Es momento de: ${rutina.titulo}',
         fechaVisual: proximaFecha,
@@ -130,9 +144,10 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         esInsistente: true,
       );
 
-      // Sembramos los avisos para las siguientes 3 horas si no se completa
+     
+      // Sembramos los avisos secundarios
       NotificacionesService().programarRecordatoriosSecundarios(
-        rutina.id.hashCode + diaIndex,
+        baseId + diaIndex,
         rutina.titulo,
         proximaFecha,
       );
@@ -200,6 +215,15 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     _gestionarNotificacionesRutina(rutinaActualizada);
   }
 
+  Future<void> resincronizarTodasLasAlarmas() async {
+    for (final rutina in state) {
+      // Solo reprogramamos si el hábito está encendido
+      if (rutina.activa) {
+        await _gestionarNotificacionesRutina(rutina);
+      }
+    }
+  }
+
   void incrementarRacha(String id) {
     state = [
       for (final r in state)
@@ -212,10 +236,12 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     state = state.where((r) => r.id != id).toList();
     _guardarRutinas();
     
+    // Actualizado con el ID seguro
+    final int baseId = _generarIdNumerico(id);
     for (int i = 0; i < 7; i++) {
-      NotificacionesService().cancelarAlertaRutina(id.hashCode + i);
-      NotificacionesService().cancelarAlertaRutina(id.hashCode + i + 1000);
-      NotificacionesService().cancelarRecordatoriosSecundarios(id.hashCode + i); 
+      NotificacionesService().cancelarAlertaRutina(baseId + i);
+      NotificacionesService().cancelarAlertaRutina(baseId + i + 1000);
+      NotificacionesService().cancelarRecordatoriosSecundarios(baseId + i); 
     }
   }
 

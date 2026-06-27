@@ -295,6 +295,9 @@ class NotificacionesService {
   }
 
   Future<void> posponerAlerta(int idAlarma, String titulo, String cuerpo, int minutos) async {
+    // 1. Cancelar la notificación activa para que Android la trate como una NUEVA alarma al sonar
+    await _plugin.cancel(idAlarma);
+
     final tz.TZDateTime nuevaHora = tz.TZDateTime.now(tz.local).add(Duration(minutes: minutos));
     final String datosPayload = 'alarma|$idAlarma|$titulo|$cuerpo|0'; 
 
@@ -311,13 +314,14 @@ class NotificacionesService {
         NotificationDetails( 
           android: AndroidNotificationDetails(
             canalDinamicoId, 
-            'Alarmas de Urgencia',
+            'Alarmas Urgentes', // Homologado con los otros métodos
             importance: Importance.max,
-            priority: Priority.high,
+            priority: Priority.max, // Subido a max para forzar interrupción
+            color: const Color(0xFF276749), // Agregamos tu color temático
             fullScreenIntent: true,
             playSound: true,
             sound: RawResourceAndroidNotificationSound(sonidoAlarma),
-            additionalFlags: Int32List.fromList(<int>[4]), 
+            additionalFlags: Int32List.fromList(<int>[4]), // Mantiene el loop insistente
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.alarmClock,
@@ -328,5 +332,11 @@ class NotificacionesService {
     } catch (e) {
       print('❌ Error al posponer la alarma: $e');
     }
+  }
+
+  // --- BOMBA NUCLEAR PARA ALARMAS FANTASMAS ---
+  Future<void> limpiarTodasLasAlarmasDelSistema() async {
+    await _plugin.cancelAll();
+    print('🧹 Todas las alarmas de Android han sido reseteadas');
   }
 }
