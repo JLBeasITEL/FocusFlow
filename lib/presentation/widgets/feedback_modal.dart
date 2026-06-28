@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_email_sender/flutter_email_sender.dart';
 
 class FeedbackModal extends StatefulWidget {
@@ -13,13 +12,6 @@ class _FeedbackModalState extends State<FeedbackModal> {
   final TextEditingController _mensajeController = TextEditingController();
   String _tipoFeedback = 'Sugerencia'; // Opción por defecto
 
-  // Función especial para que los espacios y saltos de línea no rompan el correo
-  String? _encodeQueryParameters(Map<String, String> params) {
-    return params.entries
-        .map((MapEntry<String, String> e) =>
-            '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
-        .join('&');
-  }
 
   Future<void> _enviarFeedback() async {
     final texto = _mensajeController.text.trim();
@@ -27,9 +19,9 @@ class _FeedbackModalState extends State<FeedbackModal> {
 
     // Construimos el objeto del correo usando el nuevo paquete
     final Email email = Email(
-      body: 'Categoría: $_tipoFeedback\n\nDetalles del mensaje:\n$texto\n\n--- \nEnviado desde la App de Tareas',
+      body: 'Categoría: $_tipoFeedback\n\nDetalles del mensaje:\n$texto\n\n--- \nEnviado desde FocusFlow App',
       subject: 'Feedback App de Tareas - $_tipoFeedback',
-      recipients: ['tu_correo_de_desarrollador@gmail.com'], // Tu correo real
+      recipients: ['jl.beas_itel@outlook.com'], 
       isHTML: false,
     );
 
