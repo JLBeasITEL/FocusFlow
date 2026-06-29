@@ -14,6 +14,21 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     return [];
   }
 
+  // --- CALCULADORA DE PROGRESO DIARIO ---
+  double get progresoDiario {
+    final hoy = DateTime.now().weekday; // 1 = Lunes, 7 = Domingo
+    
+    // Filtramos para considerar solo las rutinas que tocan el día de hoy
+    final rutinasDeHoy = state.where((r) => r.horarios.containsKey(hoy)).toList();
+    
+    if (rutinasDeHoy.isEmpty) return 0.0;
+    
+    // Contamos cuántas de esas están marcadas como completadas
+    final completadas = rutinasDeHoy.where((r) => r.completada).length;
+    
+    return completadas / rutinasDeHoy.length;
+  }
+
   Future<void> _cargarRutinas() async {
     final prefs = await SharedPreferences.getInstance();
     final String? rutinasJson = prefs.getString(_storageKey);

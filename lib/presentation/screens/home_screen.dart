@@ -20,6 +20,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import '../widgets/onboarding_permisos.dart';
 import '../../services/notificaciones_service.dart';
+import '../widgets/progreso_rutinas_bar.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -927,39 +928,55 @@ class _SeccionRutinasHoy extends ConsumerWidget {
           ),
         ),
         
-        // ELIMINAMOS EL SizedBox(height: 180) QUE ESTABA AQUÍ
         
         Expanded(
-          child: rutinasDeHoy.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center, // Enfoque de centrado horizontal para la columna
-                    children: [
-                      // Este espacio empuja el texto hacia abajo del loto central.
-                      // Si notas que queda muy abajo o muy arriba, puedes ajustar este número (ej. 100 o 140)
-                      const SizedBox(height: 120), 
-                      
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32), // Evita que el texto toque los bordes de la pantalla
-                        child: Text(
-                          'Cada que agregas un nuevo hábito a tu vida,\nte acercas más a la persona que quieres ser.', 
-                          textAlign: TextAlign.center, // Centra las líneas de texto entre sí
-                          style: TextStyle(
-                            color: colorPrincipal.withOpacity(0.6),
-                            fontSize: 15,
-                            height: 1.4, // Agrega un ligero espacio entre las dos líneas para mejorar la lectura
-                          ),
+          child: Column(
+            children: [
+              // 1. La barra de progreso inteligente: 
+              // Solo se dibuja si la lista de rutinas de hoy NO está vacía.
+              if (rutinasDeHoy.isNotEmpty) 
+                ProgresoRutinasBar(
+                  rutinasDeHoy: rutinasDeHoy,
+                  colorTema: colorPrincipal, // Le inyectamos el color del tema actual
+                ),
+
+              // 2. El contenido principal (Mensaje motivacional o Lista de rutinas)
+              Expanded(
+                child: rutinasDeHoy.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center, 
+                          children: [
+                            // Este espacio empuja el texto hacia abajo del loto central.
+                            const SizedBox(height: 120), 
+                            
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 32), 
+                              child: Text(
+                                'Cada que agregas un nuevo hábito a tu vida,\nte acercas más a la persona que quieres ser.', 
+                                textAlign: TextAlign.center, 
+                                style: TextStyle(
+                                  color: colorPrincipal.withOpacity(0.6),
+                                  fontSize: 15,
+                                  height: 1.4, 
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.only(top: 16, bottom: 100, left: 16, right: 16),
+                        itemCount: rutinasDeHoy.length,
+                        itemBuilder: (context, index) => RutinaCard(
+                          rutina: rutinasDeHoy[index], 
+                          colorTema: colorPrincipal
                         ),
                       ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.only(top: 16, bottom: 100, left: 16, right: 16),
-                  itemCount: rutinasDeHoy.length,
-                  itemBuilder: (context, index) => RutinaCard(rutina: rutinasDeHoy[index], colorTema: colorPrincipal),
-                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
