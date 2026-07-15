@@ -74,29 +74,27 @@ class _AddRutinaModalState extends ConsumerState<AddRutinaModal> {
     }
   }
 
-  void _guardarRutina() {
-    if (_tituloController.text.trim().isEmpty) return;
-    if (!_diasSeleccionados.contains(true)) return; // Debe elegir al menos un día
+  Future<void> _guardarRutina() async {
+  if (_tituloController.text.trim().isEmpty) return;
+  if (!_diasSeleccionados.contains(true)) return;
 
-          // 1. Primero convertimos tus antiguas variables en el nuevo formato de Mapa
-      Map<int, TimeOfDay> horariosConvertidos = {};
-      for (int i = 0; i < _diasSeleccionados.length; i++) {
-        if (_diasSeleccionados[i]) {
-          horariosConvertidos[i] = _horaSeleccionada;
-        }
-      }
-
-      // 2. Ahora creamos la rutina usando el campo 'horarios'
-      final nuevaRutina = Rutina(
-        id: const Uuid().v4(),
-        titulo: _tituloController.text.trim(),
-        horarios: horariosConvertidos, // <--- Este es el nuevo campo que reemplaza a los otros dos
-        iconoCode: _iconoSeleccionado,
-      );
-
-    ref.read(rutinaProvider.notifier).addRutina(nuevaRutina);
-    Navigator.pop(context);
+  Map<int, TimeOfDay> horariosConvertidos = {};
+  for (int i = 0; i < _diasSeleccionados.length; i++) {
+    if (_diasSeleccionados[i]) {
+      horariosConvertidos[i] = _horaSeleccionada;
+    }
   }
+
+  final nuevaRutina = Rutina(
+    id: const Uuid().v4(),
+    titulo: _tituloController.text.trim(),
+    horarios: horariosConvertidos,
+    iconoCode: _iconoSeleccionado,
+  );
+
+  await ref.read(rutinaProvider.notifier).addRutina(nuevaRutina);
+  if (mounted) Navigator.pop(context);
+}
 
   @override
   Widget build(BuildContext context) {

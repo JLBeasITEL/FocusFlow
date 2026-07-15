@@ -69,9 +69,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     _solicitarPermisosDeBateria();
 
     // --- SINCRONIZACIÓN AUTOMÁTICA AL ABRIR LA APP ---
+    // addPostFrameCallback espera a que se dibuje el primer frame antes de ejecutar
+    // esta función, para asegurarnos de que el árbol de widgets (y el context) ya existen.
     WidgetsBinding.instance.addPostFrameCallback((_) async { 
       // 1. LIMPIEZA NUCLEAR (Ejecución Única)
-      // Asegúrate de tener la función limpiarTodasLasAlarmasDelSistema en tu NotificacionesService
+      // Esto cancela TODAS las alarmas/notificaciones que existan en el sistema Android
+      // (cancelAll), pero SOLO la primera vez que el usuario abre la app después de
+      // instalar este fix. Usamos una bandera guardada en SharedPreferences
+      // ("fantasmas_borrados") para no repetir esta limpieza en cada apertura.
       final prefs = await SharedPreferences.getInstance();
       final borrado = prefs.getBool('fantasmas_borrados') ?? false;
       
@@ -81,13 +86,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         print('🧹 Limpieza nuclear ejecutada por única vez');
       }
 
-      // 2. Resincronizamos con la lógica perfecta de tu Provider
-      await ref.read(rutinaProvider.notifier).resincronizarTodasLasAlarmas();
-      
-      // 3. LIMPIEZA DE TAREAS: Borra las completadas de ayer
+      // ============================================================
+      // FIX APLICADO: se eliminó la llamada a
+      // ref.read(rutinaProvider.notifier).resincronizarTodasLasAlarmas();
+      //
+      // Motivo: RutinaNotifier.build() (en rutina_provider.dart) YA ejecuta
+      // _cargarRutinas() automáticamente en cuanto el provider se crea al
+      // abrir la app, y _cargarRutinas() ya reprograma las notificaciones
+      // de todas las rutinas activas por su cuenta.
+      //
+      // Antes de este fix, este archivo llamaba OTRA VEZ a esa misma lógica
+      // (resincronizarTodasLasAlarmas), lo que generaba dos procesos
+      // corriendo en paralelo, cancelando y reprogramando las MISMAS
+      // notificaciones al mismo tiempo. Esta condición de carrera podía
+      // dejar alarmas "fantasma" o duplicadas cada vez que se abría la app,
+      // incluso sin crear, editar, ni marcar ninguna rutina como completa.
+      // ============================================================
+
+      // 2. LIMPIEZA DE TAREAS: Borra las completadas de ayer
       ref.read(tareaProvider.notifier).limpiarTareasCompletadasAlCambiarDeDia();
 
-      // 4. Lanzar el Onboarding interactivo de permisos
+      // 3. Lanzar el Onboarding interactivo de permisos
+      // (Se retrasa 500ms para no interrumpir la animación de entrada de la app)
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
           OnboardingPermisos.verificarYMostrar(context);
@@ -115,6 +135,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     }
   } */
 
+  // Solicita al sistema operativo los 3 permisos críticos para que las alarmas
+  // de rutinas suenen de forma confiable: notificaciones, ignorar optimización
+  // de batería (para que Android no "duerma" la app) y alarmas exactas.
   Future<void> _solicitarPermisosDeBateria() async {
     if (await Permission.notification.isDenied) await Permission.notification.request();
     if (await Permission.ignoreBatteryOptimizations.isDenied) await Permission.ignoreBatteryOptimizations.request();
@@ -127,6 +150,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     super.dispose();
   }
 
+  // --- HELPERS DE APARIENCIA VISUAL (no relacionados con rutinas/notificaciones) ---
+  // Cada uno de estos métodos recibe el tema activo (enum TemaApp) y devuelve
+  // el color/degradado correspondiente. Son puramente de UI.
   Gradient _getDegradadoFondo(TemaApp tema) {
     if (tema == TemaApp.clasico) return const LinearGradient(colors: [Colors.white, Colors.white]);
     if (tema == TemaApp.brisaMarina) return const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFF0F8FF), Color(0xFF9FB8D0)]);
@@ -893,6 +919,11 @@ class _PostItCardState extends State<PostItCard> {
 
 // --- TUS COMPONENTES ORIGINALES (_SeccionRutinasHoy y TareaCard) ---
 
+// _SeccionRutinasHoy: pinta el contenido del tab "Rutinas" en la pantalla principal.
+// Es un widget "de solo lectura" respecto a las notificaciones: únicamente
+// observa (ref.watch) el estado actual de rutinaProvider y construye la lista
+// de RutinaCard para HOY. Toda la lógica de cancelar/programar notificaciones
+// vive en rutina_provider.dart y rutina_card.dart, NO aquí.
 class _SeccionRutinasHoy extends ConsumerWidget {
   const _SeccionRutinasHoy();
 

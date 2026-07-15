@@ -55,48 +55,49 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
   }
 
   // MÉTODO DE GUARDADO CENTRALIZADO
-  void _guardarRutina() {
-    if (_tituloController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, asigne un título.')),
-      );
-      return;
-    }
-
-    if (!_esFlexible) {
-      _horarios.clear();
-      for (int i = 0; i < _diasFijos.length; i++) {
-        if (_diasFijos[i]) _horarios[i] = _horaFija;
-      }
-    }
-
-    if (_horarios.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleccione al menos un día.')),
-      );
-      return;
-    }
-
-    final rutina = Rutina(
-      id: widget.rutinaAEditar?.id ?? const Uuid().v4(),
-      titulo: _tituloController.text.trim(),
-      descripcion: _descripcionController.text.trim().isEmpty ? null : _descripcionController.text.trim(),
-      horarios: _horarios,
-      esFlexible: _esFlexible,
-      iconoCode: _iconoSeleccionado,
-      racha: widget.rutinaAEditar?.racha ?? 0,
-      activa: widget.rutinaAEditar?.activa ?? true,
-      completada: widget.rutinaAEditar?.completada ?? false,
-      fechaCompletada: widget.rutinaAEditar?.fechaCompletada,
+  Future<void> _guardarRutina() async {
+  if (_tituloController.text.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Por favor, asigne un título.')),
     );
-
-    if (widget.rutinaAEditar == null) {
-      ref.read(rutinaProvider.notifier).addRutina(rutina);
-    } else {
-      ref.read(rutinaProvider.notifier).editarRutina(rutina);
-    }
-    Navigator.pop(context);
+    return;
   }
+
+  if (!_esFlexible) {
+    _horarios.clear();
+    for (int i = 0; i < _diasFijos.length; i++) {
+      if (_diasFijos[i]) _horarios[i] = _horaFija;
+    }
+  }
+
+  if (_horarios.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Seleccione al menos un día.')),
+    );
+    return;
+  }
+
+  final rutina = Rutina(
+    id: widget.rutinaAEditar?.id ?? const Uuid().v4(),
+    titulo: _tituloController.text.trim(),
+    descripcion: _descripcionController.text.trim().isEmpty ? null : _descripcionController.text.trim(),
+    horarios: _horarios,
+    esFlexible: _esFlexible,
+    iconoCode: _iconoSeleccionado,
+    racha: widget.rutinaAEditar?.racha ?? 0,
+    activa: widget.rutinaAEditar?.activa ?? true,
+    completada: widget.rutinaAEditar?.completada ?? false,
+    fechaCompletada: widget.rutinaAEditar?.fechaCompletada,
+  );
+
+  if (widget.rutinaAEditar == null) {
+    await ref.read(rutinaProvider.notifier).addRutina(rutina);
+  } else {
+    await ref.read(rutinaProvider.notifier).editarRutina(rutina);
+  }
+
+  if (mounted) Navigator.pop(context);
+}
 
   @override
   Widget build(BuildContext context) {

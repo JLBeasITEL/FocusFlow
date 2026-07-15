@@ -102,43 +102,58 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   }
 
   Future<void> _gestionarNotificacionesRutina(Rutina rutina) async {
-    // Usamos nuestro generador constante en lugar del .hashCode volátil
+    // Usamos nuestro generador constante
     final int baseId = _generarIdNumerico(rutina.id);
-
-    // 1. APAGADO DE EMERGENCIA: Limpiamos cualquier alarma previa de esta rutina
-    for (int i = 0; i < 7; i++) {
-      NotificacionesService().cancelarAlertaRutina(baseId + i); 
-      NotificacionesService().cancelarAlertaRutina(baseId + i + 1000); 
-      NotificacionesService().cancelarRecordatoriosSecundarios(baseId + i); 
-    }
-
-    // 2. Si la rutina no está activa, terminamos aquí
-    if (!rutina.activa) return;
-
-    // 3. Programamos los horarios activos
     final ahora = DateTime.now();
 
-    rutina.horarios.forEach((diaIndex, hora) {
+    // --- PRINTS DE DIAGNÓSTICO ---
+    print("🔔 DEBUG: -- INICIANDO GESTIÓN DE ALARMAS --");
+    print("🔔 DEBUG: Rutina: '${rutina.titulo}' | Estado completada: ${rutina.completada}");
+    print("🔔 DEBUG: ID Base numérico: $baseId");
+
+    // 1. APAGADO DE EMERGENCIA (Ahora con AWAIT)
+    // Al usar await, obligamos a Flutter a pausarse hasta que Android confirme
+    // que la alarma fue destruida. Esto evita las alarmas fantasma.
+    for (final diaIndex in rutina.horarios.keys) {
+      await NotificacionesService().cancelarAlertaRutina(baseId + diaIndex); 
+      await NotificacionesService().cancelarAlertaRutina(baseId + diaIndex + 1000); 
+      await NotificacionesService().cancelarRecordatoriosSecundarios(baseId + diaIndex); 
+    }
+    print("🔔 DEBUG: Alarmas previas canceladas exitosamente de la memoria.");
+
+    // 2. Si la rutina no está activa, terminamos aquí
+    if (!rutina.activa) {
+      print("🔔 DEBUG: La rutina está inactiva. Proceso terminado.");
+      return;
+    }
+
+    // 3. Programamos los horarios activos
+    // Cambiamos el .forEach por un 'for in' para poder usar await adentro
+    for (var entry in rutina.horarios.entries) {
+      final diaIndex = entry.key;
+      final hora = entry.value;
+      final int idExacto = baseId + diaIndex; // El ID final de esta alarma
+      
       DateTime proximaFecha = _calcularProximaFecha(diaIndex, hora);
       
-      // --- LA MAGIA ESTÁ AQUÍ ---
-      // Si ya se completó hoy, empujamos la fecha de inicio 7 días al futuro.
-      // Al programarla para la próxima semana, Android sobrescribe inmediatamente 
-      // la alarma de hoy, apagándola al instante pero manteniendo vivo el hábito.
+      // Si ya se completó hoy, empujamos la fecha 7 días
       if (rutina.completada && 
           proximaFecha.year == ahora.year && 
           proximaFecha.month == ahora.month && 
           proximaFecha.day == ahora.day) {
         
         proximaFecha = proximaFecha.add(const Duration(days: 7));
+        print("🔔 DEBUG: ⏩ Rutina de hoy marcada completa. ID: $idExacto reprogramado al: $proximaFecha");
+      } else {
+        print("🔔 DEBUG: ⏰ Programando ID: $idExacto para el: $proximaFecha");
       }
 
       final fechaUnaHoraAntes = proximaFecha.subtract(const Duration(hours: 1));
       
-      // Aviso 1 hora antes
+      // Aviso 1 hora antes (Con AWAIT)
       if (fechaUnaHoraAntes.isAfter(ahora)) {
-        NotificacionesService().programarAlertaRutina(
-          id: baseId + diaIndex + 1000,
+        await NotificacionesService().programarAlertaRutina(
+          id: idExacto + 1000,
           titulo: 'Preparación de hábito',
           body: 'Tu hábito "${rutina.titulo}" comienza en 1 hora.',
           fechaVisual: fechaUnaHoraAntes,
@@ -148,9 +163,9 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         );
       }
 
-      // Aviso a la hora exacta
-      NotificacionesService().programarAlertaRutina(
-        id: baseId + diaIndex,
+      // Aviso a la hora exacta (Con AWAIT)
+      await NotificacionesService().programarAlertaRutina(
+        id: idExacto,
         titulo: '¡Es hora de tu hábito!',
         body: 'Es momento de: ${rutina.titulo}',
         fechaVisual: proximaFecha,
@@ -159,14 +174,14 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         esInsistente: true,
       );
 
-     
-      // Sembramos los avisos secundarios
-      NotificacionesService().programarRecordatoriosSecundarios(
-        baseId + diaIndex,
+      // Sembramos los avisos secundarios (Con AWAIT)
+      await NotificacionesService().programarRecordatoriosSecundarios(
+        idExacto,
         rutina.titulo,
         proximaFecha,
       );
-    });
+    }
+    print("🔔 DEBUG: -- FINALIZÓ LA PROGRAMACIÓN CON ÉXITO --");
   }
 
   DateTime _calcularProximaFecha(int diaSemana, TimeOfDay hora) {
@@ -184,51 +199,50 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
 
   // --- MÉTODOS DE ACCIÓN ---
 
-  void addRutina(Rutina rutina) {
-    state = [...state, rutina];
-    _guardarRutinas();
-    _gestionarNotificacionesRutina(rutina); 
-  }
+  Future<void> addRutina(Rutina rutina) async {
+  state = [...state, rutina];
+  _guardarRutinas();
+  await _gestionarNotificacionesRutina(rutina);
+}
 
-  void editarRutina(Rutina rutinaEditada) {
-    state = [
-      for (final r in state)
-        if (r.id == rutinaEditada.id) rutinaEditada else r,
-    ];
-    _guardarRutinas();
-    _gestionarNotificacionesRutina(rutinaEditada); 
-  }
+Future<void> editarRutina(Rutina rutinaEditada) async {
+  state = [
+    for (final r in state)
+      if (r.id == rutinaEditada.id) rutinaEditada else r,
+  ];
+  _guardarRutinas();
+  await _gestionarNotificacionesRutina(rutinaEditada);
+}
 
-  void toggleActiva(String id) {
-    state = [
-      for (final r in state)
-        if (r.id == id) r.copyWith(activa: !r.activa) else r,
-    ];
-    _guardarRutinas();
-    
-    final rutinaActualizada = state.firstWhere((r) => r.id == id);
-    _gestionarNotificacionesRutina(rutinaActualizada); 
-  }
+Future<void> toggleActiva(String id) async {
+  state = [
+    for (final r in state)
+      if (r.id == id) r.copyWith(activa: !r.activa) else r,
+  ];
+  _guardarRutinas();
+  
+  final rutinaActualizada = state.firstWhere((r) => r.id == id);
+  await _gestionarNotificacionesRutina(rutinaActualizada);
+}
 
-  void toggleCompletada(String id) {
-    final hoy = DateTime.now().toIso8601String().split('T')[0];
-    state = [
-      for (final r in state)
-        if (r.id == id)
-          r.copyWith(
-            completada: !r.completada,
-            racha: !r.completada ? r.racha + 1 : (r.racha > 0 ? r.racha - 1 : 0),
-            // CORRECCIÓN: Si marca la tarea, guarda hoy. Si la desmarca (error del usuario), la borramos.
-            fechaCompletada: !r.completada ? hoy : null,
-          )
-        else
-          r,
-    ];
-    _guardarRutinas();
+  Future<void> toggleCompletada(String id) async {
+  final hoy = DateTime.now().toIso8601String().split('T')[0];
+  state = [
+    for (final r in state)
+      if (r.id == id)
+        r.copyWith(
+          completada: !r.completada,
+          racha: !r.completada ? r.racha + 1 : (r.racha > 0 ? r.racha - 1 : 0),
+          fechaCompletada: !r.completada ? hoy : null,
+        )
+      else
+        r,
+  ];
+  _guardarRutinas();
 
-    final rutinaActualizada = state.firstWhere((r) => r.id == id);
-    _gestionarNotificacionesRutina(rutinaActualizada);
-  }
+  final rutinaActualizada = state.firstWhere((r) => r.id == id);
+  await _gestionarNotificacionesRutina(rutinaActualizada); // <- await aquí
+}
 
   Future<void> resincronizarTodasLasAlarmas() async {
     for (final rutina in state) {

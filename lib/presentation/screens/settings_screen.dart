@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/tema_provider.dart';
 import '../../providers/configuracion_provider.dart';
 import '../widgets/feedback_modal.dart';
+import '../../services/notificaciones_service.dart';
+import '../../providers/rutina_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -87,6 +89,14 @@ class SettingsScreen extends ConsumerWidget {
               );
             },
           ),
+          ListTile(
+            leading: Icon(Icons.cleaning_services_outlined, color: colorPrincipal),
+            title: Text('Reparar notificaciones', style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.w600)),
+            subtitle: Text('Limpia y reprograma todas las alarmas', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.7))),
+            trailing: Icon(Icons.chevron_right, color: colorPrincipal.withValues(alpha: 0.5)),
+            onTap: () => _confirmarLimpiezaAlarmas(context, ref, colorPrincipal, estiloTitulo),
+          ),
+          
           
           // === DERECHOS DE AUTOR ===
           Padding(
@@ -95,7 +105,7 @@ class SettingsScreen extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'FocusFlow v1.9.4',
+                  'FocusFlow v1.9.10',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -223,6 +233,47 @@ class SettingsScreen extends ConsumerWidget {
             },
           )).toList(),
         ),
+      ),
+    );
+  }
+
+  void _confirmarLimpiezaAlarmas(BuildContext context, WidgetRef ref, Color colorPrincipal, TextStyle estiloTitulo) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('¿Reparar notificaciones?', style: estiloTitulo),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Text(
+          'Esto cancelará todas las alarmas pendientes del sistema y las volverá a programar desde cero, basándose en tus rutinas actuales. Úsalo si notas notificaciones duplicadas o que no coinciden con el estado real de tus rutinas.',
+          style: TextStyle(color: colorPrincipal.withValues(alpha: 0.8)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context); // Cerramos el diálogo de confirmación
+
+              // 1. Cancelamos TODO lo que haya en el sistema, sin excepción
+              await NotificacionesService().limpiarTodasLasAlarmasDelSistema();
+
+              // 2. Reprogramamos desde cero basándonos en el estado real guardado
+              await ref.read(rutinaProvider.notifier).resincronizarTodasLasAlarmas();
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✅ Notificaciones reparadas y reprogramadas'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: Text('Reparar', style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
