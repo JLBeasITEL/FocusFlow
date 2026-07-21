@@ -2,16 +2,17 @@ import 'package:app_tareas/presentation/screens/gestor_rutinas_screen.dart';
 import 'package:app_tareas/presentation/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:intl/intl.dart';
-import 'dart:ui'; 
-import 'dart:math' as math; 
-import 'dart:convert'; // Necesario para guardar datos
+import 'dart:ui';
+import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart'; // Necesario para guardado offline
 
 import '../../providers/tarea_provider.dart';
 import '../../models/tarea.dart';
+import '../../models/nota.dart';
+import '../../providers/nota_provider.dart';
 import '../widgets/add_tarea_modal.dart';
+import '../widgets/ayuda_formulario_button.dart';
 import '../../providers/rutina_provider.dart';
 import '../widgets/rutina_card.dart';
 import 'rutina_form_screen.dart';
@@ -150,30 +151,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     super.dispose();
   }
 
-  // --- HELPERS DE APARIENCIA VISUAL (no relacionados con rutinas/notificaciones) ---
-  // Cada uno de estos métodos recibe el tema activo (enum TemaApp) y devuelve
-  // el color/degradado correspondiente. Son puramente de UI.
-  Gradient _getDegradadoFondo(TemaApp tema) {
-    if (tema == TemaApp.clasico) return const LinearGradient(colors: [Colors.white, Colors.white]);
-    if (tema == TemaApp.brisaMarina) return const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFF0F8FF), Color(0xFF9FB8D0)]);
-    if (tema == TemaApp.atardecerMinimalista) return const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFFFF9F5), Color(0xFFE5B270)]);
-    return const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFF2F7F2), Color(0xFF8BA888)]);
-  }
-
-  Color _getColorPrincipal(TemaApp tema) {
-    if (tema == TemaApp.clasico) return Colors.black87; 
-    if (tema == TemaApp.brisaMarina) return const Color(0xFF1E3A8A); 
-    if (tema == TemaApp.atardecerMinimalista) return const Color(0xFFC05621); 
-    return const Color(0xFF276749); 
-  }
-
-  Color _getColorFondoAppBar(TemaApp tema) {
-    if (tema == TemaApp.clasico) return Colors.white;
-    if (tema == TemaApp.brisaMarina) return const Color(0xFFF0F8FF);
-    if (tema == TemaApp.atardecerMinimalista) return const Color(0xFFFFF9F5);
-    return const Color(0xFFF2F7F2); 
-  }
-
   // --- VISTA DE NOTAS ESTILO TABLERO ---
   Widget _buildTabNotas(Color colorPrincipal, List<NotaPostIt> notasActuales) {
     if (notasActuales.isEmpty) {
@@ -226,9 +203,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     
     final controller = TextEditingController(text: esNueva ? '' : notaActual!.texto);
     // Usa tu paleta nativa del archivo original
-    final Color colorDialogo = esNueva ? const Color(0xFFFDFBF7) : Color(notaActual!.colorValue);
+    Color colorDialogo = esNueva ? const Color(0xFFFDFBF7) : Color(notaActual!.colorValue);
+    // null = color aleatorio (solo aplica a notas nuevas); si el usuario elige uno manualmente, se guarda aquí.
+    int? colorElegido = esNueva ? null : notaActual!.colorValue;
 
-    bool modoEdicion = esNueva; 
+    bool modoEdicion = esNueva;
     TipoNota tipoActual = esNueva ? TipoNota.texto : notaActual!.tipo;
     
     List<ItemLista> itemsTemp = esNueva 
@@ -236,6 +215,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         : notaActual!.elementosLista.map((e) => ItemLista(texto: e.texto, completado: e.completado)).toList();
     
     List<TextEditingController> controllersLista = itemsTemp.map((e) => TextEditingController(text: e.texto)).toList();
+    List<FocusNode> focusNodesLista = itemsTemp.map((e) => FocusNode()).toList();
 
     showGeneralDialog(
       context: context,
@@ -313,15 +293,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                               child: modoEdicion
                                                 ? TextField(
                                                     controller: controllersLista[i],
+                                                    focusNode: focusNodesLista[i],
                                                     onChanged: (val) => itemsTemp[i].texto = val,
                                                     textInputAction: TextInputAction.next, // Configura el botón del teclado como "Siguiente"
                                                     onSubmitted: (val) {
                                                       // Si el usuario presiona Enter estando en el último elemento de la lista, crea uno nuevo automáticamente
                                                       if (i == itemsTemp.length - 1) {
+                                                        final nuevoFocusNode = FocusNode();
                                                         setStateDialog(() {
                                                           itemsTemp.add(ItemLista(texto: ''));
                                                           controllersLista.add(TextEditingController());
+                                                          focusNodesLista.add(nuevoFocusNode);
                                                         });
+                                                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                                                          nuevoFocusNode.requestFocus();
+                                                        });
+                                                      } else {
+                                                        focusNodesLista[i + 1].requestFocus();
                                                       }
                                                     },
                                                     style: const TextStyle(fontSize: 18, color: Colors.black87, fontWeight: FontWeight.w500),
@@ -338,7 +326,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                             ),
                                             if (modoEdicion)
                                               GestureDetector(
-                                                onTap: () => setStateDialog(() { itemsTemp.removeAt(i); controllersLista.removeAt(i); }),
+                                                onTap: () => setStateDialog(() { itemsTemp.removeAt(i); controllersLista.removeAt(i); focusNodesLista.removeAt(i); }),
                                                 child: const Icon(Icons.close, size: 20, color: Colors.black38),
                                               )
                                           ],
@@ -348,7 +336,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                       Padding(
                                         padding: const EdgeInsets.only(top: 8.0),
                                         child: InkWell(
-                                          onTap: () => setStateDialog(() { itemsTemp.add(ItemLista(texto: '')); controllersLista.add(TextEditingController()); }),
+                                          onTap: () {
+                                            final nuevoFocusNode = FocusNode();
+                                            setStateDialog(() {
+                                              itemsTemp.add(ItemLista(texto: ''));
+                                              controllersLista.add(TextEditingController());
+                                              focusNodesLista.add(nuevoFocusNode);
+                                            });
+                                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                                              nuevoFocusNode.requestFocus();
+                                            });
+                                          },
                                           child: const Row(children: [Icon(Icons.add, color: Colors.black54), SizedBox(width: 8), Text('Agregar elemento', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold))]),
                                         ),
                                       )
@@ -361,6 +359,94 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             top: 8, right: 8,
                             child: Row(
                               children: [
+                                AyudaFormularioButton(
+                                  titulo: 'Ayuda: Nota',
+                                  color: Colors.black54,
+                                  puntos: const [
+                                    'Texto: Escribe libremente tus ideas o pendientes.',
+                                    'Convertir en Lista/Texto: El botón con las líneas cambia entre modo texto libre y modo lista de compras.',
+                                    'Lista de compras: Agrega elementos con casillas que puedes marcar como completados.',
+                                    'Lápiz: Permite editar una nota ya guardada.',
+                                    'Color: Usa el ícono de paleta para elegir un color. Si no eliges ninguno, la nota nueva recibe uno aleatorio tipo post-it.',
+                                  ],
+                                ),
+                                // SELECTOR DE COLOR (SIEMPRE VISIBLE, EN EDICIÓN Y EN VISTA PREVIA)
+                                // Si el usuario no elige nada, se conserva el comportamiento
+                                // original: color aleatorio para notas nuevas, o el color ya
+                                // asignado para notas existentes.
+                                IconButton(
+                                    icon: const Icon(Icons.palette_outlined, color: Colors.black54),
+                                    tooltip: 'Elegir color',
+                                    onPressed: () async {
+                                      final Color? seleccion = await showDialog<Color>(
+                                        context: context,
+                                        builder: (dialogContext) => AlertDialog(
+                                          title: const Text('Color de la nota'),
+                                          content: Wrap(
+                                            spacing: 12,
+                                            runSpacing: 12,
+                                            children: [
+                                              for (final opcion in _coloresPostIt)
+                                                GestureDetector(
+                                                  onTap: () => Navigator.pop(dialogContext, opcion),
+                                                  child: Container(
+                                                    width: 36, height: 36,
+                                                    decoration: BoxDecoration(
+                                                      color: opcion,
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(
+                                                        color: colorElegido == opcion.value ? Colors.black87 : Colors.black12,
+                                                        width: colorElegido == opcion.value ? 2.5 : 1,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              // "Aleatorio" solo tiene sentido si la nota aún no tiene un color fijo (nota nueva)
+                                              if (esNueva)
+                                                GestureDetector(
+                                                  onTap: () => Navigator.pop(dialogContext, const Color(0x00000000)),
+                                                  child: Container(
+                                                    width: 36, height: 36,
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      border: Border.all(color: colorElegido == null ? Colors.black87 : Colors.black12, width: colorElegido == null ? 2.5 : 1),
+                                                      gradient: const SweepGradient(colors: [Colors.red, Colors.yellow, Colors.green, Colors.blue, Colors.purple, Colors.red]),
+                                                    ),
+                                                    child: const Icon(Icons.shuffle_rounded, size: 16, color: Colors.white),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          actions: [
+                                            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cerrar')),
+                                          ],
+                                        ),
+                                      );
+
+                                      if (seleccion == null) return; // Se cerró sin elegir
+                                      setStateDialog(() {
+                                        if (seleccion.value == 0x00000000) {
+                                          // Opción "Aleatorio"
+                                          colorElegido = null;
+                                          colorDialogo = const Color(0xFFFDFBF7);
+                                        } else {
+                                          colorElegido = seleccion.value;
+                                          colorDialogo = seleccion;
+                                        }
+                                      });
+
+                                      // Fuera del modo edición (nota ya guardada en vista previa)
+                                      // no hay botón "Guardar" visible, así que persistimos de una vez.
+                                      if (!modoEdicion && !esNueva) {
+                                        ref.read(notaProvider.notifier).editarNota(
+                                          notaActual!.id, notaActual.texto,
+                                          tipo: notaActual.tipo,
+                                          elementosLista: notaActual.elementosLista,
+                                          colorValue: colorElegido,
+                                        );
+                                      }
+                                    },
+                                  ),
                                 // BOTÓN SOLICITADO: 3 bolitas en vertical y líneas paralelas (Icons.format_list_bulleted)
                                 // Se muestra únicamente cuando el usuario está en modo de edición
                                 if (modoEdicion)
@@ -376,10 +462,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                             for (var linea in lineas) {
                                               itemsTemp.add(ItemLista(texto: linea.trim()));
                                               controllersLista.add(TextEditingController(text: linea.trim()));
+                                              focusNodesLista.add(FocusNode());
                                             }
                                           } else if (itemsTemp.isEmpty) {
-                                            itemsTemp.add(ItemLista(texto: '')); 
+                                            itemsTemp.add(ItemLista(texto: ''));
                                             controllersLista.add(TextEditingController());
+                                            focusNodesLista.add(FocusNode());
                                           }
                                         } else {
                                           tipoActual = TipoNota.texto;
@@ -414,7 +502,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                         controller.text = notaActual!.texto;
                                         itemsTemp = notaActual.elementosLista.map((e) => ItemLista(texto: e.texto, completado: e.completado)).toList();
                                         controllersLista = itemsTemp.map((e) => TextEditingController(text: e.texto)).toList();
+                                        focusNodesLista = itemsTemp.map((e) => FocusNode()).toList();
                                         tipoActual = notaActual.tipo;
+                                        colorElegido = notaActual.colorValue;
+                                        colorDialogo = Color(notaActual.colorValue);
                                       });
                                     } else { 
                                       Navigator.pop(context); 
@@ -431,18 +522,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                       
                                       if (!esNueva) {
                                         ref.read(notaProvider.notifier).editarNota(
-                                          notaActual!.id, controller.text, tipo: tipoActual, elementosLista: itemsTemp
+                                          notaActual!.id, controller.text, tipo: tipoActual, elementosLista: itemsTemp, colorValue: colorElegido
                                         );
                                       } else {
-                                        final math.Random random = math.Random();
-                                        // SOLUCIÓN A WARNING: Retorna el uso de tu paleta nativa _coloresPostIt
-                                        final colorAleatorio = _coloresPostIt[random.nextInt(_coloresPostIt.length)];
-                                        
-                                        final nueva = NotaPostIt( 
-                                          id: DateTime.now().millisecondsSinceEpoch.toString(), 
-                                          texto: controller.text, 
-                                          colorValue: colorAleatorio.value, 
-                                          rotacion: (random.nextDouble() - 0.5) * 0.1,
+                                        // Si el usuario no eligió color, se mantiene el comportamiento aleatorio original
+                                        int colorFinal = colorElegido ?? _coloresPostIt[math.Random().nextInt(_coloresPostIt.length)].value;
+
+                                        final nueva = NotaPostIt(
+                                          id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                          texto: controller.text,
+                                          colorValue: colorFinal,
+                                          rotacion: (math.Random().nextDouble() - 0.5) * 0.1,
                                           tipo: tipoActual,
                                           elementosLista: itemsTemp
                                         );
@@ -505,9 +595,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       }
     });
 
-    final colorPrincipal = _getColorPrincipal(temaActual);
-    final degradadoFondo = _getDegradadoFondo(temaActual);
-    final colorFondoAppBar = _getColorFondoAppBar(temaActual); 
+    final colorPrincipal = temaActual.colorPrincipal;
+    final degradadoFondo = temaActual.degradadoFondo;
+    final colorFondoAppBar = temaActual.colorFondo;
 
     // Lógica adaptativa para la marca de agua del loto
     final String imagenFondo = temaActual == TemaApp.clasico 
@@ -586,8 +676,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
           child: Icon(
             _currentIndex == 0 ? Icons.add_task_rounded : _currentIndex == 1 ? Icons.alarm_add_rounded : Icons.post_add_rounded,
-            key: ValueKey<int>(_currentIndex), 
-            color: Colors.white,
+            key: ValueKey<int>(_currentIndex),
+            color: temaActual.colorSobrePrincipal,
           ),
         ),
         label: AnimatedSwitcher(
@@ -595,8 +685,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
           child: Text(
             _currentIndex == 0 ? 'Nueva Tarea' : _currentIndex == 1 ? 'Nuevo hábito' : 'Nueva Nota',
-            key: ValueKey<int>(_currentIndex), 
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            key: ValueKey<int>(_currentIndex),
+            style: TextStyle(color: temaActual.colorSobrePrincipal, fontWeight: FontWeight.bold),
           ),
         ),
       ),
@@ -650,79 +740,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                         // puedes reemplazar esta variable directamente por ese valor).
                         final colorTema = colorPrincipal;
 
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // --- CABECERA ANIMADA E INTERACTIVA ---
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () {
-                                setState(() {
-                                  if (isColapsado) {
-                                    _gruposColapsados.remove(grupo); // Abrir
-                                  } else {
-                                    _gruposColapsados.add(grupo); // Minimizar
-                                  }
-                                });
-                              },
-                              child: Padding(
-                                padding: EdgeInsets.only(bottom: 12, top: index == 0 ? 0 : 24),
-                                child: Row(
-                                  children: [
-                                    // Ícono de carpeta con color dinámico
-                                    Icon(
-                                      isColapsado ? Icons.folder_rounded : Icons.folder_open_rounded,
-                                      size: 24,
-                                      color: colorTema,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      grupo,
-                                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                                    ),
-                                    const Spacer(),
-                                    
-                                    // Contador de tareas con fondo dinámico
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: colorTema.withOpacity(0.15), 
-                                        borderRadius: BorderRadius.circular(10)
-                                      ),
-                                      child: Text(
-                                        '${tareasDelGrupo.length}',
-                                        style: TextStyle(color: colorTema, fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    
-                                    // Flecha con rotación animada (180 grados al abrir/cerrar)
-                                    AnimatedRotation(
-                                      turns: isColapsado ? 0 : 0.5, 
-                                      duration: const Duration(milliseconds: 300),
-                                      curve: Curves.easeInOut,
-                                      child: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            
-                            // --- LISTA DE TAREAS CON ANIMACIÓN DE EXPANSIÓN (AnimatedSize) ---
-                            AnimatedSize(
-                              duration: const Duration(milliseconds: 350), // Velocidad del despliegue
-                              curve: Curves.easeInOut, // Suavidad de la animación
-                              alignment: Alignment.topCenter,
-                              child: isColapsado
-                                  ? const SizedBox(width: double.infinity, height: 0) // Estado cerrado
-                                  : Column( // Estado abierto
-                                      children: tareasDelGrupo.map((tarea) => Padding(
-                                        padding: const EdgeInsets.only(bottom: 8.0),
-                                        child: TareaCard(tarea: tarea, tema: temaActual),
-                                      )).toList(),
-                                    ),
-                            ),
-                          ],
+                        return _GrupoTareasSection(
+                          key: ValueKey(grupo),
+                          grupo: grupo,
+                          tareas: tareasDelGrupo,
+                          isColapsado: isColapsado,
+                          esPrimero: index == 0,
+                          colorTema: colorTema,
+                          temaActual: temaActual,
+                          onToggle: () {
+                            setState(() {
+                              if (isColapsado) {
+                                _gruposColapsados.remove(grupo); // Abrir
+                              } else {
+                                _gruposColapsados.add(grupo); // Minimizar
+                              }
+                            });
+                          },
                         );
                       },
                     );
@@ -732,6 +766,164 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           ],
         ),
       ),
+    );
+  }
+}
+
+// =====================================================================
+// SECCIÓN DE GRUPO DE TAREAS CON ANIMACIÓN DE CASCADA (ABRIR Y CERRAR)
+// =====================================================================
+
+class _GrupoTareasSection extends StatefulWidget {
+  final String grupo;
+  final List<Tarea> tareas;
+  final bool isColapsado;
+  final bool esPrimero;
+  final Color colorTema;
+  final TemaApp temaActual;
+  final VoidCallback onToggle;
+
+  const _GrupoTareasSection({
+    super.key,
+    required this.grupo,
+    required this.tareas,
+    required this.isColapsado,
+    required this.esPrimero,
+    required this.colorTema,
+    required this.temaActual,
+    required this.onToggle,
+  });
+
+  @override
+  State<_GrupoTareasSection> createState() => _GrupoTareasSectionState();
+}
+
+class _GrupoTareasSectionState extends State<_GrupoTareasSection> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+      value: widget.isColapsado ? 0.0 : 1.0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _GrupoTareasSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isColapsado != oldWidget.isColapsado) {
+      if (widget.isColapsado) {
+        _controller.reverse(); // Cierra con cascada ascendente
+      } else {
+        _controller.forward(); // Abre con cascada descendente
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tareas = widget.tareas;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // --- CABECERA ANIMADA E INTERACTIVA ---
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onToggle,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: 12, top: widget.esPrimero ? 0 : 24),
+            child: Row(
+              children: [
+                AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, child) => Icon(
+                    _controller.value < 0.5 ? Icons.folder_rounded : Icons.folder_open_rounded,
+                    size: 24,
+                    color: widget.colorTema,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  widget.grupo,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: widget.temaActual.colorTituloGrupo),
+                ),
+                const Spacer(),
+
+                // Contador de tareas con fondo dinámico
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: widget.colorTema.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${tareas.length}',
+                    style: TextStyle(color: widget.colorTema, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Flecha con rotación animada (180 grados al abrir/cerrar)
+                AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, child) => Transform.rotate(
+                    angle: _controller.value * 3.14159265,
+                    child: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // --- LISTA DE TAREAS CON CASCADA ESCALONADA (ABRIR HACIA ABAJO / CERRAR HACIA ARRIBA) ---
+        AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            return ClipRect(
+              child: Align(
+                alignment: Alignment.topCenter,
+                heightFactor: _controller.value.clamp(0.0, 1.0),
+                child: child,
+              ),
+            );
+          },
+          child: Column(
+            children: List.generate(tareas.length, (i) {
+              final n = tareas.length;
+              final start = (i / n) * 0.4;
+              final end = (start + 0.6).clamp(0.0, 1.0);
+              final itemCurve = CurvedAnimation(
+                parent: _controller,
+                curve: Interval(start, end, curve: Curves.easeOut),
+              );
+              return AnimatedBuilder(
+                animation: itemCurve,
+                builder: (context, child) => Opacity(
+                  opacity: itemCurve.value.clamp(0.0, 1.0),
+                  child: Transform.translate(
+                    offset: Offset(0, (1 - itemCurve.value) * 16),
+                    child: child,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: TareaCard(tarea: tareas[i], tema: widget.temaActual),
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -927,20 +1119,11 @@ class _PostItCardState extends State<PostItCard> {
 class _SeccionRutinasHoy extends ConsumerWidget {
   const _SeccionRutinasHoy();
 
-  Color _getPrimaryColor(TemaApp tema) {
-    switch (tema) {
-      case TemaApp.clasico: return Colors.black87;
-      case TemaApp.brisaMarina: return const Color(0xFF1E3A8A); 
-      case TemaApp.atardecerMinimalista: return const Color(0xFFC05621); 
-      case TemaApp.zenClasico: return const Color(0xFF276749); 
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final listaCompleta = ref.watch(rutinaProvider);
     final temaActual = ref.watch(temaProvider);
-    final colorPrincipal = _getPrimaryColor(temaActual);
+    final colorPrincipal = temaActual.colorPrincipal;
     final int diaActual = DateTime.now().weekday - 1; 
     final rutinasDeHoy = listaCompleta.where((r) => r.horarios.containsKey(diaActual) && r.activa).toList();
 
@@ -1060,8 +1243,16 @@ class _TareaCardState extends ConsumerState<TareaCard> {
   Widget build(BuildContext context) {
     final tarea = widget.tarea;
     final colorBase = _getColorUrgencia(tarea.urgencia, widget.tema);
-    final colorTarjeta = tarea.esCompletada ? Colors.white.withValues(alpha: 0.7) : (widget.tema == TemaApp.clasico ? Colors.white : colorBase.withValues(alpha: 0.25)); 
+    // Las tarjetas completadas siempre quedan claras (blanco @0.7) en los 5
+    // temas, así que su texto oscuro sigue legible sin cambios. Solo las NO
+    // completadas se tiñen con colorBase, lo que en Medianoche produce una
+    // tarjeta oscura: por eso el texto de esa rama necesita volverse claro.
+    final bool esMedianoche = widget.tema == TemaApp.medianoche;
+    final colorTarjeta = tarea.esCompletada ? Colors.white.withValues(alpha: 0.7) : (widget.tema == TemaApp.clasico ? Colors.white : colorBase.withValues(alpha: 0.25));
     final bool estaAtrasada = !tarea.esCompletada && tarea.fechaLimite != null && tarea.fechaLimite!.isBefore(DateTime.now());
+    final bool tieneSubtareas = tarea.subtareas.isNotEmpty;
+    final bool tieneDescripcionVisible = tarea.descripcion != null && tarea.descripcion!.isNotEmpty;
+    const Color colorTextoClaro = Color(0xFFF1F5F9);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16), 
@@ -1082,12 +1273,92 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ListTile(
-                    leading: Checkbox(value: tarea.esCompletada, activeColor: colorBase, shape: const CircleBorder(), side: BorderSide(color: tarea.esCompletada ? colorBase : Colors.black45, width: 1.5), onChanged: (_) => ref.read(tareaProvider.notifier).toggleTarea(tarea.id)),
-                    title: Text(tarea.titulo, style: TextStyle(fontSize: 17, decoration: tarea.esCompletada ? TextDecoration.lineThrough : null, color: tarea.esCompletada ? Colors.black38 : Colors.black87, fontWeight: tarea.esCompletada ? FontWeight.normal : FontWeight.w600)),
-                    subtitle: !tarea.esCompletada && tarea.fechaLimite != null ? Padding(padding: const EdgeInsets.only(top: 4), child: Row(children: [Icon(Icons.access_time, size: 14, color: colorBase.withValues(alpha: 0.9)), const SizedBox(width: 4), Text(DateFormat('EEEE, d MMM • HH:mm', 'es').format(tarea.fechaLimite!), style: TextStyle(color: colorBase.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w600))])) : null,
-                    trailing: tarea.esCompletada ? null : Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: widget.tema == TemaApp.clasico ? colorBase.withValues(alpha: 0.2) : colorBase, borderRadius: BorderRadius.circular(12)), child: Text(_getLabelUrgencia(tarea.urgencia), style: TextStyle(color: widget.tema == TemaApp.clasico ? colorBase : Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
+                    leading: Checkbox(value: tarea.esCompletada, activeColor: colorBase, shape: const CircleBorder(), side: BorderSide(color: tarea.esCompletada ? colorBase : (esMedianoche ? Colors.white54 : Colors.black45), width: 1.5), onChanged: (_) => ref.read(tareaProvider.notifier).toggleTarea(tarea.id)),
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: AnimatedSize(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeInOut,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              tarea.titulo,
+                              style: TextStyle(fontSize: 17, decoration: tarea.esCompletada ? TextDecoration.lineThrough : null, color: tarea.esCompletada ? Colors.black38 : (esMedianoche ? colorTextoClaro : Colors.black87), fontWeight: tarea.esCompletada ? FontWeight.normal : FontWeight.w600),
+                              maxLines: _isExpanded ? null : 1,
+                              overflow: _isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        if (tieneSubtareas) ...[
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () => setState(() => _isExpanded = !_isExpanded),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(color: colorBase.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('${tarea.progresoSubtareas.$1}/${tarea.progresoSubtareas.$2}', style: TextStyle(color: colorBase, fontSize: 12, fontWeight: FontWeight.bold)),
+                                  const SizedBox(width: 2),
+                                  Icon(_isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: 16, color: colorBase),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    subtitle: (!tarea.esCompletada && tarea.fechaLimite != null) || tieneSubtareas
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (!tarea.esCompletada && tarea.fechaLimite != null)
+                                  Row(children: [
+                                    Icon(Icons.access_time, size: 14, color: colorBase.withValues(alpha: 0.9)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      // 23:59 es el valor implícito cuando no se eligió hora (ver
+                                      // add_tarea_modal._guardarTarea), así que no se muestra.
+                                      DateFormat(
+                                        (tarea.fechaLimite!.hour == 23 && tarea.fechaLimite!.minute == 59) ? 'EEEE, d MMM' : 'EEEE, d MMM • HH:mm',
+                                        'es',
+                                      ).format(tarea.fechaLimite!),
+                                      style: TextStyle(color: colorBase.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w600),
+                                    ),
+                                  ]),
+                                if (tieneSubtareas) ...[
+                                  if (!tarea.esCompletada && tarea.fechaLimite != null) const SizedBox(height: 6),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(value: tarea.porcentajeSubtareas, minHeight: 4, backgroundColor: colorBase.withValues(alpha: 0.15), valueColor: AlwaysStoppedAnimation(colorBase)),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
+                        : null,
+                    trailing: tarea.esCompletada ? null : Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: (widget.tema == TemaApp.clasico || esMedianoche) ? colorBase.withValues(alpha: 0.2) : colorBase, borderRadius: BorderRadius.circular(12)), child: Text(_getLabelUrgencia(tarea.urgencia), style: TextStyle(color: (widget.tema == TemaApp.clasico || esMedianoche) ? colorBase : Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
                   ),
-                  AnimatedSize(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut, child: _isExpanded && tarea.descripcion != null && tarea.descripcion!.isNotEmpty && !tarea.esCompletada ? Padding(padding: const EdgeInsets.fromLTRB(72, 0, 24, 16), child: Align(alignment: Alignment.centerLeft, child: Text(tarea.descripcion!, style: const TextStyle(fontSize: 14, color: Colors.black54, height: 1.4)))) : const SizedBox.shrink()),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    child: _isExpanded && !tarea.esCompletada && (tieneDescripcionVisible || tieneSubtareas)
+                        ? Padding(
+                            padding: const EdgeInsets.fromLTRB(72, 0, 24, 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (tieneDescripcionVisible) Text(tarea.descripcion!, style: TextStyle(fontSize: 14, color: esMedianoche ? colorTextoClaro.withValues(alpha: 0.75) : Colors.black54, height: 1.4)),
+                                if (tieneDescripcionVisible && tieneSubtareas) const SizedBox(height: 12),
+                                if (tieneSubtareas) ..._buildFilasSubtareas(tarea, colorBase, esMedianoche),
+                              ],
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
                 ],
               ),
             ),
@@ -1103,6 +1374,69 @@ class _TareaCardState extends ConsumerState<TareaCard> {
     return CircleAvatar(backgroundColor: Colors.white, radius: 28, child: IconButton(icon: Icon(icon, color: color, size: 28), onPressed: onTap));
   }
 
+  // Aviso no bloqueante (SnackBar con acción) al completar el último paso
+  // pendiente de la lista de subtareas. El usuario decide si marca la tarea
+  // completa o la deja pendiente; no hay auto-completado ni diálogo modal.
+  void _preguntarCompletarTarea(Tarea tarea) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Completaste todos los pasos. ¿Marcar la tarea como completada?'),
+        action: SnackBarAction(
+          label: 'Marcar',
+          onPressed: () => ref.read(tareaProvider.notifier).toggleTarea(tarea.id),
+        ),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  // Checklist de subtareas dentro de la tarjeta expandida. El marcado se
+  // delega siempre a toggleSubtarea del provider (sin lógica propia aquí).
+  List<Widget> _buildFilasSubtareas(Tarea tarea, Color colorBase, bool esMedianoche) {
+    const colorTextoClaro = Color(0xFFF1F5F9);
+    return tarea.subtareas.map((sub) => Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            height: 22, width: 22,
+            child: Checkbox(
+              value: sub.completado,
+              activeColor: colorBase,
+              side: BorderSide(color: sub.completado ? colorBase : (esMedianoche ? Colors.white54 : Colors.black45), width: 1.5),
+              onChanged: (_) {
+                final estabaSinCompletar = !sub.completado;
+                ref.read(tareaProvider.notifier).toggleSubtarea(tarea.id, sub.id);
+
+                // Si este era el último paso pendiente, la tarea sigue "no completada"
+                // por decisión de diseño (b): se le pregunta al usuario en vez de
+                // auto-completarla o dejarla en 100% sin marcar.
+                final tareaActualizada = ref.read(tareaProvider).firstWhere((t) => t.id == tarea.id);
+                final (completadas, total) = tareaActualizada.progresoSubtareas;
+                if (estabaSinCompletar && completadas == total && !tareaActualizada.esCompletada) {
+                  _preguntarCompletarTarea(tareaActualizada);
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              sub.texto,
+              style: TextStyle(
+                fontSize: 14,
+                decoration: sub.completado ? TextDecoration.lineThrough : null,
+                color: sub.completado
+                    ? (esMedianoche ? colorTextoClaro.withValues(alpha: 0.38) : Colors.black38)
+                    : (esMedianoche ? colorTextoClaro : Colors.black87),
+              ),
+            ),
+          ),
+        ],
+      ),
+    )).toList();
+  }
+
   Color _getColorUrgencia(int urgencia, TemaApp tema) {
     if (tema == TemaApp.clasico) {
       switch (urgencia) { case 1: return Colors.teal; case 2: return Colors.blue; case 3: return Colors.orange; case 4: return Colors.red; default: return Colors.grey; }
@@ -1110,7 +1444,14 @@ class _TareaCardState extends ConsumerState<TareaCard> {
       switch (urgencia) { case 1: return const Color(0xFFA5C4A6); case 2: return const Color(0xFF80A681); case 3: return const Color(0xFF5A855C); case 4: return const Color(0xFF3B633D); default: return Colors.grey; }
     } else if (tema == TemaApp.brisaMarina) {
       switch (urgencia) { case 1: return const Color(0xFF90CDF4); case 2: return const Color(0xFF63B3ED); case 3: return const Color(0xFF3182CE); case 4: return const Color(0xFF2B6CB0); default: return Colors.grey; }
-    } else { 
+    } else if (tema == TemaApp.medianoche) {
+      // Escala morada (violeta claro -> violeta intenso) en vez de colores
+      // dispares por nivel. Actúan como TEXTO sobre una tarjeta oscura
+      // (colorBase@25% sobre fondo casi negro), no como relleno claro, así
+      // que necesitan alta luminancia para mantener ≥4.5:1 de contraste;
+      // el nivel 4 (#8B5CF6) es el más oscuro que aún cumple ese mínimo.
+      switch (urgencia) { case 1: return const Color(0xFFDDD6FE); case 2: return const Color(0xFFC4B5FD); case 3: return const Color(0xFFA78BFA); case 4: return const Color(0xFF8B5CF6); default: return Colors.grey.shade400; }
+    } else {
       switch (urgencia) { case 1: return const Color(0xFFFBD38D); case 2: return const Color(0xFFF6AD55); case 3: return const Color(0xFFDD6B20); case 4: return const Color(0xFFC05621); default: return Colors.grey; }
     }
   }
@@ -1123,135 +1464,9 @@ class _TareaCardState extends ConsumerState<TareaCard> {
 }
 
 // =========================================================================
-// BLOQUE FINAL DE NOTAS CON PERSISTENCIA COMPLETA (JSON Y SHARED_PREFERENCES)
+// BLOQUE FINAL DE NOTAS: pintor decorativo de la libreta (modelo y
+// provider de notas viven en models/nota.dart y providers/nota_provider.dart)
 // =========================================================================
-
-enum TipoNota { texto, lista }
-
-class ItemLista {
-  String texto;
-  bool completado;
-  ItemLista({required this.texto, this.completado = false});
-
-  Map<String, dynamic> toMap() => {'texto': texto, 'completado': completado};
-  factory ItemLista.fromMap(Map<String, dynamic> map) => ItemLista(
-    texto: map['texto'] ?? '',
-    completado: map['completado'] ?? false,
-  );
-}
-
-class NotaPostIt {
-  final String id;
-  String texto;
-  int colorValue;
-  double rotacion;
-  TipoNota tipo;
-  List<ItemLista> elementosLista;
-
-  NotaPostIt({
-    required this.id,
-    required this.texto,
-    required this.colorValue,
-    required this.rotacion,
-    this.tipo = TipoNota.texto,
-    List<ItemLista>? elementosLista,
-  }) : elementosLista = elementosLista ?? [];
-
-  Color get color => Color(colorValue);
-
-  NotaPostIt copyWith({
-    String? texto,
-    int? colorValue,
-    TipoNota? tipo,
-    List<ItemLista>? elementosLista,
-  }) {
-    return NotaPostIt(
-      id: id,
-      texto: texto ?? this.texto,
-      colorValue: colorValue ?? this.colorValue,
-      rotacion: rotacion,
-      tipo: tipo ?? this.tipo,
-      elementosLista: elementosLista ?? this.elementosLista.map((e) => ItemLista(texto: e.texto, completado: e.completado)).toList(),
-    );
-  }
-
-  Map<String, dynamic> toMap() => {
-    'id': id,
-    'texto': texto,
-    'colorValue': colorValue,
-    'rotacion': rotacion,
-    'tipo': tipo.name,
-    'elementosLista': elementosLista.map((e) => e.toMap()).toList(),
-  };
-
-  factory NotaPostIt.fromMap(Map<String, dynamic> map) => NotaPostIt(
-    id: map['id'] ?? '',
-    texto: map['texto'] ?? '',
-    colorValue: map['colorValue'] ?? 0xFFFFF7D1,
-    rotacion: (map['rotacion'] as num?)?.toDouble() ?? 0.0,
-    tipo: TipoNota.values.firstWhere((e) => e.name == map['tipo'], orElse: () => TipoNota.texto),
-    elementosLista: (map['elementosLista'] as List?)?.map((e) => ItemLista.fromMap(e as Map<String, dynamic>)).toList() ?? [],
-  );
-}
-
-class NotaNotifier extends StateNotifier<List<NotaPostIt>> {
-  NotaNotifier() : super([]) {
-    _cargarNotas();
-  }
-
-  static const String _storageKey = 'lista_notas_postit_v2';
-
-  Future<void> _cargarNotas() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? notasJson = prefs.getString(_storageKey);
-      if (notasJson != null) {
-        final List<dynamic> listaDecodificada = jsonDecode(notasJson);
-        state = listaDecodificada.map((item) => NotaPostIt.fromMap(item as Map<String, dynamic>)).toList();
-      }
-    } catch (e) {
-      debugPrint('Error al cargar notas offline: $e');
-    }
-  }
-
-  Future<void> _guardarNotas(List<NotaPostIt> nuevasNotas) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String notasJson = jsonEncode(nuevasNotas.map((n) => n.toMap()).toList());
-      await prefs.setString(_storageKey, notasJson);
-    } catch (e) {
-      debugPrint('Error al persistir notas offline: $e');
-    }
-  }
-
-  void agregarNota(NotaPostIt nuevaNota) {
-    final nuevoEstado = [nuevaNota, ...state];
-    state = nuevoEstado;
-    _guardarNotas(nuevoEstado);
-  }
-
-  void eliminarNota(String id) {
-    final nuevoEstado = state.where((n) => n.id != id).toList();
-    state = nuevoEstado;
-    _guardarNotas(nuevoEstado);
-  }
-
-  void editarNota(String id, String nuevoTexto, {TipoNota? tipo, List<ItemLista>? elementosLista}) {
-    final nuevoEstado = [
-      for (final nota in state)
-        if (nota.id == id)
-          nota.copyWith(texto: nuevoTexto, tipo: tipo, elementosLista: elementosLista)
-        else
-          nota,
-    ];
-    state = nuevoEstado;
-    _guardarNotas(nuevoEstado);
-  }
-}
-
-final notaProvider = StateNotifierProvider<NotaNotifier, List<NotaPostIt>>((ref) {
-  return NotaNotifier();
-});
 
 class HojaLibretaPainter extends CustomPainter {
   @override

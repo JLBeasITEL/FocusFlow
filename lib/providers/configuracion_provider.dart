@@ -30,6 +30,12 @@ class SonidoNotifier extends Notifier<ConfiguracionSonidos> {
     state = ConfiguracionSonidos(sonidoNotificacion: nota, sonidoAlarma: alarma);
   }
 
+  // Fuerza una relectura completa desde SharedPreferences. Se usa tras
+  // restaurar un respaldo.
+  Future<void> recargarDesdeDisco() async {
+    await _cargarSonidos();
+  }
+
   Future<void> cambiarSonidoNotificacion(String nuevoSonido) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('sonido_notificacion', nuevoSonido);

@@ -72,6 +72,12 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     await prefs.setString(_storageKey, tareasCodificadas);
   }
 
+  // Fuerza una relectura completa desde SharedPreferences, descartando el
+  // estado en memoria. Se usa tras restaurar un respaldo.
+  Future<void> recargarDesdeDisco() async {
+    await _cargarTareas();
+  }
+
   // --- MÉTODOS DE ACCIÓN ---
 
   Future<void> addTarea(Tarea tarea) async {
@@ -131,6 +137,106 @@ class TareaNotifier extends Notifier<List<Tarea>> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_gruposKey, jsonEncode(_gruposGuardados));
     }
+  }
+
+  // Renombra un grupo existente y reasigna todas las tareas que lo usaban.
+  Future<void> renombrarGrupo(String grupoAnterior, String grupoNuevoRaw) async {
+    final grupoNuevo = grupoNuevoRaw.trim();
+    if (grupoNuevo.isEmpty || grupoNuevo == grupoAnterior) return;
+
+    state = [
+      for (final t in state)
+        if (t.grupo == grupoAnterior) t.copyWith(grupo: grupoNuevo) else t,
+    ];
+    _guardarTareas();
+
+    _gruposGuardados.remove(grupoAnterior);
+    if (!_gruposGuardados.contains(grupoNuevo)) {
+      _gruposGuardados.add(grupoNuevo);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_gruposKey, jsonEncode(_gruposGuardados));
+  }
+
+  // Elimina un grupo; las tareas que lo usaban pasan a 'General'.
+  // El grupo 'General' no puede eliminarse.
+  Future<void> eliminarGrupo(String grupo) async {
+    if (grupo == 'General') return;
+
+    state = [
+      for (final t in state)
+        if (t.grupo == grupo) t.copyWith(grupo: 'General') else t,
+    ];
+    _guardarTareas();
+
+    _gruposGuardados.remove(grupo);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_gruposKey, jsonEncode(_gruposGuardados));
+  }
+
+  // --- MÉTODOS DE SUBTAREAS ---
+  // Ninguno de estos dispara NotificacionesService: las subtareas no afectan
+  // urgencia ni fechaLimite, así que no hay alarma que reprogramar/cancelar.
+
+  void agregarSubtarea(String tareaId, String texto) {
+    final textoLimpio = texto.trim();
+    if (textoLimpio.isEmpty) return;
+
+    state = [
+      for (final tarea in state)
+        if (tarea.id == tareaId)
+          tarea.copyWith(subtareas: [...tarea.subtareas, ItemSubtarea(texto: textoLimpio)])
+        else
+          tarea,
+    ];
+    _guardarTareas();
+  }
+
+  void toggleSubtarea(String tareaId, String subtareaId) {
+    state = [
+      for (final tarea in state)
+        if (tarea.id == tareaId)
+          tarea.copyWith(subtareas: [
+            for (final sub in tarea.subtareas)
+              if (sub.id == subtareaId) ItemSubtarea(id: sub.id, texto: sub.texto, completado: !sub.completado) else sub,
+          ])
+        else
+          tarea,
+    ];
+    _guardarTareas();
+  }
+
+  void eliminarSubtarea(String tareaId, String subtareaId) {
+    state = [
+      for (final tarea in state)
+        if (tarea.id == tareaId)
+          tarea.copyWith(subtareas: tarea.subtareas.where((s) => s.id != subtareaId).toList())
+        else
+          tarea,
+    ];
+    _guardarTareas();
+  }
+
+  void reordenarSubtareas(String tareaId, int oldIndex, int newIndex) {
+    state = [
+      for (final tarea in state)
+        if (tarea.id == tareaId)
+          tarea.copyWith(subtareas: _moverEnLista(tarea.subtareas, oldIndex, newIndex))
+        else
+          tarea,
+    ];
+    _guardarTareas();
+  }
+
+  // Acepta oldIndex/newIndex tal como los entrega ReorderableListView.onReorder
+  // (sin el ajuste manual de -1 que esa API exige al mover hacia abajo).
+  List<ItemSubtarea> _moverEnLista(List<ItemSubtarea> lista, int oldIndex, int newIndex) {
+    final nuevaLista = List<ItemSubtarea>.from(lista);
+    var destino = newIndex;
+    if (destino > oldIndex) destino -= 1;
+    final item = nuevaLista.removeAt(oldIndex);
+    nuevaLista.insert(destino, item);
+    return nuevaLista;
   }
 }
 

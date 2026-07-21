@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/rutina.dart';
 import '../../providers/rutina_provider.dart';
+import '../widgets/ayuda_formulario_button.dart';
 
 class RutinaFormScreen extends ConsumerStatefulWidget {
   final Rutina? rutinaAEditar;
@@ -105,6 +106,17 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
       appBar: AppBar(
         title: Text(widget.rutinaAEditar == null ? 'Crear hábito' : 'Editar Rutina'),
         actions: [
+          AyudaFormularioButton(
+            titulo: 'Ayuda: Hábito',
+            puntos: const [
+              'Título del hábito: Nombre de la rutina que quieres repetir.',
+              'Descripción: Detalle opcional sobre el hábito.',
+              'Horario personalizado por día: Actívalo para elegir una hora distinta cada día; desactívalo para usar siempre la misma hora.',
+              'Hora general / Días de repetición: Hora fija y los días en que se repetirá (modo simple, sin horario personalizado).',
+              'Horarios específicos: Hora individual para cada día que actives (modo horario personalizado).',
+              'Ícono: Imagen que identifica al hábito en la lista.',
+            ],
+          ),
           // BOTÓN DE GUARDADO EN LA PARTE SUPERIOR (SIEMPRE VISIBLE)
           IconButton(
             icon: const Icon(Icons.check_rounded, size: 28),

@@ -10,9 +10,43 @@ class Rutina {
   final int racha; 
   final bool completada; 
   final String? fechaCompletada;
-  
-  // NUEVO CAMPO AÑADIDO
   final bool esFlexible; 
+
+  // ============================================================
+  // NUEVO CAMPO: notificacionesActivas
+  // ------------------------------------------------------------
+  // Guarda la lista EXACTA de IDs de notificación que quedaron
+  // programados en el sistema (Android AlarmManager) la última vez
+  // que se ejecutó _gestionarNotificacionesRutina().
+  //
+  // Por qué existe: antes, para cancelar una notificación, el código
+  // RECALCULABA el ID a partir de una fórmula matemática (hash del id
+  // + offsets). Si ese cálculo no coincidía EXACTO con el ID que se
+  // usó al programar (por overflow de enteros, timing, etc.), la
+  // cancelación fallaba en silencio y la notificación seguía sonando.
+  //
+  // Ahora, en vez de recalcular, simplemente anotamos aquí los IDs
+  // reales que se usaron al programar, y para cancelar usamos
+  // exactamente esa lista. Ya no hay adivinanza posible.
+  // ============================================================
+  final List<int> notificacionesActivas;
+
+  // ============================================================
+  // NUEVO CAMPO: ultimaFechaProgramada
+  // ------------------------------------------------------------
+  // Fecha del occurrence MÁS LEJANO que quedó efectivamente
+  // programado la última vez que se gestionaron las notificaciones
+  // de esta rutina (el final del colchón de 4 semanas). Con esto,
+  // cada apertura de la app puede decidir si el colchón todavía
+  // alcanza (y no hacer ninguna llamada nativa) o si hace falta
+  // rellenarlo, en vez de cancelar/reprogramar todo siempre.
+  //
+  // null = "todavía no se sabe" (rutina creada antes de este campo,
+  // o recién restaurada de un respaldo de otro dispositivo): fuerza
+  // un reset completo una sola vez para sembrarlo. Nunca debe causar
+  // un crash si falta o viene corrupto.
+  // ============================================================
+  final DateTime? ultimaFechaProgramada;
 
   Rutina({
     required this.id,
@@ -24,8 +58,9 @@ class Rutina {
     this.racha = 0,
     this.completada = false,
     this.fechaCompletada,
-    // Lo inicializamos por defecto en false para que el diseño clásico sea el predeterminado
-    this.esFlexible = false, 
+    this.esFlexible = false,
+    this.notificacionesActivas = const [], // Por defecto, ninguna notificación programada aún
+    this.ultimaFechaProgramada,
   });
 
   Rutina copyWith({
@@ -39,6 +74,8 @@ class Rutina {
     bool? completada,
     String? fechaCompletada,
     bool? esFlexible,
+    List<int>? notificacionesActivas,
+    DateTime? ultimaFechaProgramada,
   }) {
     return Rutina(
       id: id ?? this.id,
@@ -51,6 +88,8 @@ class Rutina {
       completada: completada ?? this.completada,
       fechaCompletada: fechaCompletada ?? this.fechaCompletada,
       esFlexible: esFlexible ?? this.esFlexible,
+      notificacionesActivas: notificacionesActivas ?? this.notificacionesActivas,
+      ultimaFechaProgramada: ultimaFechaProgramada ?? this.ultimaFechaProgramada,
     );
   }
 
@@ -67,21 +106,22 @@ class Rutina {
       'racha': racha,
       'completada': completada,
       'fechaCompletada': fechaCompletada,
-      'esFlexible': esFlexible, // Guardamos el estado del interruptor
+      'esFlexible': esFlexible,
+      // Guardamos la lista de IDs reales para poder recuperarla al reabrir la app
+      'notificacionesActivas': notificacionesActivas,
+      'ultimaFechaProgramada': ultimaFechaProgramada?.toIso8601String(),
     };
   }
 
   factory Rutina.fromJson(Map<String, dynamic> json) {
     Map<int, TimeOfDay> horariosParsados = {};
 
-    // 1. Cargamos el nuevo formato
     if (json.containsKey('horarios') && json['horarios'] != null) {
       final Map<String, dynamic> hMap = json['horarios'];
       hMap.forEach((k, v) {
         horariosParsados[int.parse(k)] = TimeOfDay(hour: v['hour'], minute: v['minute']);
       });
     } 
-    // 2. Mantenemos la compatibilidad con las rutinas viejas
     else if (json.containsKey('diasSemana')) {
       List<bool> viejosDias = List<bool>.from(json['diasSemana']);
       TimeOfDay viejaHora = TimeOfDay(hour: json['hora'] as int, minute: json['minuto'] as int);
@@ -100,8 +140,22 @@ class Rutina {
       racha: json['racha'] as int? ?? 0,
       completada: json['completada'] as bool? ?? false,
       fechaCompletada: json['fechaCompletada'] as String?,
-      // Si la rutina es antigua y no tiene este campo en la memoria, le ponemos false
       esFlexible: json['esFlexible'] as bool? ?? false, 
+      // Rutinas guardadas ANTES de este cambio no tendrán este campo:
+      // les asignamos lista vacía (no rompe nada, simplemente no habrá
+      // nada que cancelar de forma "recordada" hasta que se reprogramen
+      // por primera vez con el nuevo sistema).
+      notificacionesActivas: (json['notificacionesActivas'] as List<dynamic>?)
+              ?.map((e) => e as int)
+              .toList() ??
+          const [],
+      // Rutinas guardadas ANTES de este campo (o restauradas de un respaldo
+      // de otro dispositivo) no lo tendrán: usamos tryParse para que un
+      // valor ausente o corrupto se convierta en null en vez de crashear,
+      // y null fuerza el reset completo que "siembra" el campo de nuevo.
+      ultimaFechaProgramada: json['ultimaFechaProgramada'] != null
+          ? DateTime.tryParse(json['ultimaFechaProgramada'] as String)
+          : null,
     );
   }
 }

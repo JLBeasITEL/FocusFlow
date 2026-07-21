@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/splash_screen.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'services/notificaciones_service.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
@@ -36,7 +37,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      home: const SplashScreen(child: HomeScreen()),
     );
   }
 }

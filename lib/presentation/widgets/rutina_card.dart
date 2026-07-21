@@ -99,7 +99,16 @@ class RutinaCard extends ConsumerWidget {
 
                     // PASO 3: Verificamos si la nueva racha completa un "ciclo semanal" exacto.
                     // Ejemplo: si la rutina es de 3 días a la semana, cada 3 completadas = 1 semana cumplida.
-                    if (nuevaRacha > 0 && nuevaRacha % diasPorSemana == 0) {
+                    //
+                    // Caso especial: si la rutina es de 1 solo día a la semana, "nuevaRacha % 1"
+                    // siempre da 0, así que sin este mínimo el festejo se dispararía desde la
+                    // PRIMERA vez que se marca (nuevaRacha == 1), cuando en realidad eso es
+                    // apenas 1 marca, no una racha sostenida. Exigimos al menos 2 completadas
+                    // (2 semanas) antes del primer festejo, igual que ocurre de forma natural
+                    // con las rutinas de 2+ días a la semana.
+                    final minimoParaFestejar = diasPorSemana == 1 ? 2 : diasPorSemana;
+
+                    if (nuevaRacha >= minimoParaFestejar && nuevaRacha % diasPorSemana == 0) {
 
                       // Calculamos cuántas semanas completas representa esta racha.
                       final semanas = nuevaRacha ~/ diasPorSemana; // división entera

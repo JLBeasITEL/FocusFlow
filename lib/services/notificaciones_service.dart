@@ -144,25 +144,60 @@ class NotificacionesService {
     }
 
     if (tarea.horasEstimadas != null && tarea.horasEstimadas! > 0) {
-      final fechaUrgencia = tarea.fechaLimite!.subtract(Duration(hours: tarea.horasEstimadas!));
+      final horas = tarea.horasEstimadas!;
+
+      // --- NOTIFICACIONES DE CAMBIO DE NIVEL DE URGENCIA AUTOMÁTICA ---
+      // Los umbrales son los mismos que usa Tarea.urgencia (2x, 1.5x y 1x las
+      // horas estimadas antes del límite), así que el momento exacto en que
+      // "ahora" cruza cada umbral es el momento en que el nivel sube.
+      final momentoMedio = tarea.fechaLimite!.subtract(Duration(minutes: (horas * 2 * 60).round()));
+      if (momentoMedio.isAfter(ahoraReal)) {
+        final tzMedio = ahoraTz.add(momentoMedio.difference(ahoraReal));
+        await _programarNotificacion(idBase + 3, '📊 Urgencia subió a Media',
+          'La urgencia de "${tarea.titulo}" cambió a Media. Quedan ${_formatoHorasRestantes(horas * 2)}.', tzMedio,
+          esAlarmaFullScreen: false,
+          esInsistente: false
+        );
+      }
+
+      final momentoAlto = tarea.fechaLimite!.subtract(Duration(minutes: (horas * 1.5 * 60).round()));
+      if (momentoAlto.isAfter(ahoraReal)) {
+        final tzAlto = ahoraTz.add(momentoAlto.difference(ahoraReal));
+        await _programarNotificacion(idBase + 4, '📈 Urgencia subió a Alta',
+          'La urgencia de "${tarea.titulo}" cambió a Alta. Quedan ${_formatoHorasRestantes(horas * 1.5)}.', tzAlto,
+          esAlarmaFullScreen: false,
+          esInsistente: false
+        );
+      }
+
+      final fechaUrgencia = tarea.fechaLimite!.subtract(Duration(minutes: (horas * 60).round()));
       if (fechaUrgencia.isAfter(ahoraReal)) {
         final tzUrgencia = ahoraTz.add(fechaUrgencia.difference(ahoraReal));
-        await _programarNotificacion(idBase, '🚀 Es hora de empezar', 'Deberías empezar "${tarea.titulo}" ahora.', tzUrgencia, 
-          esAlarmaFullScreen: usarPantallaCompleta, 
+        await _programarNotificacion(idBase, '🚀 Urgencia subió a Muy alta',
+          'Deberías empezar "${tarea.titulo}" ahora. Quedan ${_formatoHorasRestantes(horas)}.', tzUrgencia,
+          esAlarmaFullScreen: usarPantallaCompleta,
           esInsistente: usarLoopInsistente
         );
       }
     }
   }
 
+  // Convierte horas (con decimales) a un texto legible tipo "2 h 30 min".
+  String _formatoHorasRestantes(double horas) {
+    final totalMinutos = (horas * 60).round();
+    final h = totalMinutos ~/ 60;
+    final m = totalMinutos % 60;
+    if (h > 0 && m > 0) return '$h h $m min';
+    if (h > 0) return '$h h';
+    return '$m min';
+  }
+
   Future<void> _programarNotificacion(int id, String titulo, String body, tz.TZDateTime fechaSistema, {required bool esAlarmaFullScreen, required bool esInsistente}) async {
     try {
-      // 1. Leemos los sonidos guardados
       final prefs = await SharedPreferences.getInstance();
       final sonidoNota = prefs.getString('sonido_notificacion') ?? 'default_nota';
       final sonidoAlarma = prefs.getString('sonido_alarma') ?? 'default_alarma';
 
-      // 2. Elegimos qué sonido y canal usar
       final String sonidoElegido = esAlarmaFullScreen ? sonidoAlarma : sonidoNota;
       final String canalDinamicoId = esAlarmaFullScreen 
           ? '${canalAlarmasId}_$sonidoAlarma' 
@@ -173,11 +208,11 @@ class NotificacionesService {
       final AndroidNotificationDetails detalles = esAlarmaFullScreen
           ? AndroidNotificationDetails(canalDinamicoId, 'Alarmas Urgentes', 
               importance: Importance.max, priority: Priority.max, color: const Color(0xFF276749), fullScreenIntent: true, 
-              playSound: true, sound: RawResourceAndroidNotificationSound(sonidoElegido), // <-- AQUÍ SE REPRODUCE EL SONIDO
+              playSound: true, sound: RawResourceAndroidNotificationSound(sonidoElegido),
               additionalFlags: flags != null ? Int32List.fromList(flags) : null)
           : AndroidNotificationDetails(canalDinamicoId, 'Recordatorios', 
               importance: Importance.high, priority: Priority.high, color: const Color(0xFF276749), fullScreenIntent: false,
-              playSound: true, sound: RawResourceAndroidNotificationSound(sonidoElegido)); // <-- AQUÍ SE REPRODUCE EL SONIDO
+              playSound: true, sound: RawResourceAndroidNotificationSound(sonidoElegido));
 
       await _plugin.zonedSchedule(
         id, titulo, body, fechaSistema,
@@ -222,8 +257,25 @@ class NotificacionesService {
         androidScheduleMode: AndroidScheduleMode.alarmClock, 
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         payload: esAlarmaFullScreen ? payloadData : null, 
-        // ESTA LÍNEA HACE QUE SE REPITA TODAS LAS SEMANAS INFINITAMENTE
-        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime, 
+        // ============================================================
+        // FIX: se eliminó matchDateTimeComponents.
+        // Antes, este parámetro le pedía a Android que reprogramara
+        // automáticamente esta alarma cada semana, a nivel de sistema
+        // operativo, de forma independiente a nuestro código Dart.
+        //
+        // Esto es lo que causaba que cancel() fallara de forma
+        // silenciosa e inconsistente (comportamiento documentado como
+        // problemático en el plugin flutter_local_notifications con
+        // notificaciones recurrentes vía matchDateTimeComponents).
+        //
+        // Ya NO lo necesitamos: nuestro propio código en
+        // rutina_provider.dart (_gestionarNotificacionesRutina) ya
+        // recalcula y reprograma la siguiente ocurrencia cada vez que
+        // se marca completa, se edita, o se abre la app. Ahora cada
+        // llamada a zonedSchedule es una alarma de UNA SOLA vez, sin
+        // ambigüedad para Android sobre si debe o no recrearla después
+        // de cancelarla.
+        // ============================================================
       );
     } catch (e) {
        print('❌ Error agendando rutina: $e');
@@ -243,17 +295,47 @@ class NotificacionesService {
     await _plugin.cancel(idBase);
     await _plugin.cancel(idBase + 1);
     await _plugin.cancel(idBase + 2);
+    await _plugin.cancel(idBase + 3);
+    await _plugin.cancel(idBase + 4);
   }
 
+  // ============================================================
+  // MÉTODO NUEVO: cancelarListaDeIds
+  // ------------------------------------------------------------
+  // Reemplaza la necesidad de "recalcular" qué IDs pertenecen a una
+  // rutina. Recibe la lista EXACTA de IDs que se guardó en
+  // rutina.notificacionesActivas y los cancela uno por uno.
+  // Cada cancelación va en su propio try/catch para que, si un ID
+  // ya no existe (por ejemplo porque ya sonó), no detenga la
+  // cancelación de los demás.
+  // ============================================================
+  Future<void> cancelarListaDeIds(List<int> ids) async {
+    for (final id in ids) {
+      try {
+        await _plugin.cancel(id);
+      } catch (_) {
+        // Ignoramos: si el ID ya no existía, no es un error real.
+      }
+    }
+  }
+
+  // Se mantienen por compatibilidad, pero YA NO se usan desde
+  // rutina_provider.dart (que ahora usa cancelarListaDeIds con IDs
+  // guardados explícitamente en el modelo Rutina).
   Future<void> cancelarAlertaRutina(int id) async {
     try { await _plugin.cancel(id); } catch (e) { // Ignorar
     }
   }
 
-  Future<void> programarRecordatoriosSecundarios(int idBase, String titulo, DateTime horaAlarma) async {
+  // Ahora DEVUELVE la lista de IDs que efectivamente se programaron,
+  // para que rutina_provider.dart pueda guardarlos y cancelarlos
+  // con certeza más adelante.
+  Future<List<int>> programarRecordatoriosSecundarios(int idBase, String titulo, DateTime horaAlarma) async {
     final prefs = await SharedPreferences.getInstance();
     final sonidoNota = prefs.getString('sonido_notificacion') ?? 'default_nota';
     final canalDinamicoId = '${canalRecordatoriosId}_$sonidoNota';
+
+    final List<int> idsCreados = [];
 
     for (int i = 1; i <= 3; i++) {
       final fechaRecordatorio = horaAlarma.add(Duration(hours: i));
@@ -279,14 +361,22 @@ class NotificacionesService {
           ),
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle, 
           uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-          matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+          // FIX: se eliminó matchDateTimeComponents por el mismo motivo que
+          // en programarAlertaRutina — evitar el bug de cancelación
+          // inconsistente en alarmas recurrentes a nivel de Android.
         );
+        // Solo anotamos el ID si la programación fue exitosa
+        idsCreados.add(idRecordatorio);
       } catch (e) {
         print('❌ Error agendando recordatorio secundario: $e');
       }
     }
+
+    return idsCreados;
   }
 
+  // Se mantiene por compatibilidad, pero YA NO se usa desde
+  // rutina_provider.dart (reemplazado por cancelarListaDeIds).
   Future<void> cancelarRecordatoriosSecundarios(int idBase) async {
     for (int i = 1; i <= 3; i++) {
       await _plugin.cancel(idBase + (i * 10000));
@@ -295,7 +385,6 @@ class NotificacionesService {
   }
 
   Future<void> posponerAlerta(int idAlarma, String titulo, String cuerpo, int minutos) async {
-    // 1. Cancelar la notificación activa para que Android la trate como una NUEVA alarma al sonar
     await _plugin.cancel(idAlarma);
 
     final tz.TZDateTime nuevaHora = tz.TZDateTime.now(tz.local).add(Duration(minutes: minutos));
@@ -314,14 +403,14 @@ class NotificacionesService {
         NotificationDetails( 
           android: AndroidNotificationDetails(
             canalDinamicoId, 
-            'Alarmas Urgentes', // Homologado con los otros métodos
+            'Alarmas Urgentes',
             importance: Importance.max,
-            priority: Priority.max, // Subido a max para forzar interrupción
-            color: const Color(0xFF276749), // Agregamos tu color temático
+            priority: Priority.max,
+            color: const Color(0xFF276749),
             fullScreenIntent: true,
             playSound: true,
             sound: RawResourceAndroidNotificationSound(sonidoAlarma),
-            additionalFlags: Int32List.fromList(<int>[4]), // Mantiene el loop insistente
+            additionalFlags: Int32List.fromList(<int>[4]),
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.alarmClock,

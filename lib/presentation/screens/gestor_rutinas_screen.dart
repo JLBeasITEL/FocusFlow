@@ -1,22 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/rutina_provider.dart';
+import '../../providers/tema_provider.dart';
 import 'rutina_form_screen.dart';
 
 class GestorRutinasScreen extends ConsumerWidget {
   final Color colorTema;
-  
+
   const GestorRutinasScreen({super.key, required this.colorTema});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rutinas = ref.watch(rutinaProvider);
+    // colorTema llega ya resuelto desde HomeScreen (temaActual.colorPrincipal),
+    // pero el color de texto/ícono que va ENCIMA de ese relleno sí depende
+    // del tema activo (blanco en los temas claros, tinta oscura en Medianoche).
+    final colorSobreTema = ref.watch(temaProvider).colorSobrePrincipal;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Horario Semanal'),
         backgroundColor: colorTema,
-        foregroundColor: Colors.white,
+        foregroundColor: colorSobreTema,
       ),
       body: rutinas.isEmpty
           ? const Center(child: Text('No hay rutinas configuradas'))
@@ -43,9 +48,9 @@ class GestorRutinasScreen extends ConsumerWidget {
                     ),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                      onPressed: () {
+                      onPressed: () async {
                         // Aquí podrías agregar un diálogo de confirmación si gustas
-                        ref.read(rutinaProvider.notifier).eliminarRutina(r.id);
+                        await ref.read(rutinaProvider.notifier).eliminarRutina(r.id);
                       },
                     ),
                     onTap: () {
@@ -66,8 +71,8 @@ class GestorRutinasScreen extends ConsumerWidget {
           ));
         },
         backgroundColor: colorTema,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Nueva Rutina', style: TextStyle(color: Colors.white)),
+        icon: Icon(Icons.add, color: colorSobreTema),
+        label: Text('Nueva Rutina', style: TextStyle(color: colorSobreTema)),
       ),
     );
   }
