@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/tarea.dart';
 import '../services/notificaciones_service.dart';
+import '../services/widget_tareas_service.dart';
 
 // 1. Usamos la sintaxis moderna 'Notifier' de Riverpod 2.0
 class TareaNotifier extends Notifier<List<Tarea>> {
@@ -70,6 +71,9 @@ class TareaNotifier extends Notifier<List<Tarea>> {
       state.map((t) => t.toJson()).toList(),
     );
     await prefs.setString(_storageKey, tareasCodificadas);
+    // Mantiene el widget de pantalla de inicio de Tareas en sync con cada
+    // creación/edición/completado, ya que todos pasan por este método.
+    WidgetTareasService.actualizar();
   }
 
   // Fuerza una relectura completa desde SharedPreferences, descartando el

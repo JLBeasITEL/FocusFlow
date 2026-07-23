@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tareas_widget_description">Muestra tus tareas próximas o más importantes</string>
+    <string name="rutinas_widget_description">Muestra tus rutinas de hoy y tu progreso</string>
+    <string name="nota_rapida_widget_description">Acceso directo para crear una nota nueva</string>
+    <string name="resumen_widget_description">Resumen del día: tareas y rutinas por categoría</string>
+</resources>

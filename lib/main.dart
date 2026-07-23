@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:home_widget/home_widget.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/splash_screen.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'services/notificaciones_service.dart';
+import 'services/widget_tareas_service.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 // 1. Creamos una llave global para navegar desde cualquier parte (incluso en segundo plano)
@@ -11,12 +13,16 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await AndroidAlarmManager.initialize();
   await initializeDateFormatting('es', null);
-  
+
   // Es vital pasar la llave aquí
-  await NotificacionesService().init(navigatorKey); 
+  await NotificacionesService().init(navigatorKey);
+
+  // Registra el callback que atiende los clicks en los íconos interactivos
+  // de los widgets de pantalla de inicio (ej. alternar modo en el widget de Tareas).
+  await HomeWidget.registerInteractivityCallback(tareasWidgetBackgroundCallback);
 
   runApp(
     ProviderScope(
@@ -25,8 +31,48 @@ void main() async {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _sincronizarWidgetsAlPasarASegundoPlano();
+    }
+  }
+
+  // Red de seguridad adicional: si el isolate headless que atiende el toggle
+  // del widget de Tareas llegara a fallar en algún escenario no cubierto,
+  // este refresco (que corre en el isolate principal, con acceso confirmado
+  // a los datos reales) deja ambos modos del widget de Tareas ya calculados
+  // y al día antes de que la app pase a segundo plano o se cierre.
+  void _sincronizarWidgetsAlPasarASegundoPlano() {
+    WidgetTareasService.actualizarAmbosModos();
+    // Rutinas y Resumen todavía no tienen un servicio de datos propio (llegan
+    // en las Fases 3 y 5); por ahora solo se les pide refrescar su vista
+    // actual. Nota rápida no depende de datos, pero se refresca igual por
+    // consistencia con los otros 3 widgets.
+    HomeWidget.updateWidget(androidName: 'RutinasWidgetProvider');
+    HomeWidget.updateWidget(androidName: 'ResumenWidgetProvider');
+    HomeWidget.updateWidget(androidName: 'NotaRapidaWidgetProvider');
+  }
 
   @override
   Widget build(BuildContext context) {
