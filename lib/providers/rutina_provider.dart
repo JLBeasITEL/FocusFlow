@@ -3,7 +3,8 @@ import 'package:flutter/material.dart'; // Necesario para TimeOfDay
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/rutina.dart';
-import '../services/notificaciones_service.dart'; 
+import '../services/notificaciones_service.dart';
+import '../services/widget_rutinas_service.dart';
 
 class RutinaNotifier extends Notifier<List<Rutina>> {
   static const String _storageKey = 'lista_rutinas_v2';
@@ -78,7 +79,10 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         return rutinaActualizada;
       }).toList();
 
-      if (huboCambios) _guardarRutinas();
+      // Con await: si no se espera, el actualizar() incondicional del widget
+      // más abajo podría ejecutarse ANTES de que este guardado termine de
+      // escribir a disco, y leería datos viejos.
+      if (huboCambios) await _guardarRutinas();
 
       // 3. Rellenar el colchón de notificaciones de forma segura al abrir la
       // app — SOLO donde realmente haga falta (ver _rellenarColchonSiHaceFalta).
@@ -104,12 +108,29 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         "| saltadas (colchón suficiente): ${totalRutinasActivas - rutinasConTrabajoReal}",
       );
     }
+
+    // Incondicional (no solo cuando huboCambios): el reseteo por cambio de
+    // día ocurre arriba y hoy por hoy es la única señal de que el widget
+    // necesita refrescarse aunque no haya habido ningún cambio real.
+    //
+    // Con await: si no se espera, dos sincronizaciones disparadas en
+    // sucesión rápida (ej. varias altas/bajas seguidas) pueden resolverse
+    // fuera de orden — la más vieja podría terminar de escribir DESPUÉS de
+    // la más nueva y dejar el widget mostrando datos desactualizados. Al
+    // esperar aquí, cada mutación deja el widget al día antes de que la
+    // siguiente pueda empezar la suya.
+    await WidgetRutinasService.actualizar();
   }
 
   Future<void> _guardarRutinas() async {
     final prefs = await SharedPreferences.getInstance();
     final String rutinasCodificadas = jsonEncode(state.map((r) => r.toJson()).toList());
     await prefs.setString(_storageKey, rutinasCodificadas);
+    // Mantiene el widget de pantalla de inicio de Rutinas en sync con cada
+    // creación/edición/completado, ya que todos pasan por este método.
+    // Con await (ver nota de _cargarRutinas): evita que sincronizaciones
+    // concurrentes se resuelvan fuera de orden.
+    await WidgetRutinasService.actualizar();
   }
 
   // --- LÓGICA DE NOTIFICACIONES PARA RUTINAS ---
@@ -227,7 +248,22 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     // semanas completas cada vez que hace falta (ver
     // _rellenarColchonSiHaceFalta).
     // ============================================================
-    const int semanasColchon = 4;
+    //
+    // BAJADO de 4 a 2 semanas (ver también programarRecordatoriosSecundarios
+    // en notificaciones_service.dart, bajado de 3 a 1 recordatorio): Android
+    // tiene un límite DURO de 500 alarmas concurrentes por app (lanza
+    // IllegalStateException "Maximum limit of concurrent alarms 500 reached"
+    // desde Android 12+). Con el diseño anterior, una sola rutina de 7 días
+    // ya generaba 4 semanas × 5 alarmas/ocurrencia × 7 días = 140 alarmas;
+    // con apenas 4 rutinas de 7 días activas ya se superaba el límite. Al
+    // llegar ahí, las llamadas de zonedSchedule para las semanas más lejanas
+    // (2, 3, 4) fallaban con esa excepción, que quedaba atrapada en un
+    // try-catch silencioso (solo un print) — por eso las rutinas dejaban de
+    // sonar después de la primera semana, sin ningún error visible. Con 2
+    // semanas × 3 alarmas/ocurrencia, esa misma rutina de 7 días usa 42
+    // alarmas: se puede tener muchas más rutinas activas sin acercarse al
+    // límite.
+    const int semanasColchon = 2;
 
     for (var entry in rutina.horarios.entries) {
       final diaIndex = entry.key;
@@ -345,7 +381,11 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     final int diasDeColchon = rutina.ultimaFechaProgramada!.difference(ahora).inDays;
 
     // b. Colchón suficiente: cero llamadas nativas.
-    if (diasDeColchon >= 14) {
+    // Umbral bajado de 14 a 7 días, proporcional al colchón objetivo (ver
+    // nota extensa en _resetCompletoNotificacionesRutina sobre el límite de
+    // 500 alarmas de Android): con objetivo de 2 semanas, rellenamos cuando
+    // queda menos de la mitad (1 semana), igual que antes era la mitad de 4.
+    if (diasDeColchon >= 7) {
       print("🔔 DEBUG: ✅ '${rutina.titulo}' con colchón suficiente ($diasDeColchon días). Se omite trabajo.");
       return false;
     }
@@ -354,7 +394,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     print("🔔 DEBUG: ⏳ '${rutina.titulo}' con colchón corto ($diasDeColchon días). Rellenando...");
 
     final int baseId = _generarIdNumerico(rutina.id);
-    const int semanasColchonObjetivo = 4;
+    const int semanasColchonObjetivo = 2;
     final DateTime limiteColchon = ahora.add(const Duration(days: 7 * semanasColchonObjetivo));
 
     // Época fija + offset grande: garantiza que el multiplicador de semana
@@ -457,8 +497,13 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   // --- MÉTODOS DE ACCIÓN ---
 
   Future<void> addRutina(Rutina rutina) async {
+    // tarea_provider.dart ya lo hacía para tareas, pero acá faltaba: cada
+    // rutina nueva agenda muchas alarmas (hasta 4 semanas de colchón por
+    // día programado), así que vale la pena reforzar aquí también el
+    // permiso de ignorar optimización de batería estándar de Android.
+    await NotificacionesService().solicitarPermisosEspeciales();
     state = [...state, rutina];
-    _guardarRutinas();
+    await _guardarRutinas();
     // Rutina nueva: no hay nada que "rellenar", siempre reset completo.
     await _resetCompletoNotificacionesRutina(rutina);
   }
@@ -480,7 +525,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         for (final r in state)
           if (r.id == rutinaConHistorial.id) rutinaConHistorial else r,
       ];
-      _guardarRutinas();
+      await _guardarRutinas();
       // El horario pudo haber cambiado: hace falta empezar de cero para no
       // dejar notificaciones colgadas con el horario viejo.
       await _resetCompletoNotificacionesRutina(rutinaConHistorial);
@@ -497,7 +542,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         for (final r in state)
           if (r.id == id) r.copyWith(activa: !r.activa) else r,
       ];
-      _guardarRutinas();
+      await _guardarRutinas();
 
       final rutinaActualizada = state.firstWhere((r) => r.id == id);
       // Activar/desactivar cambia el resultado completo de la gestión
@@ -577,12 +622,12 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     }
   }
 
-  void incrementarRacha(String id) {
+  Future<void> incrementarRacha(String id) async {
     state = [
       for (final r in state)
         if (r.id == id) r.copyWith(racha: r.racha + 1) else r,
     ];
-    _guardarRutinas();
+    await _guardarRutinas();
   }
 
   Future<void> eliminarRutina(String id) async {
@@ -591,7 +636,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     final rutina = state.firstWhere((r) => r.id == id);
 
     state = state.where((r) => r.id != id).toList();
-    _guardarRutinas();
+    await _guardarRutinas();
 
     await NotificacionesService().cancelarListaDeIds(rutina.notificacionesActivas);
   }

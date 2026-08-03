@@ -26,6 +26,15 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
 
   int _iconoSeleccionado = Icons.fitness_center.codePoint;
 
+  // Programar las notificaciones de una rutina puede tardar unos segundos
+  // (hasta 4 semanas de colchón por cada día programado, ver
+  // _resetCompletoNotificacionesRutina en rutina_provider.dart) — con más
+  // días activos, más llamadas nativas a AlarmManager. Este flag maneja el
+  // overlay de carga para que quede claro que la app sigue trabajando y no
+  // se congeló, y evita que el usuario dispare un segundo guardado o
+  // navegue hacia atrás mientras el primero sigue en curso.
+  bool _guardando = false;
+
   final List<IconData> _opcionesIconos = [
     Icons.medication, Icons.medical_services, Icons.monitor_heart, Icons.water_drop,
     Icons.fitness_center, Icons.directions_run, Icons.self_improvement, Icons.nightlight_round,
@@ -57,6 +66,8 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
 
   // MÉTODO DE GUARDADO CENTRALIZADO
   Future<void> _guardarRutina() async {
+  if (_guardando) return; // Evita un segundo guardado mientras el primero sigue en curso.
+
   if (_tituloController.text.trim().isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Por favor, asigne un título.')),
@@ -91,18 +102,33 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
     fechaCompletada: widget.rutinaAEditar?.fechaCompletada,
   );
 
-  if (widget.rutinaAEditar == null) {
-    await ref.read(rutinaProvider.notifier).addRutina(rutina);
-  } else {
-    await ref.read(rutinaProvider.notifier).editarRutina(rutina);
+  setState(() => _guardando = true);
+  try {
+    if (widget.rutinaAEditar == null) {
+      await ref.read(rutinaProvider.notifier).addRutina(rutina);
+    } else {
+      await ref.read(rutinaProvider.notifier).editarRutina(rutina);
+    }
+    if (mounted) Navigator.pop(context);
+  } catch (e) {
+    if (mounted) {
+      setState(() => _guardando = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo guardar la rutina: $e')),
+      );
+    }
   }
-
-  if (mounted) Navigator.pop(context);
 }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      // Evita salir del formulario a medias mientras se están programando
+      // las notificaciones — no rompería nada (el guardado sigue corriendo
+      // en el provider), pero es confuso ver la lista sin la rutina nueva
+      // todavía mientras el proceso sigue en curso.
+      canPop: !_guardando,
+      child: Scaffold(
       appBar: AppBar(
         title: Text(widget.rutinaAEditar == null ? 'Crear hábito' : 'Editar Rutina'),
         actions: [
@@ -118,15 +144,27 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
             ],
           ),
           // BOTÓN DE GUARDADO EN LA PARTE SUPERIOR (SIEMPRE VISIBLE)
-          IconButton(
-            icon: const Icon(Icons.check_rounded, size: 28),
-            onPressed: _guardarRutina,
-            tooltip: 'Guardar cambios',
-          ),
+          if (_guardando)
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.check_rounded, size: 28),
+              onPressed: _guardarRutina,
+              tooltip: 'Guardar cambios',
+            ),
           const SizedBox(width: 8),
         ],
       ),
-      body: SingleChildScrollView(
+      body: Stack(
+        children: [
+          SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -264,16 +302,52 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                   backgroundColor: Colors.deepPurple,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 ),
-                onPressed: _guardarRutina,
-                child: Text(
-                  widget.rutinaAEditar == null ? 'Guardar Rutina' : 'Actualizar Rutina',
-                  style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
-                ),
+                onPressed: _guardando ? null : _guardarRutina,
+                child: _guardando
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                      )
+                    : Text(
+                        widget.rutinaAEditar == null ? 'Guardar Rutina' : 'Actualizar Rutina',
+                        style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
               ),
             ),
             const SizedBox(height: 20),
           ],
         ),
+          ),
+          // Overlay de carga: bloquea el formulario y explica la demora
+          // (programar notificaciones de varios días toma varios segundos).
+          if (_guardando)
+            Positioned.fill(
+              child: AbsorbPointer(
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  child: Center(
+                    child: Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 28, vertical: 22),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 14),
+                            Text('Guardando y programando notificaciones...'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
       ),
     );
   }

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Paleta de los widgets de pantalla de inicio. Colores separados de
+         styles.xml (que es de la app) porque estos se referencian desde
+         RemoteViews/drawables, y necesitan su propia variante values-night
+         para que los widgets respeten el tema claro/oscuro del sistema. -->
+    <color name="widget_background">#FFFFFFFF</color>
+    <color name="widget_row_background">#FFF2F2F2</color>
+    <color name="widget_border">#FFE3E3E3</color>
+    <color name="widget_text_primary">#FF1A1A1A</color>
+    <color name="widget_text_secondary">#FF6B6B6B</color>
+    <color name="widget_text_tertiary">#FF9E9E9E</color>
+    <!-- Mismo teal que ColorScheme.fromSeed(seedColor: Colors.teal) en main.dart -->
+    <color name="widget_accent">#FF00796B</color>
+</resources>

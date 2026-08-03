@@ -3,8 +3,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FFFFFF"
-    android:padding="12dp">
+    android:background="@drawable/widget_background"
+    android:padding="14dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,14 +18,14 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Próximas"
-            android:textColor="#000000"
-            android:textSize="16sp"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="17sp"
             android:textStyle="bold" />
 
         <ImageView
             android:id="@+id/widget_tareas_toggle"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
             android:padding="2dp"
             android:src="@drawable/ic_widget_swap"
             android:contentDescription="Alternar entre próximas y más importantes" />
@@ -37,8 +37,10 @@
         android:id="@+id/widget_tareas_fila1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:orientation="vertical">
+        android:layout_marginTop="7dp"
+        android:orientation="vertical"
+        android:background="@drawable/widget_row_background"
+        android:padding="7dp">
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -51,12 +53,13 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#333333"
+                android:textColor="@color/widget_text_primary"
+                android:textStyle="bold"
                 android:textSize="13sp" />
             <ImageView
                 android:id="@+id/widget_tareas_urgencia_dot1"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
                 android:layout_marginStart="6dp"
                 android:src="@drawable/ic_dot" />
             <TextView
@@ -64,12 +67,13 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#666666"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="10sp" />
         </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
             <TextView
@@ -79,7 +83,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="11sp" />
             <ImageView
                 android:id="@+id/widget_tareas_grupo_dot1"
@@ -92,7 +96,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_tertiary"
                 android:textSize="10sp" />
         </LinearLayout>
     </LinearLayout>
@@ -103,7 +107,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:background="@drawable/widget_row_background"
+        android:padding="7dp">
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -116,12 +122,13 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#333333"
+                android:textColor="@color/widget_text_primary"
+                android:textStyle="bold"
                 android:textSize="13sp" />
             <ImageView
                 android:id="@+id/widget_tareas_urgencia_dot2"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
                 android:layout_marginStart="6dp"
                 android:src="@drawable/ic_dot" />
             <TextView
@@ -129,12 +136,13 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#666666"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="10sp" />
         </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
             <TextView
@@ -144,7 +152,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="11sp" />
             <ImageView
                 android:id="@+id/widget_tareas_grupo_dot2"
@@ -157,7 +165,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_tertiary"
                 android:textSize="10sp" />
         </LinearLayout>
     </LinearLayout>
@@ -168,7 +176,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:background="@drawable/widget_row_background"
+        android:padding="7dp">
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -181,12 +191,13 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#333333"
+                android:textColor="@color/widget_text_primary"
+                android:textStyle="bold"
                 android:textSize="13sp" />
             <ImageView
                 android:id="@+id/widget_tareas_urgencia_dot3"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
                 android:layout_marginStart="6dp"
                 android:src="@drawable/ic_dot" />
             <TextView
@@ -194,12 +205,13 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#666666"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="10sp" />
         </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
             <TextView
@@ -209,7 +221,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="11sp" />
             <ImageView
                 android:id="@+id/widget_tareas_grupo_dot3"
@@ -222,7 +234,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_tertiary"
                 android:textSize="10sp" />
         </LinearLayout>
     </LinearLayout>
@@ -233,7 +245,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:background="@drawable/widget_row_background"
+        android:padding="7dp">
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -246,12 +260,13 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#333333"
+                android:textColor="@color/widget_text_primary"
+                android:textStyle="bold"
                 android:textSize="13sp" />
             <ImageView
                 android:id="@+id/widget_tareas_urgencia_dot4"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
                 android:layout_marginStart="6dp"
                 android:src="@drawable/ic_dot" />
             <TextView
@@ -259,12 +274,13 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#666666"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="10sp" />
         </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
             <TextView
@@ -274,7 +290,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="11sp" />
             <ImageView
                 android:id="@+id/widget_tareas_grupo_dot4"
@@ -287,7 +303,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_tertiary"
                 android:textSize="10sp" />
         </LinearLayout>
     </LinearLayout>
@@ -298,7 +314,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:background="@drawable/widget_row_background"
+        android:padding="7dp">
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -311,12 +329,13 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#333333"
+                android:textColor="@color/widget_text_primary"
+                android:textStyle="bold"
                 android:textSize="13sp" />
             <ImageView
                 android:id="@+id/widget_tareas_urgencia_dot5"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
                 android:layout_marginStart="6dp"
                 android:src="@drawable/ic_dot" />
             <TextView
@@ -324,12 +343,13 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#666666"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="10sp" />
         </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
             <TextView
@@ -339,7 +359,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="11sp" />
             <ImageView
                 android:id="@+id/widget_tareas_grupo_dot5"
@@ -352,7 +372,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_tertiary"
                 android:textSize="10sp" />
         </LinearLayout>
     </LinearLayout>
@@ -363,7 +383,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:background="@drawable/widget_row_background"
+        android:padding="7dp">
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -376,12 +398,13 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#333333"
+                android:textColor="@color/widget_text_primary"
+                android:textStyle="bold"
                 android:textSize="13sp" />
             <ImageView
                 android:id="@+id/widget_tareas_urgencia_dot6"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
                 android:layout_marginStart="6dp"
                 android:src="@drawable/ic_dot" />
             <TextView
@@ -389,12 +412,13 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#666666"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="10sp" />
         </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
             <TextView
@@ -404,7 +428,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="11sp" />
             <ImageView
                 android:id="@+id/widget_tareas_grupo_dot6"
@@ -417,7 +441,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:textColor="#999999"
+                android:textColor="@color/widget_text_tertiary"
                 android:textSize="10sp" />
         </LinearLayout>
     </LinearLayout>
@@ -426,9 +450,11 @@
         android:id="@+id/widget_tareas_vacio"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="14dp"
+        android:gravity="center_horizontal"
         android:text="Sin tareas pendientes"
-        android:textColor="#999999"
+        android:textColor="@color/widget_text_tertiary"
+        android:textStyle="italic"
         android:textSize="13sp"
         android:visibility="gone" />
 

@@ -191,9 +191,17 @@ class TareasWidgetProvider : HomeWidgetProvider() {
 
         private const val MAX_ITEMS = 6
         private const val MIN_FILAS_VISIBLES = 1
-        private const val ALTO_ENCABEZADO_DP = 32
-        private const val ALTO_PADDING_CONTENEDOR_DP = 24
-        private const val ALTO_FILA_DP = 40
+        // El título subió de 16sp a 17sp (encabezado prácticamente igual,
+        // sigue dominado por el ícono de 26dp): +2dp de margen de sobra.
+        private const val ALTO_ENCABEZADO_DP = 34
+        // El padding del contenedor subió de 12dp a 14dp por lado para la
+        // tarjeta redondeada (widget_background) -> 28dp total en vez de 24dp.
+        private const val ALTO_PADDING_CONTENEDOR_DP = 28
+        // Cada fila ahora es una "tarjeta" (widget_row_background) con
+        // 7dp de padding arriba/abajo, además del contenido de 2 líneas que
+        // ya tenía: 40dp de contenido + 14dp de padding interno + 1dp extra
+        // de marginTop (6dp -> 7dp) = 55dp aprox.
+        private const val ALTO_FILA_DP = 55
         private const val ALTO_MINIMO_POR_DEFECTO_DP = 110
 
         private val PALETA_GRUPOS = intArrayOf(

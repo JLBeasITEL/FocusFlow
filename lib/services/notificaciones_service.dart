@@ -18,6 +18,19 @@ class NotificacionesService {
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   static late GlobalKey<NavigatorState> _navigatorKey;
+
+  // Android limita a 500 alarmas concurrentes por app (IllegalStateException
+  // "Maximum limit of concurrent alarms 500 reached" desde Android 12+). Si
+  // el volumen de rutinas/días vuelve a crecer lo suficiente para chocar con
+  // esto, este log lo hace inconfundible en vez de perderse entre los demás
+  // "❌ Error" genéricos.
+  void _logErrorAlarma(String contexto, Object e) {
+    if (e.toString().contains('Maximum limit of concurrent alarms')) {
+      print('🚨 LÍMITE DE ALARMAS DE ANDROID ALCANZADO ($contexto): $e');
+    } else {
+      print('❌ Error en $contexto: $e');
+    }
+  }
   
   // Cambiamos a v4 para forzar a Android a limpiar la caché anterior
   static const String canalRecordatoriosId = 'canal_recordatorios_v4';
@@ -219,10 +232,10 @@ class NotificacionesService {
         NotificationDetails(android: detalles),
         androidScheduleMode: AndroidScheduleMode.alarmClock, 
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        payload: esAlarmaFullScreen ? 'alarma|$id|$titulo|$body' : null, 
+        payload: esAlarmaFullScreen ? 'alarma|$id|$titulo|$body' : null,
       );
     } catch (e) {
-      print('❌ ERROR: $e');
+      _logErrorAlarma('_programarNotificacion (tarea id=$id)', e);
     }
   }
 
@@ -232,7 +245,11 @@ class NotificacionesService {
     int? iconoCode, 
     bool esAlarmaFullScreen = true, bool esInsistente = true
   }) async {
-    final tz.TZDateTime fechaSistema = tz.TZDateTime.from(fechaVisual, tz.getLocation('America/Mexico_City'));
+    // Antes usaba tz.getLocation('America/Mexico_City') hardcodeado en vez
+    // de tz.local (la zona horaria real detectada en init()): en cualquier
+    // dispositivo fuera de esa zona, esto desalineaba sistemáticamente la
+    // hora a la que realmente sonaba cada alarma de rutina.
+    final tz.TZDateTime fechaSistema = tz.TZDateTime.from(fechaVisual, tz.local);
     try {
       final prefs = await SharedPreferences.getInstance();
       final sonidoNota = prefs.getString('sonido_notificacion') ?? 'default_nota';
@@ -278,7 +295,7 @@ class NotificacionesService {
         // ============================================================
       );
     } catch (e) {
-       print('❌ Error agendando rutina: $e');
+       _logErrorAlarma('programarAlertaRutina (id=$id)', e);
     }
   }
 
@@ -330,6 +347,14 @@ class NotificacionesService {
   // Ahora DEVUELVE la lista de IDs que efectivamente se programaron,
   // para que rutina_provider.dart pueda guardarlos y cancelarlos
   // con certeza más adelante.
+  //
+  // Bajado de 3 a 1 recordatorio por ocurrencia (ver nota extensa en
+  // rutina_provider.dart, _resetCompletoNotificacionesRutina): Android
+  // limita a 500 alarmas concurrentes por app, y con 3 recordatorios × 4
+  // semanas de colchón × varias rutinas de varios días, ese límite se
+  // alcanzaba en la práctica, dejando las semanas más lejanas sin
+  // programar (silenciosamente) y por eso las rutinas dejaban de sonar
+  // después de la primera semana.
   Future<List<int>> programarRecordatoriosSecundarios(int idBase, String titulo, DateTime horaAlarma) async {
     final prefs = await SharedPreferences.getInstance();
     final sonidoNota = prefs.getString('sonido_notificacion') ?? 'default_nota';
@@ -337,7 +362,7 @@ class NotificacionesService {
 
     final List<int> idsCreados = [];
 
-    for (int i = 1; i <= 3; i++) {
+    for (int i = 1; i <= 1; i++) {
       final fechaRecordatorio = horaAlarma.add(Duration(hours: i));
       final int idRecordatorio = idBase + (i * 10000); 
       
@@ -368,7 +393,7 @@ class NotificacionesService {
         // Solo anotamos el ID si la programación fue exitosa
         idsCreados.add(idRecordatorio);
       } catch (e) {
-        print('❌ Error agendando recordatorio secundario: $e');
+        _logErrorAlarma('programarRecordatoriosSecundarios (id=$idRecordatorio)', e);
       }
     }
 

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Miniatura estática para el selector de widgets del launcher
+     (android:previewImage en tareas_widget_info.xml). No usa datos reales:
+     es una representación abstracta del widget ya rediseñado (tarjeta
+     redondeada, encabezado con acento teal, filas tipo chip con un punto
+     de color simulando la urgencia). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item>
+        <shape android:shape="rectangle">
+            <size android:width="250dp" android:height="110dp" />
+            <solid android:color="@color/widget_background" />
+            <stroke android:width="1dp" android:color="@color/widget_border" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+
+    <!-- Barra de título ("Próximas") -->
+    <item android:left="14dp" android:top="12dp" android:right="110dp" android:bottom="84dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_accent" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+
+    <!-- Ícono de alternancia (esquina superior derecha) -->
+    <item android:left="216dp" android:top="10dp" android:right="14dp" android:bottom="82dp">
+        <shape android:shape="oval">
+            <solid android:color="@color/widget_border" />
+        </shape>
+    </item>
+
+    <!-- Fila 1 -->
+    <item android:left="14dp" android:top="32dp" android:right="14dp" android:bottom="56dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_row_background" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item android:left="22dp" android:top="37dp" android:right="130dp" android:bottom="63dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_text_tertiary" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+    <item android:left="214dp" android:top="38dp" android:right="26dp" android:bottom="62dp">
+        <shape android:shape="oval">
+            <solid android:color="#FF009688" />
+        </shape>
+    </item>
+
+    <!-- Fila 2 -->
+    <item android:left="14dp" android:top="60dp" android:right="14dp" android:bottom="28dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_row_background" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item android:left="22dp" android:top="65dp" android:right="150dp" android:bottom="35dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_text_tertiary" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+    <item android:left="214dp" android:top="66dp" android:right="26dp" android:bottom="34dp">
+        <shape android:shape="oval">
+            <solid android:color="#FFFF9800" />
+        </shape>
+    </item>
+
+    <!-- Fila 3 -->
+    <item android:left="14dp" android:top="86dp" android:right="14dp" android:bottom="2dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_row_background" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item android:left="22dp" android:top="91dp" android:right="170dp" android:bottom="9dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_text_tertiary" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+    <item android:left="214dp" android:top="92dp" android:right="26dp" android:bottom="8dp">
+        <shape android:shape="oval">
+            <solid android:color="#FFF44336" />
+        </shape>
+    </item>
+
+</layer-list>

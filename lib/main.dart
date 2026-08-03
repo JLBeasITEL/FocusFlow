@@ -6,6 +6,7 @@ import 'presentation/screens/splash_screen.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'services/notificaciones_service.dart';
 import 'services/widget_tareas_service.dart';
+import 'services/widget_rutinas_service.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 // 1. Creamos una llave global para navegar desde cualquier parte (incluso en segundo plano)
@@ -65,11 +66,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   // y al día antes de que la app pase a segundo plano o se cierre.
   void _sincronizarWidgetsAlPasarASegundoPlano() {
     WidgetTareasService.actualizarAmbosModos();
-    // Rutinas y Resumen todavía no tienen un servicio de datos propio (llegan
-    // en las Fases 3 y 5); por ahora solo se les pide refrescar su vista
-    // actual. Nota rápida no depende de datos, pero se refresca igual por
-    // consistencia con los otros 3 widgets.
-    HomeWidget.updateWidget(androidName: 'RutinasWidgetProvider');
+    WidgetRutinasService.actualizar();
+    // Resumen todavía no tiene un servicio de datos propio (llega en la
+    // Fase 5); por ahora solo se le pide refrescar su vista actual. Nota
+    // rápida no depende de datos, pero se refresca igual por consistencia
+    // con los otros 3 widgets.
     HomeWidget.updateWidget(androidName: 'ResumenWidgetProvider');
     HomeWidget.updateWidget(androidName: 'NotaRapidaWidgetProvider');
   }

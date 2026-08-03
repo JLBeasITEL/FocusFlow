@@ -2,9 +2,9 @@
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/widget_rutinas"
     android:minWidth="250dp"
-    android:minHeight="110dp"
+    android:minHeight="300dp"
     android:updatePeriodMillis="0"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
-    android:previewImage="@drawable/app_icon"
+    android:previewImage="@drawable/widget_preview_rutinas"
     android:description="@string/rutinas_widget_description" />

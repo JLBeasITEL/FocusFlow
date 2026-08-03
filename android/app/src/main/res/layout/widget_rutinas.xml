@@ -3,25 +3,270 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FFFFFF"
-    android:padding="12dp">
+    android:background="@drawable/widget_background"
+    android:padding="10dp">
 
     <TextView
         android:id="@+id/widget_rutinas_titulo"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Rutinas de hoy"
-        android:textColor="#000000"
-        android:textSize="16sp"
+        android:textColor="@color/widget_accent"
+        android:textSize="15sp"
         android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/widget_rutinas_placeholder"
+    <!-- Filas de una sola línea, deliberadamente sin fondo/tarjeta por fila
+         (a diferencia del widget de Tareas): el usuario pidió expresamente
+         que quepan al menos 5 rutinas en el alto real de un widget ya
+         colocado (~124dp en pruebas previas), así que el presupuesto
+         vertical por fila se mantiene casi igual al de antes; el toque
+         estético va en la tarjeta redondeada exterior, el título en color
+         de acento y el color/negrita del estado (ver RutinasWidgetProvider). -->
+
+    <!-- Fila 1 -->
+    <LinearLayout
+        android:id="@+id/widget_rutinas_fila1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Próximamente"
-        android:textColor="#666666"
-        android:textSize="14sp" />
+        android:layout_marginTop="5dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_rutinas_titulo1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/widget_rutinas_hora1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:textColor="@color/widget_text_tertiary"
+            android:textSize="10sp" />
+        <ImageView
+            android:id="@+id/widget_rutinas_estado_dot1"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginStart="5dp"
+            android:src="@drawable/ic_dot" />
+        <TextView
+            android:id="@+id/widget_rutinas_estado_label1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:textStyle="bold"
+            android:textSize="9sp" />
+    </LinearLayout>
+
+    <!-- Fila 2 -->
+    <LinearLayout
+        android:id="@+id/widget_rutinas_fila2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_rutinas_titulo2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/widget_rutinas_hora2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:textColor="@color/widget_text_tertiary"
+            android:textSize="10sp" />
+        <ImageView
+            android:id="@+id/widget_rutinas_estado_dot2"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginStart="5dp"
+            android:src="@drawable/ic_dot" />
+        <TextView
+            android:id="@+id/widget_rutinas_estado_label2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:textStyle="bold"
+            android:textSize="9sp" />
+    </LinearLayout>
+
+    <!-- Fila 3 -->
+    <LinearLayout
+        android:id="@+id/widget_rutinas_fila3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_rutinas_titulo3"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/widget_rutinas_hora3"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:textColor="@color/widget_text_tertiary"
+            android:textSize="10sp" />
+        <ImageView
+            android:id="@+id/widget_rutinas_estado_dot3"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginStart="5dp"
+            android:src="@drawable/ic_dot" />
+        <TextView
+            android:id="@+id/widget_rutinas_estado_label3"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:textStyle="bold"
+            android:textSize="9sp" />
+    </LinearLayout>
+
+    <!-- Fila 4 -->
+    <LinearLayout
+        android:id="@+id/widget_rutinas_fila4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_rutinas_titulo4"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/widget_rutinas_hora4"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:textColor="@color/widget_text_tertiary"
+            android:textSize="10sp" />
+        <ImageView
+            android:id="@+id/widget_rutinas_estado_dot4"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginStart="5dp"
+            android:src="@drawable/ic_dot" />
+        <TextView
+            android:id="@+id/widget_rutinas_estado_label4"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:textStyle="bold"
+            android:textSize="9sp" />
+    </LinearLayout>
+
+    <!-- Fila 5 -->
+    <LinearLayout
+        android:id="@+id/widget_rutinas_fila5"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_rutinas_titulo5"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/widget_rutinas_hora5"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:textColor="@color/widget_text_tertiary"
+            android:textSize="10sp" />
+        <ImageView
+            android:id="@+id/widget_rutinas_estado_dot5"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginStart="5dp"
+            android:src="@drawable/ic_dot" />
+        <TextView
+            android:id="@+id/widget_rutinas_estado_label5"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:textStyle="bold"
+            android:textSize="9sp" />
+    </LinearLayout>
+
+    <!-- Fila 6 -->
+    <LinearLayout
+        android:id="@+id/widget_rutinas_fila6"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widget_rutinas_titulo6"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/widget_rutinas_hora6"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:textColor="@color/widget_text_tertiary"
+            android:textSize="10sp" />
+        <ImageView
+            android:id="@+id/widget_rutinas_estado_dot6"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginStart="5dp"
+            android:src="@drawable/ic_dot" />
+        <TextView
+            android:id="@+id/widget_rutinas_estado_label6"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:textStyle="bold"
+            android:textSize="9sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_rutinas_vacio"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_horizontal"
+        android:text="Sin rutinas para hoy"
+        android:textColor="@color/widget_text_tertiary"
+        android:textStyle="italic"
+        android:textSize="13sp"
+        android:visibility="gone" />
 
 </LinearLayout>

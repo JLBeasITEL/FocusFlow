@@ -151,6 +151,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     super.dispose();
   }
 
+  String _labelOrden(TipoOrden tipo) {
+    switch (tipo) {
+      case TipoOrden.creacion:
+        return 'Original';
+      case TipoOrden.alfabetico:
+        return 'Alfabético (A-Z)';
+      case TipoOrden.urgencia:
+        return 'Mayor urgencia';
+      case TipoOrden.fecha:
+        return 'Próximas a vencer';
+    }
+  }
+
   // --- VISTA DE NOTAS ESTILO TABLERO ---
   Widget _buildTabNotas(Color colorPrincipal, List<NotaPostIt> notasActuales) {
     if (notasActuales.isEmpty) {
@@ -617,23 +630,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         title: const Text('FocusFlow', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
         foregroundColor: colorPrincipal,
         actions: [
-          PopupMenuButton<TipoOrden>(
-            icon: Icon(Icons.sort_rounded, color: colorPrincipal),
-            tooltip: 'Ordenar',
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            onSelected: (TipoOrden result) => ref.read(ordenProvider.notifier).cambiarOrden(result),
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<TipoOrden>>[
-              const PopupMenuItem<TipoOrden>(value: TipoOrden.creacion, child: Row(children: [Icon(Icons.format_list_bulleted, size: 20, color: Colors.grey), SizedBox(width: 12), Text('Orden original')])),
-              const PopupMenuItem<TipoOrden>(value: TipoOrden.alfabetico, child: Row(children: [Icon(Icons.sort_by_alpha, size: 20, color: Colors.blueGrey), SizedBox(width: 12), Text('Alfabético (A-Z)')])),
-              const PopupMenuItem<TipoOrden>(value: TipoOrden.urgencia, child: Row(children: [Icon(Icons.flag, size: 20, color: Colors.redAccent), SizedBox(width: 12), Text('Mayor urgencia')])),
-              const PopupMenuItem<TipoOrden>(value: TipoOrden.fecha, child: Row(children: [Icon(Icons.event_available, size: 20, color: Colors.orangeAccent), SizedBox(width: 12), Text('Próximas a vencer')])),
-            ],
-          ),
-          IconButton(
-            icon: Icon(Icons.mode_edit_outline_rounded, color: colorPrincipal),
-            tooltip: 'Configurar Horario Semanal',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => GestorRutinasScreen(colorTema: colorPrincipal))),
-          ),
           IconButton(
             icon: Icon(Icons.more_vert_rounded, color: colorPrincipal),
             tooltip: 'Configuraciones',
@@ -707,62 +703,105 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         child: TabBarView(
           controller: _tabController,
           children: [
-            tareas.isEmpty
-                ? Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withOpacity(0.6))))
-                : () {
-                    // 1. Agrupar las tareas
-                    final mapaGrupos = <String, List<Tarea>>{};
-                    for (var tarea in tareas) {
-                      if (!mapaGrupos.containsKey(tarea.grupo)) mapaGrupos[tarea.grupo] = [];
-                      mapaGrupos[tarea.grupo]!.add(tarea);
-                    }
+            Column(
+              children: [
+                // Selector de orden: debajo de la pestaña "Tareas" y encima de la lista
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: PopupMenuButton<TipoOrden>(
+                      tooltip: 'Ordenar',
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      onSelected: (TipoOrden result) => ref.read(ordenProvider.notifier).cambiarOrden(result),
+                      itemBuilder: (BuildContext context) => <PopupMenuEntry<TipoOrden>>[
+                        const PopupMenuItem<TipoOrden>(value: TipoOrden.creacion, child: Row(children: [Icon(Icons.format_list_bulleted, size: 20, color: Colors.grey), SizedBox(width: 12), Text('Orden original')])),
+                        const PopupMenuItem<TipoOrden>(value: TipoOrden.alfabetico, child: Row(children: [Icon(Icons.sort_by_alpha, size: 20, color: Colors.blueGrey), SizedBox(width: 12), Text('Alfabético (A-Z)')])),
+                        const PopupMenuItem<TipoOrden>(value: TipoOrden.urgencia, child: Row(children: [Icon(Icons.flag, size: 20, color: Colors.redAccent), SizedBox(width: 12), Text('Mayor urgencia')])),
+                        const PopupMenuItem<TipoOrden>(value: TipoOrden.fecha, child: Row(children: [Icon(Icons.event_available, size: 20, color: Colors.orangeAccent), SizedBox(width: 12), Text('Próximas a vencer')])),
+                      ],
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: colorPrincipal.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.sort_rounded, size: 18, color: colorPrincipal),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Orden: ${_labelOrden(tipoOrden)}',
+                              style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                            Icon(Icons.arrow_drop_down_rounded, color: colorPrincipal),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: tareas.isEmpty
+                      ? Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withOpacity(0.6))))
+                      : () {
+                          // 1. Agrupar las tareas
+                          final mapaGrupos = <String, List<Tarea>>{};
+                          for (var tarea in tareas) {
+                            if (!mapaGrupos.containsKey(tarea.grupo)) mapaGrupos[tarea.grupo] = [];
+                            mapaGrupos[tarea.grupo]!.add(tarea);
+                          }
 
-                    // 2. Ordenar los grupos (Asegurando que 'General' quede siempre hasta arriba)
-                    final listaGrupos = mapaGrupos.keys.toList();
-                    listaGrupos.sort((a, b) {
-                      if (a == 'General') return -1;
-                      if (b == 'General') return 1;
-                      return a.compareTo(b);
-                    });
+                          // 2. Ordenar los grupos (Asegurando que 'General' quede siempre hasta arriba)
+                          final listaGrupos = mapaGrupos.keys.toList();
+                          listaGrupos.sort((a, b) {
+                            if (a == 'General') return -1;
+                            if (b == 'General') return 1;
+                            return a.compareTo(b);
+                          });
 
-                    // 3. Dibujar la lista con Animaciones y Colores Dinámicos
-                    return ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                      itemCount: listaGrupos.length,
-                      itemBuilder: (context, index) {
-                        final grupo = listaGrupos[index];
-                        final tareasDelGrupo = mapaGrupos[grupo]!;
-                        final isColapsado = _gruposColapsados.contains(grupo);
+                          // 3. Dibujar la lista con Animaciones y Colores Dinámicos
+                          return ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                            itemCount: listaGrupos.length,
+                            itemBuilder: (context, index) {
+                              final grupo = listaGrupos[index];
+                              final tareasDelGrupo = mapaGrupos[grupo]!;
+                              final isColapsado = _gruposColapsados.contains(grupo);
 
-                        // --- COLOR DINÁMICO DEL TEMA ---
-                        // Extraemos el color de la interfaz de Flutter. 
-                        // (Si tu objeto 'temaActual' tiene una propiedad de color, por ejemplo 'temaActual.color',
-                        // puedes reemplazar esta variable directamente por ese valor).
-                        final colorTema = colorPrincipal;
+                              // --- COLOR DINÁMICO DEL TEMA ---
+                              // Extraemos el color de la interfaz de Flutter.
+                              // (Si tu objeto 'temaActual' tiene una propiedad de color, por ejemplo 'temaActual.color',
+                              // puedes reemplazar esta variable directamente por ese valor).
+                              final colorTema = colorPrincipal;
 
-                        return _GrupoTareasSection(
-                          key: ValueKey(grupo),
-                          grupo: grupo,
-                          tareas: tareasDelGrupo,
-                          isColapsado: isColapsado,
-                          esPrimero: index == 0,
-                          colorTema: colorTema,
-                          temaActual: temaActual,
-                          onToggle: () {
-                            setState(() {
-                              if (isColapsado) {
-                                _gruposColapsados.remove(grupo); // Abrir
-                              } else {
-                                _gruposColapsados.add(grupo); // Minimizar
-                              }
-                            });
-                          },
-                        );
-                      },
-                    );
-                  }(),
-            const _SeccionRutinasHoy(), 
-            _buildTabNotas(colorPrincipal, notasGuardadas), 
+                              return _GrupoTareasSection(
+                                key: ValueKey(grupo),
+                                grupo: grupo,
+                                tareas: tareasDelGrupo,
+                                isColapsado: isColapsado,
+                                esPrimero: index == 0,
+                                colorTema: colorTema,
+                                temaActual: temaActual,
+                                onToggle: () {
+                                  setState(() {
+                                    if (isColapsado) {
+                                      _gruposColapsados.remove(grupo); // Abrir
+                                    } else {
+                                      _gruposColapsados.add(grupo); // Minimizar
+                                    }
+                                  });
+                                },
+                              );
+                            },
+                          );
+                        }(),
+                ),
+              ],
+            ),
+            const _SeccionRutinasHoy(),
+            _buildTabNotas(colorPrincipal, notasGuardadas),
           ],
         ),
       ),
@@ -1132,12 +1171,24 @@ class _SeccionRutinasHoy extends ConsumerWidget {
       children: [
         Padding(
           padding: const EdgeInsets.all(20),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Hoy es ${DateFormat('EEEE', 'es_ES').format(DateTime.now())}', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: colorPrincipal)),
-              const SizedBox(height: 4),
-              Text(rutinasDeHoy.isEmpty ? 'No hay hábitos programados.' : 'Tienes ${rutinasDeHoy.length} hábitos para hoy.', style: TextStyle(fontSize: 15, color: Colors.grey.shade600)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Hoy es ${DateFormat('EEEE', 'es_ES').format(DateTime.now())}', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: colorPrincipal)),
+                    const SizedBox(height: 4),
+                    Text(rutinasDeHoy.isEmpty ? 'No hay hábitos programados.' : 'Tienes ${rutinasDeHoy.length} hábitos para hoy.', style: TextStyle(fontSize: 15, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.mode_edit_outline_rounded, color: colorPrincipal),
+                tooltip: 'Configurar Horario Semanal',
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => GestorRutinasScreen(colorTema: colorPrincipal))),
+              ),
             ],
           ),
         ),
