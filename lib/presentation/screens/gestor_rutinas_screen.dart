@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/rutina_provider.dart';
 import '../../providers/tema_provider.dart';
+import '../../core/app_messenger.dart';
 import 'rutina_form_screen.dart';
 
 class GestorRutinasScreen extends ConsumerWidget {
@@ -51,6 +52,11 @@ class GestorRutinasScreen extends ConsumerWidget {
                       onPressed: () async {
                         // Aquí podrías agregar un diálogo de confirmación si gustas
                         await ref.read(rutinaProvider.notifier).eliminarRutina(r.id);
+                        mostrarSnackBarSimple(
+                          mensaje: 'Rutina eliminada',
+                          colorFondo: colorTema,
+                          colorTexto: colorSobreTema,
+                        );
                       },
                     ),
                     onTap: () {

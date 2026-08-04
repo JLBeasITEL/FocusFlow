@@ -82,6 +82,10 @@ class RutinaCard extends ConsumerWidget {
                   // Gracias al await, este código no continúa hasta que TODO eso termine.
                   await ref.read(rutinaProvider.notifier).toggleCompletada(rutina.id);
 
+                  // El await anterior puede tardar (guardado, notificaciones); si el
+                  // usuario ya salió de la pantalla, el context ya no es válido para UI.
+                  if (!context.mounted) return;
+
                   // PASO 2: Solo si el usuario ACABA de marcarla como completada
                   // (no si la está desmarcando), revisamos si merece festejo por racha.
                   if (valor == true) {

@@ -117,7 +117,7 @@ class TareaNotifier extends Notifier<List<Tarea>> {
 
   void deleteTarea(String id) {
     state = state.where((t) => t.id != id).toList();
-    _guardarTareas(); 
+    _guardarTareas();
     NotificacionesService().cancelarAlerta(id);
   }
 

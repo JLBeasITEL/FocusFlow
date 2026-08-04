@@ -48,8 +48,24 @@ class NotaNotifier extends Notifier<List<NotaPostIt>> {
     _guardarNotas(nuevoEstado);
   }
 
-  void eliminarNota(String id) {
-    final nuevoEstado = state.where((n) => n.id != id).toList();
+  // Elimina y devuelve los datos necesarios para deshacer (el elemento tal
+  // cual estaba, con su checklist completa, y su índice original). Devuelve
+  // null si el id no existe.
+  ({NotaPostIt elemento, int indice})? eliminarConDeshacer(String id) {
+    final indice = state.indexWhere((n) => n.id == id);
+    if (indice == -1) return null;
+    final elemento = state[indice];
+    final nuevoEstado = List<NotaPostIt>.from(state)..removeAt(indice);
+    state = nuevoEstado;
+    _guardarNotas(nuevoEstado);
+    return (elemento: elemento, indice: indice);
+  }
+
+  // Reinserta una nota previamente eliminada en su posición original, para
+  // el botón "Deshacer" del SnackBar de borrado.
+  void restaurar(NotaPostIt elemento, int indice) {
+    final nuevoEstado = List<NotaPostIt>.from(state);
+    nuevoEstado.insert(indice.clamp(0, nuevoEstado.length), elemento);
     state = nuevoEstado;
     _guardarNotas(nuevoEstado);
   }

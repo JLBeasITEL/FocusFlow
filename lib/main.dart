@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
@@ -8,28 +9,43 @@ import 'services/notificaciones_service.dart';
 import 'services/widget_tareas_service.dart';
 import 'services/widget_rutinas_service.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
+import 'core/app_messenger.dart';
 
 // 1. Creamos una llave global para navegar desde cualquier parte (incluso en segundo plano)
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  // Sin este zone, cualquier excepción que ocurra fuera del ciclo de build
+  // normal (Future.delayed, Timer, callbacks diferidos como el de "Deshacer")
+  // no la atrapa el framework de Flutter: sube como error no capturado y en
+  // una app instalada eso se traduce en un cierre abrupto sin ningún log que
+  // lo explique. Con runZonedGuarded queda registrada y la app sigue viva.
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  await AndroidAlarmManager.initialize();
-  await initializeDateFormatting('es', null);
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      debugPrint('FlutterError capturado: ${details.exceptionAsString()}');
+    };
 
-  // Es vital pasar la llave aquí
-  await NotificacionesService().init(navigatorKey);
+    await AndroidAlarmManager.initialize();
+    await initializeDateFormatting('es', null);
 
-  // Registra el callback que atiende los clicks en los íconos interactivos
-  // de los widgets de pantalla de inicio (ej. alternar modo en el widget de Tareas).
-  await HomeWidget.registerInteractivityCallback(tareasWidgetBackgroundCallback);
+    // Es vital pasar la llave aquí
+    await NotificacionesService().init(navigatorKey);
 
-  runApp(
-    ProviderScope(
-      child: MyApp(),
-    ),
-  );
+    // Registra el callback que atiende los clicks en los íconos interactivos
+    // de los widgets de pantalla de inicio (ej. alternar modo en el widget de Tareas).
+    await HomeWidget.registerInteractivityCallback(tareasWidgetBackgroundCallback);
+
+    runApp(
+      ProviderScope(
+        child: MyApp(),
+      ),
+    );
+  }, (error, stackTrace) {
+    debugPrint('Error no capturado fuera del árbol de widgets: $error\n$stackTrace');
+  });
 }
 
 class MyApp extends StatefulWidget {
@@ -80,6 +96,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
+      scaffoldMessengerKey: scaffoldMessengerKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
