@@ -144,6 +144,7 @@ class BackupService {
     // Recargamos cada provider desde disco para que la UI refleje los datos
     // recién importados sin necesidad de reiniciar la app.
     await ref.read(tareaProvider.notifier).recargarDesdeDisco();
+    await ref.read(ordenGruposProvider.notifier).recargarDesdeDisco();
     await ref.read(notaProvider.notifier).recargarDesdeDisco();
     await ref.read(temaProvider.notifier).recargarDesdeDisco();
     await ref.read(sonidoProvider.notifier).recargarDesdeDisco();

@@ -48,6 +48,26 @@ class Rutina {
   // ============================================================
   final DateTime? ultimaFechaProgramada;
 
+  // ============================================================
+  // NUEVO CAMPO: idsPorOcurrencia
+  // ------------------------------------------------------------
+  // Mapa de fecha (yyyy-MM-dd) -> lista de IDs de notificación
+  // programados para ESA fecha específica. Antes, toggleCompletada
+  // cancelaba TODA la lista notificacionesActivas (el colchón
+  // completo de varias semanas, de TODOS los días de la rutina) al
+  // marcar como completada, pero dejaba ultimaFechaProgramada sin
+  // tocar — así que _rellenarColchonSiHaceFalta creía que el
+  // colchón seguía lleno y no reprogramaba nada, dejando la rutina
+  // sin ninguna alarma real hasta que la fecha (obsoleta) del
+  // colchón se acercara a menos de 7 días. Esto es lo que hacía que
+  // las rutinas dejaran de sonar aproximadamente una semana después
+  // de completarlas por primera vez.
+  //
+  // Con este mapa, toggleCompletada puede cancelar EXACTAMENTE los
+  // IDs de hoy sin tocar el resto del colchón.
+  // ============================================================
+  final Map<String, List<int>> idsPorOcurrencia;
+
   Rutina({
     required this.id,
     required this.titulo,
@@ -61,6 +81,7 @@ class Rutina {
     this.esFlexible = false,
     this.notificacionesActivas = const [], // Por defecto, ninguna notificación programada aún
     this.ultimaFechaProgramada,
+    this.idsPorOcurrencia = const {},
   });
 
   Rutina copyWith({
@@ -76,6 +97,7 @@ class Rutina {
     bool? esFlexible,
     List<int>? notificacionesActivas,
     DateTime? ultimaFechaProgramada,
+    Map<String, List<int>>? idsPorOcurrencia,
   }) {
     return Rutina(
       id: id ?? this.id,
@@ -90,6 +112,7 @@ class Rutina {
       esFlexible: esFlexible ?? this.esFlexible,
       notificacionesActivas: notificacionesActivas ?? this.notificacionesActivas,
       ultimaFechaProgramada: ultimaFechaProgramada ?? this.ultimaFechaProgramada,
+      idsPorOcurrencia: idsPorOcurrencia ?? this.idsPorOcurrencia,
     );
   }
 
@@ -110,6 +133,7 @@ class Rutina {
       // Guardamos la lista de IDs reales para poder recuperarla al reabrir la app
       'notificacionesActivas': notificacionesActivas,
       'ultimaFechaProgramada': ultimaFechaProgramada?.toIso8601String(),
+      'idsPorOcurrencia': idsPorOcurrencia,
     };
   }
 
@@ -156,6 +180,12 @@ class Rutina {
       ultimaFechaProgramada: json['ultimaFechaProgramada'] != null
           ? DateTime.tryParse(json['ultimaFechaProgramada'] as String)
           : null,
+      // Rutinas guardadas ANTES de este campo no lo tendrán: mapa vacío
+      // fuerza (ver _rellenarColchonSiHaceFalta) un reset completo único
+      // que lo siembra, igual que con ultimaFechaProgramada.
+      idsPorOcurrencia: (json['idsPorOcurrencia'] as Map<String, dynamic>?)
+              ?.map((k, v) => MapEntry(k, (v as List<dynamic>).map((e) => e as int).toList())) ??
+          const {},
     );
   }
 }

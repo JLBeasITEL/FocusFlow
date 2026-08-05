@@ -36,7 +36,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   int _currentIndex = 0; 
   //Memoria de los grupos que el usuario ha minimizado
   final Set<String> _gruposColapsados = {};
-  
+  // Grupo que se está arrastrando en este momento para reordenarlo (o null
+  // si no hay ningún arrastre en curso). Se usa para colapsarlo mientras
+  // se mueve y devolverlo a su estado previo al soltarlo.
+  String? _grupoEnArrastre;
+
   // Paleta de 12 colores pastel
   final List<Color> _coloresPostIt = [
     const Color(0xFFFEF08A), const Color(0xFFFFF7D1),
@@ -598,8 +602,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     final tareasOriginales = ref.watch(tareaProvider);
     final tipoOrden = ref.watch(ordenProvider);
+    final vistaAgrupada = ref.watch(vistaAgrupadaProvider);
+    final ordenGrupos = ref.watch(ordenGruposProvider);
     final temaActual = ref.watch(temaProvider);
-    final notasGuardadas = ref.watch(notaProvider); 
+    final notasGuardadas = ref.watch(notaProvider);
 
     List<Tarea> tareas = List.from(tareasOriginales);
 
@@ -720,46 +726,82 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           children: [
             Column(
               children: [
-                // Selector de orden: debajo de la pestaña "Tareas" y encima de la lista
+                // Selector de orden y de vista (agrupada / todas juntas):
+                // debajo de la pestaña "Tareas" y encima de la lista
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: PopupMenuButton<TipoOrden>(
-                      tooltip: 'Ordenar',
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      onSelected: (TipoOrden result) => ref.read(ordenProvider.notifier).cambiarOrden(result),
-                      itemBuilder: (BuildContext context) => <PopupMenuEntry<TipoOrden>>[
-                        const PopupMenuItem<TipoOrden>(value: TipoOrden.creacion, child: Row(children: [Icon(Icons.format_list_bulleted, size: 20, color: Colors.grey), SizedBox(width: 12), Text('Orden original')])),
-                        const PopupMenuItem<TipoOrden>(value: TipoOrden.alfabetico, child: Row(children: [Icon(Icons.sort_by_alpha, size: 20, color: Colors.blueGrey), SizedBox(width: 12), Text('Alfabético (A-Z)')])),
-                        const PopupMenuItem<TipoOrden>(value: TipoOrden.urgencia, child: Row(children: [Icon(Icons.flag, size: 20, color: Colors.redAccent), SizedBox(width: 12), Text('Mayor urgencia')])),
-                        const PopupMenuItem<TipoOrden>(value: TipoOrden.fecha, child: Row(children: [Icon(Icons.event_available, size: 20, color: Colors.orangeAccent), SizedBox(width: 12), Text('Próximas a vencer')])),
-                      ],
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: colorPrincipal.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.sort_rounded, size: 18, color: colorPrincipal),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Orden: ${_labelOrden(tipoOrden)}',
-                              style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.w600, fontSize: 13),
-                            ),
-                            Icon(Icons.arrow_drop_down_rounded, color: colorPrincipal),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        PopupMenuButton<TipoOrden>(
+                          tooltip: 'Ordenar',
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          onSelected: (TipoOrden result) => ref.read(ordenProvider.notifier).cambiarOrden(result),
+                          itemBuilder: (BuildContext context) => <PopupMenuEntry<TipoOrden>>[
+                            const PopupMenuItem<TipoOrden>(value: TipoOrden.creacion, child: Row(children: [Icon(Icons.format_list_bulleted, size: 20, color: Colors.grey), SizedBox(width: 12), Text('Orden original')])),
+                            const PopupMenuItem<TipoOrden>(value: TipoOrden.alfabetico, child: Row(children: [Icon(Icons.sort_by_alpha, size: 20, color: Colors.blueGrey), SizedBox(width: 12), Text('Alfabético (A-Z)')])),
+                            const PopupMenuItem<TipoOrden>(value: TipoOrden.urgencia, child: Row(children: [Icon(Icons.flag, size: 20, color: Colors.redAccent), SizedBox(width: 12), Text('Mayor urgencia')])),
+                            const PopupMenuItem<TipoOrden>(value: TipoOrden.fecha, child: Row(children: [Icon(Icons.event_available, size: 20, color: Colors.orangeAccent), SizedBox(width: 12), Text('Próximas a vencer')])),
                           ],
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: colorPrincipal.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.sort_rounded, size: 18, color: colorPrincipal),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Orden: ${_labelOrden(tipoOrden)}',
+                                  style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.w600, fontSize: 13),
+                                ),
+                                Icon(Icons.arrow_drop_down_rounded, color: colorPrincipal),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () => ref.read(vistaAgrupadaProvider.notifier).cambiarVista(!vistaAgrupada),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: colorPrincipal.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(vistaAgrupada ? Icons.folder_rounded : Icons.view_agenda_rounded, size: 18, color: colorPrincipal),
+                                const SizedBox(width: 6),
+                                Text(
+                                  vistaAgrupada ? 'Agrupadas' : 'Todas juntas',
+                                  style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.w600, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
                 Expanded(
                   child: tareas.isEmpty
                       ? Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withOpacity(0.6))))
+                      : !vistaAgrupada
+                      ? ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                          itemCount: tareas.length,
+                          itemBuilder: (context, index) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: TareaCard(tarea: tareas[index], tema: temaActual),
+                          ),
+                        )
                       : () {
                           // 1. Agrupar las tareas
                           final mapaGrupos = <String, List<Tarea>>{};
@@ -768,18 +810,88 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             mapaGrupos[tarea.grupo]!.add(tarea);
                           }
 
-                          // 2. Ordenar los grupos (Asegurando que 'General' quede siempre hasta arriba)
+                          // 2. Ordenar los grupos según el orden que el usuario definió
+                          // arrastrándolos (ordenGruposProvider). Un grupo que aún no
+                          // esté registrado ahí (caso raro) queda al final, alfabético.
                           final listaGrupos = mapaGrupos.keys.toList();
                           listaGrupos.sort((a, b) {
-                            if (a == 'General') return -1;
-                            if (b == 'General') return 1;
-                            return a.compareTo(b);
+                            final ia = ordenGrupos.indexOf(a);
+                            final ib = ordenGrupos.indexOf(b);
+                            if (ia == -1 && ib == -1) return a.compareTo(b);
+                            if (ia == -1) return 1;
+                            if (ib == -1) return -1;
+                            return ia.compareTo(ib);
                           });
 
-                          // 3. Dibujar la lista con Animaciones y Colores Dinámicos
-                          return ListView.builder(
+                          // 3. Dibujar la lista con Animaciones y Colores Dinámicos.
+                          // Es reordenable: el usuario puede arrastrar la cabecera de
+                          // cada carpeta para cambiar el orden de los grupos.
+                          return ReorderableListView.builder(
                             padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                            buildDefaultDragHandles: false,
                             itemCount: listaGrupos.length,
+                            onReorderStart: (index) {
+                              setState(() => _grupoEnArrastre = listaGrupos[index]);
+                            },
+                            onReorderEnd: (_) {
+                              setState(() => _grupoEnArrastre = null);
+                            },
+                            onReorder: (oldIndex, newIndex) {
+                              ref.read(ordenGruposProvider.notifier).reordenarVisibles(listaGrupos, oldIndex, newIndex);
+                            },
+                            // Recuadro que se ve mientras se arrastra una carpeta:
+                            // en vez de reusar "child" (que puede traer todas sus
+                            // tareas visibles y tapar la pantalla en grupos grandes),
+                            // se dibuja solo la cabecera de la carpeta —el mismo
+                            // contenido colapsado—, con esquinas redondeadas y la
+                            // elevación animada que ReorderableListView usa por
+                            // defecto para su recuadro de arrastre.
+                            proxyDecorator: (child, index, animation) {
+                              final grupoArrastrado = listaGrupos[index];
+                              final cantidadTareas = mapaGrupos[grupoArrastrado]!.length;
+                              return AnimatedBuilder(
+                                animation: animation,
+                                builder: (context, _) {
+                                  final double t = Curves.easeInOut.transform(animation.value);
+                                  final double elevacion = lerpDouble(0, 6, t)!;
+                                  return Material(
+                                    elevation: elevacion,
+                                    borderRadius: BorderRadius.circular(16),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.folder_rounded, size: 24, color: colorPrincipal),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              grupoArrastrado,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: temaActual.colorTituloGrupo),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: colorPrincipal.withOpacity(0.15),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Text(
+                                              '$cantidadTareas',
+                                              style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.bold, fontSize: 13),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Icon(Icons.drag_indicator_rounded, size: 20, color: colorPrincipal.withOpacity(0.4)),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
                             itemBuilder: (context, index) {
                               final grupo = listaGrupos[index];
                               final tareasDelGrupo = mapaGrupos[grupo]!;
@@ -793,9 +905,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
                               return _GrupoTareasSection(
                                 key: ValueKey(grupo),
+                                indice: index,
                                 grupo: grupo,
                                 tareas: tareasDelGrupo,
                                 isColapsado: isColapsado,
+                                arrastrando: _grupoEnArrastre == grupo,
                                 esPrimero: index == 0,
                                 colorTema: colorTema,
                                 temaActual: temaActual,
@@ -829,9 +943,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 // =====================================================================
 
 class _GrupoTareasSection extends StatefulWidget {
+  final int indice;
   final String grupo;
   final List<Tarea> tareas;
   final bool isColapsado;
+  // true mientras el usuario arrastra esta carpeta para reordenarla: fuerza
+  // el colapso temporalmente sin tocar la preferencia manual (isColapsado).
+  final bool arrastrando;
   final bool esPrimero;
   final Color colorTema;
   final TemaApp temaActual;
@@ -839,9 +957,11 @@ class _GrupoTareasSection extends StatefulWidget {
 
   const _GrupoTareasSection({
     super.key,
+    required this.indice,
     required this.grupo,
     required this.tareas,
     required this.isColapsado,
+    required this.arrastrando,
     required this.esPrimero,
     required this.colorTema,
     required this.temaActual,
@@ -855,24 +975,28 @@ class _GrupoTareasSection extends StatefulWidget {
 class _GrupoTareasSectionState extends State<_GrupoTareasSection> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
+  bool _colapsadoEfectivo(_GrupoTareasSection w) => w.isColapsado || w.arrastrando;
+
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 280),
-      value: widget.isColapsado ? 0.0 : 1.0,
+      value: _colapsadoEfectivo(widget) ? 0.0 : 1.0,
     );
   }
 
   @override
   void didUpdateWidget(covariant _GrupoTareasSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isColapsado != oldWidget.isColapsado) {
-      if (widget.isColapsado) {
-        _controller.reverse(); // Cierra con cascada ascendente
+    final eraColapsado = _colapsadoEfectivo(oldWidget);
+    final esColapsado = _colapsadoEfectivo(widget);
+    if (eraColapsado != esColapsado) {
+      if (esColapsado) {
+        _controller.reverse(); // Cierra con cascada ascendente (manual o por arrastre)
       } else {
-        _controller.forward(); // Abre con cascada descendente
+        _controller.forward(); // Abre con cascada descendente (manual o al soltar el arrastre)
       }
     }
   }
@@ -890,6 +1014,9 @@ class _GrupoTareasSectionState extends State<_GrupoTareasSection> with SingleTic
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // --- CABECERA ANIMADA E INTERACTIVA ---
+        // El tap en cualquier parte de la cabecera sigue abriendo/cerrando
+        // la carpeta. Arrastrar (para reordenar) solo se activa desde el
+        // ícono de 6 puntos, envuelto abajo en ReorderableDragStartListener.
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onToggle,
@@ -924,7 +1051,18 @@ class _GrupoTareasSectionState extends State<_GrupoTareasSection> with SingleTic
                     style: TextStyle(color: widget.colorTema, fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
+
+                // Ícono de arrastre (única zona que inicia el reordenamiento):
+                // al presionarlo y mover el dedo, la carpeta se colapsa sola
+                // mientras se arrastra y se reabre automáticamente al soltarla.
+                ReorderableDragStartListener(
+                  index: widget.indice,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Icon(Icons.drag_indicator_rounded, size: 20, color: widget.colorTema.withOpacity(0.4)),
+                  ),
+                ),
 
                 // Flecha con rotación animada (180 grados al abrir/cerrar)
                 AnimatedBuilder(

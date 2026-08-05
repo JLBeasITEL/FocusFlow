@@ -29,22 +29,30 @@ class PantallaAlarma extends ConsumerStatefulWidget {
 class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
   // Configuración del slider de posponer
   final List<int> _opcionesMinutos = [5, 10, 15, 30, 45, 60];
-  int _snoozeIndex = 0; 
-  bool _isPosponeSliderVisible = false; 
+  int _snoozeIndex = 0;
+  bool _isPosponeSliderVisible = false;
+
+  // Canal nativo que permite mostrar esta pantalla sobre el bloqueo del
+  // dispositivo SOLO mientras la alarma está visible. Ver MainActivity.kt.
+  static const _canalAlarma = MethodChannel('com.example.app_tareas/alarm_screen');
 
   // --- 1. ENCENDER LA PANTALLA AL INICIAR ---
   @override
   void initState() {
     super.initState();
     // Obliga a la pantalla a mantenerse encendida mientras este widget exista
-    WakelockPlus.enable(); 
+    WakelockPlus.enable();
+    // Permite que esta pantalla se muestre encima del bloqueo (como una alarma normal)
+    _canalAlarma.invokeMethod('showOverLockscreen').catchError((_) {});
   }
 
   // --- 2. PERMITIR QUE SE APAGUE AL CERRAR ---
   @override
   void dispose() {
     // Libera el bloqueo para no gastar batería cuando la alarma se cierre
-    WakelockPlus.disable(); 
+    WakelockPlus.disable();
+    // Restaura el comportamiento normal: la app vuelve a respetar el bloqueo
+    _canalAlarma.invokeMethod('hideOverLockscreen').catchError((_) {});
     super.dispose();
   }
 

@@ -131,7 +131,7 @@ class SettingsScreen extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'FocusFlow v2.0.5',
+                  'FocusFlow v2.0.8',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,

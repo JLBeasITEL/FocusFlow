@@ -8,8 +8,6 @@ import '../services/widget_tareas_service.dart';
 // 1. Usamos la sintaxis moderna 'Notifier' de Riverpod 2.0
 class TareaNotifier extends Notifier<List<Tarea>> {
   static const String _storageKey = 'lista_tareas_v1';
-  static const String _gruposKey = 'lista_grupos_v1';
-  List<String> _gruposGuardados = ['General'];
 
   @override
   List<Tarea> build() {
@@ -23,11 +21,6 @@ class TareaNotifier extends Notifier<List<Tarea>> {
   Future<void> _cargarTareas() async {
     final prefs = await SharedPreferences.getInstance();
     final String? tareasJson = prefs.getString(_storageKey);
-    final String? gruposJson = prefs.getString(_gruposKey);
-
-    if (gruposJson != null) {
-      _gruposGuardados = List<String>.from(jsonDecode(gruposJson));
-    }
 
     if (tareasJson != null) {
       final List<dynamic> listaDecodificada = jsonDecode(tareasJson);
@@ -127,8 +120,9 @@ class TareaNotifier extends Notifier<List<Tarea>> {
 
   List<String> obtenerGruposExistentes() {
     final gruposEnUso = state.map((t) => t.grupo).toSet();
-    // Combinamos los grupos guardados con los que están en uso
-    final todosLosGrupos = <String>{..._gruposGuardados, ...gruposEnUso}.toList();
+    // Combinamos el orden de grupos guardado con los que están en uso
+    final gruposGuardados = ref.read(ordenGruposProvider);
+    final todosLosGrupos = <String>{...gruposGuardados, ...gruposEnUso}.toList();
     if (!todosLosGrupos.contains('General')) {
       todosLosGrupos.insert(0, 'General');
     }
@@ -136,11 +130,7 @@ class TareaNotifier extends Notifier<List<Tarea>> {
   }
 
   Future<void> registrarGrupoPersistente(String nuevoGrupo) async {
-    if (!_gruposGuardados.contains(nuevoGrupo)) {
-      _gruposGuardados.add(nuevoGrupo);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_gruposKey, jsonEncode(_gruposGuardados));
-    }
+    await ref.read(ordenGruposProvider.notifier).agregar(nuevoGrupo);
   }
 
   // Renombra un grupo existente y reasigna todas las tareas que lo usaban.
@@ -154,12 +144,7 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     ];
     _guardarTareas();
 
-    _gruposGuardados.remove(grupoAnterior);
-    if (!_gruposGuardados.contains(grupoNuevo)) {
-      _gruposGuardados.add(grupoNuevo);
-    }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_gruposKey, jsonEncode(_gruposGuardados));
+    await ref.read(ordenGruposProvider.notifier).renombrar(grupoAnterior, grupoNuevo);
   }
 
   // Elimina un grupo; las tareas que lo usaban pasan a 'General'.
@@ -173,9 +158,7 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     ];
     _guardarTareas();
 
-    _gruposGuardados.remove(grupo);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_gruposKey, jsonEncode(_gruposGuardados));
+    await ref.read(ordenGruposProvider.notifier).eliminar(grupo);
   }
 
   // --- MÉTODOS DE SUBTAREAS ---
@@ -249,13 +232,104 @@ final tareaProvider = NotifierProvider<TareaNotifier, List<Tarea>>(() {
   return TareaNotifier();
 });
 
+// --- ORDEN DE GRUPOS (CARPETAS) ---
+// Guarda el orden en que el usuario quiere ver los grupos de tareas.
+// Vive en su propio provider (y no como campo privado de TareaNotifier)
+// para que la UI pueda observarlo (ref.watch) y repintarse cuando el
+// usuario arrastra un grupo para reordenarlo.
+class OrdenGruposNotifier extends Notifier<List<String>> {
+  static const String _key = 'lista_grupos_v1';
+
+  @override
+  List<String> build() {
+    _cargarOrden();
+    return ['General'];
+  }
+
+  Future<void> _cargarOrden() async {
+    final prefs = await SharedPreferences.getInstance();
+    final gruposJson = prefs.getString(_key);
+    if (gruposJson != null) {
+      state = List<String>.from(jsonDecode(gruposJson));
+    }
+  }
+
+  Future<void> _guardar() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(state));
+  }
+
+  // Fuerza una relectura completa desde SharedPreferences. Se usa tras
+  // restaurar un respaldo.
+  Future<void> recargarDesdeDisco() async {
+    await _cargarOrden();
+  }
+
+  // Agrega un grupo nuevo al final del orden guardado, si aún no existe.
+  Future<void> agregar(String grupo) async {
+    if (state.contains(grupo)) return;
+    state = [...state, grupo];
+    await _guardar();
+  }
+
+  Future<void> renombrar(String anterior, String nuevo) async {
+    if (!state.contains(anterior)) {
+      await agregar(nuevo);
+      return;
+    }
+    state = [for (final g in state) if (g == anterior) nuevo else g];
+    await _guardar();
+  }
+
+  Future<void> eliminar(String grupo) async {
+    state = state.where((g) => g != grupo).toList();
+    await _guardar();
+  }
+
+  // Reordena el grupo arrastrado dentro de la lista completa de grupos,
+  // a partir de oldIndex/newIndex recibidos de ReorderableListView, que
+  // apuntan a "visibles" (los grupos que tienen tareas y se ven en pantalla,
+  // que pueden ser menos que el total de grupos guardados). Los grupos
+  // ocultos (sin tareas visibles ahora) mantienen su posición relativa: se
+  // ubica al grupo arrastrado justo después del grupo visible que quedó
+  // inmediatamente antes de él tras el arrastre.
+  Future<void> reordenarVisibles(List<String> visiblesAntes, int oldIndex, int newIndex) async {
+    if (oldIndex == newIndex) return;
+    final grupoMovido = visiblesAntes[oldIndex];
+
+    final visiblesDespues = List<String>.from(visiblesAntes);
+    var destino = newIndex;
+    if (destino > oldIndex) destino -= 1;
+    visiblesDespues.removeAt(oldIndex);
+    visiblesDespues.insert(destino, grupoMovido);
+
+    final indiceEnVisibles = visiblesDespues.indexOf(grupoMovido);
+    final anterior = indiceEnVisibles == 0 ? null : visiblesDespues[indiceEnVisibles - 1];
+
+    final listaCompleta = List<String>.from(state)..remove(grupoMovido);
+    if (anterior == null) {
+      listaCompleta.insert(0, grupoMovido);
+    } else {
+      final posAnterior = listaCompleta.indexOf(anterior);
+      listaCompleta.insert(posAnterior + 1, grupoMovido);
+    }
+
+    state = listaCompleta;
+    await _guardar();
+  }
+}
+
+final ordenGruposProvider = NotifierProvider<OrdenGruposNotifier, List<String>>(() {
+  return OrdenGruposNotifier();
+});
+
 // --- PROVIDERS DE UI MODERNOS ---
 
 enum TipoOrden { creacion, alfabetico, urgencia, fecha }
 
 class OrdenNotifier extends Notifier<TipoOrden> {
   @override
-  TipoOrden build() => TipoOrden.creacion; 
+  TipoOrden build() => TipoOrden.creacion;
 
   void cambiarOrden(TipoOrden nuevo) {
     state = nuevo;
@@ -263,3 +337,32 @@ class OrdenNotifier extends Notifier<TipoOrden> {
 }
 
 final ordenProvider = NotifierProvider<OrdenNotifier, TipoOrden>(() => OrdenNotifier());
+
+// --- VISTA AGRUPADA / TODAS JUNTAS ---
+// Controla si la lista de tareas se muestra separada por grupos (carpetas)
+// o como una sola lista plana, sin importar el grupo de cada tarea.
+class VistaAgrupadaNotifier extends Notifier<bool> {
+  static const String _key = 'tareas_vista_agrupada';
+
+  @override
+  bool build() {
+    _cargarPreferencia();
+    return true; // Por defecto se muestran agrupadas, como hasta ahora
+  }
+
+  Future<void> _cargarPreferencia() async {
+    final prefs = await SharedPreferences.getInstance();
+    final guardado = prefs.getBool(_key);
+    if (guardado != null) state = guardado;
+  }
+
+  Future<void> cambiarVista(bool agrupada) async {
+    state = agrupada;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_key, agrupada);
+  }
+}
+
+final vistaAgrupadaProvider = NotifierProvider<VistaAgrupadaNotifier, bool>(() {
+  return VistaAgrupadaNotifier();
+});

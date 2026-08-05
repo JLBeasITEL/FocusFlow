@@ -98,7 +98,24 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       for (var rutina in state) {
         if (rutina.activa) {
           totalRutinasActivas++;
-          final huboTrabajoReal = await _rellenarColchonSiHaceFalta(rutina);
+          // Marcamos la rutina como "en proceso" mientras se rellena su
+          // colchón. Sin esto, si el usuario la elimina justo en este
+          // instante (la pantalla de gestión ya está disponible aunque
+          // este relleno automático siga corriendo en segundo plano),
+          // eliminarRutina podría capturar notificacionesActivas ANTES de
+          // que este relleno le agregue los IDs recién programados,
+          // cancelar solo los viejos, y borrar la rutina del estado —
+          // dejando esas alarmas nuevas programadas en Android para
+          // siempre, sin ningún registro en la app que permita
+          // cancelarlas. Ver la nota completa en eliminarRutina.
+          if (_idsEnProceso.contains(rutina.id)) continue;
+          _idsEnProceso.add(rutina.id);
+          bool huboTrabajoReal = false;
+          try {
+            huboTrabajoReal = await _rellenarColchonSiHaceFalta(rutina);
+          } finally {
+            _idsEnProceso.remove(rutina.id);
+          }
           if (huboTrabajoReal) rutinasConTrabajoReal++;
         }
       }
@@ -158,11 +175,15 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   // patrón "??" de copyWith). Es el paso final de
   // _resetCompletoNotificacionesRutina: "anotar qué quedó realmente
   // programado, y hasta qué fecha llega el colchón".
-  Future<void> _guardarListaDeIds(String rutinaId, List<int> ids, {DateTime? ultimaFechaProgramada}) async {
+  Future<void> _guardarListaDeIds(String rutinaId, List<int> ids, {DateTime? ultimaFechaProgramada, Map<String, List<int>>? idsPorOcurrencia}) async {
     state = [
       for (final r in state)
         if (r.id == rutinaId)
-          r.copyWith(notificacionesActivas: ids, ultimaFechaProgramada: ultimaFechaProgramada)
+          r.copyWith(
+            notificacionesActivas: ids,
+            ultimaFechaProgramada: ultimaFechaProgramada,
+            idsPorOcurrencia: idsPorOcurrencia,
+          )
         else
           r,
     ];
@@ -176,13 +197,14 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   // AGREGA los IDs nuevos a los que ya había (sin tocar ni descartar los
   // existentes, que siguen siendo válidos y ya están sonando en Android)
   // y actualiza ultimaFechaProgramada al nuevo final del colchón.
-  Future<void> _agregarIdsYActualizarFecha(String rutinaId, List<int> idsNuevos, DateTime nuevaUltimaFecha) async {
+  Future<void> _agregarIdsYActualizarFecha(String rutinaId, List<int> idsNuevos, DateTime nuevaUltimaFecha, {Map<String, List<int>> idsPorOcurrenciaNuevos = const {}}) async {
     state = [
       for (final r in state)
         if (r.id == rutinaId)
           r.copyWith(
             notificacionesActivas: [...r.notificacionesActivas, ...idsNuevos],
             ultimaFechaProgramada: nuevaUltimaFecha,
+            idsPorOcurrencia: {...r.idsPorOcurrencia, ...idsPorOcurrenciaNuevos},
           )
         else
           r,
@@ -229,6 +251,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     final int baseId = _generarIdNumerico(rutina.id);
     final ahora = DateTime.now();
     final List<int> nuevosIds = []; // Aquí acumulamos TODO lo que programemos en este ciclo
+    final Map<String, List<int>> mapaPorFecha = {}; // IDs agrupados por fecha exacta (ver idsPorOcurrencia)
     DateTime? fechaMasLejana; // El final real del colchón: se guarda en ultimaFechaProgramada
 
     // ============================================================
@@ -297,6 +320,12 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           fechaMasLejana = fechaDeEstaSemana;
         }
 
+        // IDs de ESTA ocurrencia (todos sus recordatorios) agrupados por su
+        // fecha exacta, para que toggleCompletada pueda cancelar solo lo de
+        // hoy sin tocar el resto del colchón.
+        final String claveFecha = _claveFecha(fechaDeEstaSemana);
+        final List<int> idsDeEstaOcurrencia = mapaPorFecha.putIfAbsent(claveFecha, () => []);
+
         final fechaUnaHoraAntes = fechaDeEstaSemana.subtract(const Duration(hours: 1));
 
         // Aviso 1 hora antes
@@ -311,6 +340,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
             esInsistente: false,
           );
           nuevosIds.add(idDeEstaSemana + 1000);
+          idsDeEstaOcurrencia.add(idDeEstaSemana + 1000);
         }
 
         // Aviso a la hora exacta
@@ -324,6 +354,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           esInsistente: true,
         );
         nuevosIds.add(idDeEstaSemana);
+        idsDeEstaOcurrencia.add(idDeEstaSemana);
 
         // Recordatorios secundarios (cada hora, hasta 3 veces) de ESTA semana del colchón.
         final idsSecundarios = await NotificacionesService().programarRecordatoriosSecundarios(
@@ -332,6 +363,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           fechaDeEstaSemana,
         );
         nuevosIds.addAll(idsSecundarios);
+        idsDeEstaOcurrencia.addAll(idsSecundarios);
       }
     }
 
@@ -339,9 +371,13 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     // (las 4 semanas de colchón, para todos los días de la rutina) y la
     // fecha del occurrence más lejano, para saber con certeza qué cancelar
     // y cuándo hará falta rellenar la próxima vez.
-    await _guardarListaDeIds(rutina.id, nuevosIds, ultimaFechaProgramada: fechaMasLejana);
+    await _guardarListaDeIds(rutina.id, nuevosIds, ultimaFechaProgramada: fechaMasLejana, idsPorOcurrencia: mapaPorFecha);
     print("🔔 DEBUG: -- FINALIZÓ EL RESET COMPLETO. Nuevos IDs guardados: $nuevosIds | Colchón hasta: $fechaMasLejana --");
   }
+
+  // Formato yyyy-MM-dd, igual al usado para fechaCompletada, para usar
+  // como clave de idsPorOcurrencia.
+  String _claveFecha(DateTime fecha) => fecha.toIso8601String().split('T')[0];
 
   // ============================================================
   // TOP-UP INCREMENTAL — el camino que corre en cada apertura de la app
@@ -370,9 +406,15 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   // último reset completo (ver verificación detallada en el README).
   // ============================================================
   Future<bool> _rellenarColchonSiHaceFalta(Rutina rutina) async {
-    // a. Sembrar el campo la primera vez (o tras restaurar un respaldo).
-    if (rutina.ultimaFechaProgramada == null) {
-      print("🔔 DEBUG: 🌱 '${rutina.titulo}' sin ultimaFechaProgramada. Sembrando con reset completo.");
+    // a. Sembrar el campo la primera vez (o tras restaurar un respaldo), o
+    // MIGRAR una rutina que ya tiene notificaciones activas pero fue
+    // guardada antes de que existiera idsPorOcurrencia (ver nota extensa
+    // en el modelo Rutina sobre por qué las rutinas dejaban de sonar tras
+    // completarlas una vez). En ambos casos, un reset completo siembra el
+    // campo desde cero de forma segura.
+    if (rutina.ultimaFechaProgramada == null ||
+        (rutina.notificacionesActivas.isNotEmpty && rutina.idsPorOcurrencia.isEmpty)) {
+      print("🔔 DEBUG: 🌱 '${rutina.titulo}' sin ultimaFechaProgramada o sin idsPorOcurrencia. Sembrando con reset completo.");
       await _resetCompletoNotificacionesRutina(rutina);
       return true;
     }
@@ -404,6 +446,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     const int offsetSemanaRelleno = 1000;
 
     final List<int> idsNuevos = [];
+    final Map<String, List<int>> mapaPorFechaNuevo = {};
     DateTime fechaMasLejana = rutina.ultimaFechaProgramada!;
 
     for (var entry in rutina.horarios.entries) {
@@ -431,6 +474,9 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         final int semanasDesdeEpoca = siguienteFecha.difference(epoca).inDays ~/ 7;
         final int idDeEstaOcurrencia = idExactoBase + ((offsetSemanaRelleno + semanasDesdeEpoca) * 100000);
 
+        final String claveFecha = _claveFecha(siguienteFecha);
+        final List<int> idsDeEstaOcurrencia = mapaPorFechaNuevo.putIfAbsent(claveFecha, () => []);
+
         final fechaUnaHoraAntes = siguienteFecha.subtract(const Duration(hours: 1));
 
         if (fechaUnaHoraAntes.isAfter(ahora)) {
@@ -444,6 +490,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
             esInsistente: false,
           );
           idsNuevos.add(idDeEstaOcurrencia + 1000);
+          idsDeEstaOcurrencia.add(idDeEstaOcurrencia + 1000);
         }
 
         await NotificacionesService().programarAlertaRutina(
@@ -456,6 +503,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           esInsistente: true,
         );
         idsNuevos.add(idDeEstaOcurrencia);
+        idsDeEstaOcurrencia.add(idDeEstaOcurrencia);
 
         final idsSecundarios = await NotificacionesService().programarRecordatoriosSecundarios(
           idDeEstaOcurrencia,
@@ -463,6 +511,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           siguienteFecha,
         );
         idsNuevos.addAll(idsSecundarios);
+        idsDeEstaOcurrencia.addAll(idsSecundarios);
 
         if (siguienteFecha.isAfter(fechaMasLejana)) {
           fechaMasLejana = siguienteFecha;
@@ -477,7 +526,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       return false;
     }
 
-    await _agregarIdsYActualizarFecha(rutina.id, idsNuevos, fechaMasLejana);
+    await _agregarIdsYActualizarFecha(rutina.id, idsNuevos, fechaMasLejana, idsPorOcurrenciaNuevos: mapaPorFechaNuevo);
     print("🔔 DEBUG: -- RELLENO TERMINADO. IDs agregados: $idsNuevos | Colchón ahora hasta: $fechaMasLejana --");
     return true;
   }
@@ -558,25 +607,43 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   // ------------------------------------------------------------
   // Si el usuario está marcando la rutina como completada (no
   // desmarcándola), lo PRIMERO que hacemos —antes de tocar el
-  // estado, antes de guardar nada— es cancelar sus notificaciones
-  // ya programadas. Esto elimina cualquier ventana de tiempo en la
-  // que una notificación podría dispararse mientras el resto de la
-  // lógica (actualizar racha, guardar, reprogramar) todavía se
-  // está ejecutando.
+  // estado, antes de guardar nada— es cancelar la notificación de
+  // HOY. Esto elimina cualquier ventana de tiempo en la que esa
+  // notificación podría dispararse mientras el resto de la lógica
+  // (actualizar racha, guardar, reprogramar) todavía se está
+  // ejecutando.
+  //
+  // IMPORTANTE: solo cancelamos rutinaAntes.idsPorOcurrencia[hoy], NO
+  // toda la lista notificacionesActivas. Antes se cancelaba la lista
+  // completa (el colchón de varias semanas, de TODOS los días de la
+  // rutina), pero ultimaFechaProgramada no se tocaba — así que
+  // _rellenarColchonSiHaceFalta creía que el colchón seguía lleno y
+  // nunca reprogramaba nada. Resultado: con solo marcar la rutina
+  // como completada UNA vez, todas sus ocurrencias futuras (de todos
+  // los días programados) quedaban canceladas en Android para
+  // siempre, hasta que la fecha (ya obsoleta) del colchón se
+  // acercara a menos de 7 días — lo cual hacía que las rutinas
+  // dejaran de sonar aproximadamente una semana después de la
+  // primera vez que se completaban. Ver [[idsPorOcurrencia]] en el
+  // modelo Rutina.
   // ============================================================
   Future<void> toggleCompletada(String id) async {
     if (_idsEnProceso.contains(id)) return;
     _idsEnProceso.add(id);
     try {
       final rutinaAntes = state.firstWhere((r) => r.id == id);
+      final hoy = DateTime.now().toIso8601String().split('T')[0];
 
       // Cancelación inmediata y prioritaria, solo al MARCAR como completa
-      if (!rutinaAntes.completada) {
-        await NotificacionesService().cancelarListaDeIds(rutinaAntes.notificacionesActivas);
-        print("🔔 DEBUG: ⚡ Cancelación prioritaria ejecutada para '${rutinaAntes.titulo}'");
+      // (no al desmarcar), y solo de los IDs que corresponden EXACTAMENTE
+      // a hoy — nunca tocamos el resto del colchón.
+      final List<int> idsDeHoy = rutinaAntes.idsPorOcurrencia[hoy] ?? const [];
+      final bool seCancelaronIdsDeHoy = !rutinaAntes.completada && idsDeHoy.isNotEmpty;
+      if (seCancelaronIdsDeHoy) {
+        await NotificacionesService().cancelarListaDeIds(idsDeHoy);
+        print("🔔 DEBUG: ⚡ Cancelación prioritaria (solo hoy) ejecutada para '${rutinaAntes.titulo}': $idsDeHoy");
       }
 
-      final hoy = DateTime.now().toIso8601String().split('T')[0];
       state = [
         for (final r in state)
           if (r.id == id)
@@ -584,6 +651,15 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
               completada: !r.completada,
               racha: !r.completada ? r.racha + 1 : (r.racha > 0 ? r.racha - 1 : 0),
               fechaCompletada: !r.completada ? hoy : null,
+              // Quitamos los IDs de hoy (ya cancelados) de ambos registros,
+              // para que la contabilidad del colchón siga siendo exacta.
+              // Solo si de verdad los cancelamos arriba (nunca al desmarcar).
+              notificacionesActivas: !seCancelaronIdsDeHoy
+                  ? null
+                  : r.notificacionesActivas.where((i) => !idsDeHoy.contains(i)).toList(),
+              idsPorOcurrencia: !seCancelaronIdsDeHoy
+                  ? null
+                  : ({...r.idsPorOcurrencia}..remove(hoy)),
             )
           else
             r,
@@ -617,7 +693,19 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     // importar qué tan lleno esté el colchón de cada rutina.
     for (final rutina in state) {
       if (rutina.activa) {
-        await _resetCompletoNotificacionesRutina(rutina);
+        // Mismo motivo que en _cargarRutinas: si otra operación ya está
+        // trabajando sobre esta rutina (p. ej. se está eliminando en este
+        // mismo instante), la saltamos en vez de arriesgarnos a la misma
+        // condición de carrera que eliminarRutina ahora evita (ver ese
+        // método) — programar alarmas nuevas justo cuando la rutina está
+        // siendo borrada del estado las dejaría huérfanas para siempre.
+        if (_idsEnProceso.contains(rutina.id)) continue;
+        _idsEnProceso.add(rutina.id);
+        try {
+          await _resetCompletoNotificacionesRutina(rutina);
+        } finally {
+          _idsEnProceso.remove(rutina.id);
+        }
       }
     }
   }
@@ -630,15 +718,50 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     await _guardarRutinas();
   }
 
+  // ============================================================
+  // eliminarRutina — con espera por operaciones en curso
+  // ------------------------------------------------------------
+  // Antes, este método no respetaba el candado _idsEnProceso que sí
+  // usan editarRutina/toggleActiva/toggleCompletada. El caso real que
+  // esto rompía: _rellenarColchonSiHaceFalta (el relleno automático del
+  // colchón de notificaciones, que corre en CADA apertura de la app,
+  // ver _cargarRutinas) primero programa las alarmas nuevas en Android
+  // y solo AL FINAL las guarda en notificacionesActivas.
+  //
+  // Si el usuario eliminaba la rutina justo en medio de ese proceso,
+  // eliminarRutina capturaba la lista VIEJA de IDs (sin los recién
+  // programados), cancelaba solo esos, y borraba la rutina del state.
+  // Cuando el relleno terminaba de programar y trataba de guardar los
+  // IDs nuevos, la rutina ya no existía — un no-op silencioso. Las
+  // alarmas nuevas quedaban programadas en Android para siempre, sin
+  // ningún registro en la app que permitiera cancelarlas después: esto
+  // es lo que hacía sonar rutinas ya eliminadas hace tiempo.
+  //
+  // Ahora esperamos (con un tope de 10s, por si algo más se quedó
+  // atascado sosteniendo el candado) a que cualquier operación en curso
+  // termine antes de capturar la lista de IDs a cancelar.
+  // ============================================================
   Future<void> eliminarRutina(String id) async {
-    // Capturamos la rutina ANTES de quitarla del state, para poder
-    // cancelar sus notificaciones con la lista de IDs que tenía guardada.
-    final rutina = state.firstWhere((r) => r.id == id);
+    int intentos = 0;
+    while (_idsEnProceso.contains(id) && intentos < 100) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      intentos++;
+    }
+    _idsEnProceso.add(id);
+    try {
+      // Pudo haber sido eliminada mientras esperábamos (p. ej. doble tap
+      // en el botón de eliminar).
+      final int index = state.indexWhere((r) => r.id == id);
+      if (index == -1) return;
+      final rutina = state[index];
 
-    state = state.where((r) => r.id != id).toList();
-    await _guardarRutinas();
+      state = state.where((r) => r.id != id).toList();
+      await _guardarRutinas();
 
-    await NotificacionesService().cancelarListaDeIds(rutina.notificacionesActivas);
+      await NotificacionesService().cancelarListaDeIds(rutina.notificacionesActivas);
+    } finally {
+      _idsEnProceso.remove(id);
+    }
   }
 }
 
