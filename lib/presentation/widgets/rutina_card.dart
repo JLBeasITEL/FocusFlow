@@ -9,7 +9,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/rutina_provider.dart'; // Acceso al provider que maneja el estado global de rutinas
+import '../../providers/monedas_provider.dart'; // Saldo de monedas de racha, para el botón de omitir
 import '../../models/rutina.dart';             // El modelo de datos "Rutina"
+import '../../core/colores_estado_rutina.dart';
+import '../../core/app_messenger.dart';
 
 // ConsumerWidget: es un widget "sin estado propio" (stateless) pero que SÍ puede
 // leer/escuchar el provider de Riverpod a través del parámetro `ref`.
@@ -28,6 +31,10 @@ class RutinaCard extends ConsumerWidget {
 
     // Variable local: ¿esta rutina está activa (encendida) o desactivada por el usuario?
     final bool activa = rutina.activa;
+
+    // ¿La ocurrencia de HOY fue omitida a propósito (pagada con monedas de
+    // racha)? Es un tercer estado, distinto de "pendiente" y de "completada".
+    final bool omitida = rutina.omitida;
 
     // Si la rutina está activa, usamos su color de tema; si está desactivada, todo se ve gris.
     final Color colorFuerte = activa ? colorTema : Colors.grey;
@@ -54,8 +61,23 @@ class RutinaCard extends ConsumerWidget {
           children: [
 
             // ================================================================
-            // 1. ZONA IZQUIERDA: Checkbox (marcar como completada) + ícono
+            // 1. ZONA IZQUIERDA: estado del día (Checkbox, u omitida) + ícono
             // ================================================================
+            // Si la ocurrencia de hoy fue omitida, no tiene sentido mostrar el
+            // checkbox normal (no se puede "completar" algo que se saltó sin
+            // deshacer la omisión primero): en su lugar mostramos un botón
+            // para deshacer, que reembolsa exactamente lo que costó.
+            if (omitida)
+              IconButton(
+                tooltip: 'Deshacer omisión (te devuelve las monedas)',
+                icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina),
+                onPressed: !activa
+                    ? null
+                    : () async {
+                        await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
+                      },
+              )
+            else
             Checkbox(
               // El checkbox refleja si la rutina ya está marcada como completa hoy.
               value: rutina.completada,
@@ -95,42 +117,23 @@ class RutinaCard extends ConsumerWidget {
                     // este widget todavía no se ha reconstruido con el nuevo valor.
                     final nuevaRacha = rutina.racha + 1;
 
-                    // ¿En cuántos días de la semana está programada esta rutina?
-                    final diasPorSemana = rutina.horarios.length;
+                    // PASO 3: Verificamos si la nueva racha completa un nuevo múltiplo
+                    // de rachaPorMoneda (7, 14, 21, 28... sin tope, se repite cada vez
+                    // que la racha vuelve a cruzar un múltiplo). Es EXACTAMENTE el
+                    // mismo hito, fijo para TODAS las rutinas sin importar cuántos
+                    // días/semana tengan programados, que usa toggleCompletada en
+                    // rutina_provider.dart para otorgar la moneda real — este chequeo
+                    // acá solo decide cuándo MOSTRAR el diálogo, la moneda en sí ya se
+                    // otorgó en el provider antes de que este código se ejecute.
+                    if (nuevaRacha % rachaPorMoneda == 0) {
 
-                    // Si por alguna razón no tiene días asignados, no seguimos (evita división por cero).
-                    if (diasPorSemana == 0) return;
-
-                    // PASO 3: Verificamos si la nueva racha completa un "ciclo semanal" exacto.
-                    // Ejemplo: si la rutina es de 3 días a la semana, cada 3 completadas = 1 semana cumplida.
-                    //
-                    // Caso especial: si la rutina es de 1 solo día a la semana, "nuevaRacha % 1"
-                    // siempre da 0, así que sin este mínimo el festejo se dispararía desde la
-                    // PRIMERA vez que se marca (nuevaRacha == 1), cuando en realidad eso es
-                    // apenas 1 marca, no una racha sostenida. Exigimos al menos 2 completadas
-                    // (2 semanas) antes del primer festejo, igual que ocurre de forma natural
-                    // con las rutinas de 2+ días a la semana.
-                    final minimoParaFestejar = diasPorSemana == 1 ? 2 : diasPorSemana;
-
-                    if (nuevaRacha >= minimoParaFestejar && nuevaRacha % diasPorSemana == 0) {
-
-                      // Calculamos cuántas semanas completas representa esta racha.
-                      final semanas = nuevaRacha ~/ diasPorSemana; // división entera
-
-                      // PASO 4: Armamos el texto de felicitación según el tipo de hábito.
-                      String textoFelicidades;
-                      if (diasPorSemana >= 5) {
-                        // Si es un hábito de 5, 6 o 7 días por semana, celebramos por DÍAS seguidos.
-                        textoFelicidades =
-                            '¡Felicidades! Has mantenido este hábito impecable durante $nuevaRacha días seguidos.';
-                      } else {
-                        // Si es un hábito de menos de 5 días por semana, celebramos por SEMANAS.
-                        final pluralSemanas = semanas == 1
-                            ? '1 semana consecutiva'
-                            : '$semanas semanas consecutivas';
-                        textoFelicidades =
-                            '¡Felicidades! Has mantenido este hábito impecable durante $pluralSemanas.';
-                      }
+                      // PASO 4: Texto de felicitación. Ya no distingue por días/semana
+                      // (con el hito fijo en 7, la racha no corresponde 1 a 1 con
+                      // semanas de calendario para rutinas de pocos días/semana), así
+                      // que es el mismo mensaje para cualquier frecuencia.
+                      final String textoFelicidades =
+                          '¡Felicidades! Llevas $nuevaRacha veces seguidas sin fallar con este hábito.\n'
+                          '+1 moneda de racha 🪙';
 
                       // PASO 5: Mostramos un diálogo emergente de felicitación.
                       showDialog(
@@ -219,20 +222,26 @@ class RutinaCard extends ConsumerWidget {
                       fontWeight: FontWeight.bold,
                       // Si ya está completada, le pone una línea tachada encima del texto.
                       decoration: rutina.completada ? TextDecoration.lineThrough : null,
-                      // Color del texto: negro si activa, gris si desactivada.
-                      color: activa ? Colors.black87 : Colors.grey,
+                      // Color del texto: ámbar si se omitió hoy, negro si activa, gris si desactivada.
+                      color: omitida ? colorOmitidaRutina : (activa ? Colors.black87 : Colors.grey),
                     ),
                     maxLines: 1,                       // Nunca ocupa más de una línea
                     overflow: TextOverflow.ellipsis,   // Si no cabe, corta con "..."
                   ),
                   const SizedBox(height: 4),
 
-                  // Hora programada para HOY específicamente.
-                  // rutina.horarios es un Map<int, TimeOfDay> donde la llave es el día de la semana (0=Lunes).
-                  // DateTime.now().weekday devuelve 1=Lunes...7=Domingo, por eso se resta 1.
+                  // Hora programada para HOY, o la etiqueta de estado "Omitida"
+                  // si se pagó con monedas para saltarla — igual que el widget
+                  // de pantalla de inicio, que ya distingue Pendiente/Hecha/Omitida.
                   Text(
-                    rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--',
-                    style: TextStyle(fontSize: 14, color: colorFuerte, fontWeight: FontWeight.w600),
+                    omitida
+                        ? 'Omitida hoy'
+                        : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: omitida ? colorOmitidaRutina : colorFuerte,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -253,7 +262,77 @@ class RutinaCard extends ConsumerWidget {
               ),
               const SizedBox(width: 12),
             ],
+
+            // ================================================================
+            // 4. Botón "Omitir por hoy": solo tiene sentido si todavía está
+            // pendiente (ni completada ni ya omitida) y la rutina está activa.
+            // ================================================================
+            if (activa && !rutina.completada && !omitida) _BotonOmitirRutina(rutina: rutina),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// _BotonOmitirRutina — "comodín" de omitir, pagado con monedas de racha
+// ------------------------------------------------------------
+// Chip compacto (mismo estilo visual que el contador de racha 🔥N de
+// arriba) que muestra el costo en monedas de omitir HOY esta rutina
+// (rutina.omisionesSeguidas + 1: sube con cada omisión consecutiva sin
+// una completada real de por medio, ver toggleOmitida). Se atenúa a
+// gris cuando el saldo no alcanza, pero se deja tocar igual para que
+// el usuario reciba feedback claro (tooltip + SnackBar) en vez de un
+// botón "muerto" sin explicación.
+// ============================================================
+class _BotonOmitirRutina extends ConsumerWidget {
+  final Rutina rutina;
+  const _BotonOmitirRutina({required this.rutina});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final int monedas = ref.watch(monedasProvider);
+    final int costo = rutina.omisionesSeguidas + 1;
+    final bool alcanza = monedas >= costo;
+    final Color color = alcanza ? colorOmitidaRutina : Colors.grey;
+
+    return Tooltip(
+      message: alcanza
+          ? 'Omitir hoy por $costo 🪙 (protege tu racha)'
+          : 'Te faltan monedas de racha: necesitas $costo, tienes $monedas',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () async {
+          final bool exito = await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
+          if (!exito) {
+            mostrarSnackBarSimple(
+              mensaje:
+                  'No te alcanzan las monedas de racha para omitir "${rutina.titulo}" '
+                  '(necesitas $costo, tienes $monedas).',
+              colorFondo: colorOmitidaRutina,
+              colorTexto: Colors.white,
+            );
+          }
+        },
+        child: Container(
+          margin: const EdgeInsets.only(left: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.redo_rounded, size: 16, color: color),
+              const SizedBox(width: 3),
+              Text(
+                '$costo🪙',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
+              ),
+            ],
+          ),
         ),
       ),
     );

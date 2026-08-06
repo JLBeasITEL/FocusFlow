@@ -105,7 +105,13 @@ class WidgetRutinasService {
             continue;
           }
           final completadaHoy = r.completada && r.fechaCompletada == hoyStr;
-          items.add({'titulo': r.titulo, 'horaHoy': _formatearHora(hora), 'completada': completadaHoy});
+          final omitidaHoy = r.omitida && r.fechaOmitida == hoyStr;
+          items.add({
+            'titulo': r.titulo,
+            'horaHoy': _formatearHora(hora),
+            'completada': completadaHoy,
+            'omitida': omitidaHoy,
+          });
         } catch (e) {
           // Una rutina con datos corruptos no debe tumbar a las demás.
           // ignore: avoid_print

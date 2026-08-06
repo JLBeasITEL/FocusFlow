@@ -17,6 +17,7 @@ class RutinasWidgetProvider : HomeWidgetProvider() {
         val titulo: String,
         val horaHoy: String,
         val completada: Boolean,
+        val omitida: Boolean,
     )
 
     override fun onUpdate(
@@ -89,8 +90,16 @@ class RutinasWidgetProvider : HomeWidgetProvider() {
                     views.setTextViewText(fila.titulo, item.titulo)
                     views.setTextViewText(fila.hora, item.horaHoy)
 
-                    val color = if (item.completada) COLOR_COMPLETADA else COLOR_PENDIENTE
-                    val etiqueta = if (item.completada) "Hecha" else "Pendiente"
+                    val color = when {
+                        item.completada -> COLOR_COMPLETADA
+                        item.omitida -> COLOR_OMITIDA
+                        else -> COLOR_PENDIENTE
+                    }
+                    val etiqueta = when {
+                        item.completada -> "Hecha"
+                        item.omitida -> "Omitida"
+                        else -> "Pendiente"
+                    }
                     views.setInt(fila.estadoDot, "setColorFilter", color)
                     views.setTextViewText(fila.estadoLabel, etiqueta)
                     views.setTextColor(fila.estadoLabel, color)
@@ -163,6 +172,7 @@ class RutinasWidgetProvider : HomeWidgetProvider() {
                     titulo = item.optString("titulo", ""),
                     horaHoy = item.optString("horaHoy", ""),
                     completada = item.optBoolean("completada", false),
+                    omitida = item.optBoolean("omitida", false),
                 )
             }
         } catch (e: Exception) {
@@ -197,11 +207,15 @@ class RutinasWidgetProvider : HomeWidgetProvider() {
         private const val ALTO_FILA_DP = 19
         private const val ALTO_MINIMO_POR_DEFECTO_DP = 110
 
-        // Paleta propia para estado (completada/pendiente), distinta de la de
-        // urgencia (rojo/ámbar/naranja/rojo) usada en TareasWidgetProvider,
-        // para no mezclar significados entre widgets.
+        // Paleta propia para estado (completada/pendiente/omitida), distinta
+        // de la de urgencia (rojo/ámbar/naranja/rojo) usada en
+        // TareasWidgetProvider, para no mezclar significados entre widgets.
+        // COLOR_OMITIDA usa el mismo tono ámbar que colorOmitidaRutina en el
+        // lado Flutter (progreso_rutinas_bar.dart / rutina_card.dart), para
+        // que "omitida" signifique lo mismo en toda la app.
         private val COLOR_COMPLETADA = 0xFF4CAF50.toInt() // verde
         private val COLOR_PENDIENTE = 0xFF9E9E9E.toInt() // gris
+        private val COLOR_OMITIDA = 0xFFF59E0B.toInt() // ámbar
 
         private val FILA_IDS = listOf(
             FilaIds(

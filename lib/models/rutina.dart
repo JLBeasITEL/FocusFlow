@@ -68,6 +68,31 @@ class Rutina {
   // ============================================================
   final Map<String, List<int>> idsPorOcurrencia;
 
+  // ============================================================
+  // CAMPOS DE "OMITIR RUTINA" (comodín pagado con monedas de racha)
+  // ------------------------------------------------------------
+  // omitida / fechaOmitida: espejo de completada / fechaCompletada,
+  // pero para la ocurrencia de HOY marcada como "salteada a propósito"
+  // (no como "no hecha"). Se resetea en cada cambio de día igual que
+  // completada, ver _cargarRutinas en rutina_provider.dart.
+  //
+  // omisionesSeguidas: cuántas veces seguidas se omitió esta rutina
+  // SIN una completada real de por medio. Determina el costo en
+  // monedas de la PRÓXIMA omisión (costo = omisionesSeguidas + 1,
+  // creciente para desalentar el abuso) y se resetea a 0 apenas se
+  // completa la rutina de verdad.
+  //
+  // historialOmisiones: fechas (yyyy-MM-dd) de ocurrencias omitidas,
+  // recortado a los últimos 60 días al escribir. Existe para que
+  // _cargarRutinas pueda distinguir, al revisar si se perdió la
+  // racha, un día realmente saltado (protegido con moneda, no rompe
+  // racha) de un día simplemente no hecho (sí la rompe).
+  // ============================================================
+  final bool omitida;
+  final String? fechaOmitida;
+  final int omisionesSeguidas;
+  final List<String> historialOmisiones;
+
   Rutina({
     required this.id,
     required this.titulo,
@@ -82,6 +107,10 @@ class Rutina {
     this.notificacionesActivas = const [], // Por defecto, ninguna notificación programada aún
     this.ultimaFechaProgramada,
     this.idsPorOcurrencia = const {},
+    this.omitida = false,
+    this.fechaOmitida,
+    this.omisionesSeguidas = 0,
+    this.historialOmisiones = const [],
   });
 
   Rutina copyWith({
@@ -98,6 +127,10 @@ class Rutina {
     List<int>? notificacionesActivas,
     DateTime? ultimaFechaProgramada,
     Map<String, List<int>>? idsPorOcurrencia,
+    bool? omitida,
+    String? fechaOmitida,
+    int? omisionesSeguidas,
+    List<String>? historialOmisiones,
   }) {
     return Rutina(
       id: id ?? this.id,
@@ -113,6 +146,10 @@ class Rutina {
       notificacionesActivas: notificacionesActivas ?? this.notificacionesActivas,
       ultimaFechaProgramada: ultimaFechaProgramada ?? this.ultimaFechaProgramada,
       idsPorOcurrencia: idsPorOcurrencia ?? this.idsPorOcurrencia,
+      omitida: omitida ?? this.omitida,
+      fechaOmitida: fechaOmitida ?? this.fechaOmitida,
+      omisionesSeguidas: omisionesSeguidas ?? this.omisionesSeguidas,
+      historialOmisiones: historialOmisiones ?? this.historialOmisiones,
     );
   }
 
@@ -134,6 +171,10 @@ class Rutina {
       'notificacionesActivas': notificacionesActivas,
       'ultimaFechaProgramada': ultimaFechaProgramada?.toIso8601String(),
       'idsPorOcurrencia': idsPorOcurrencia,
+      'omitida': omitida,
+      'fechaOmitida': fechaOmitida,
+      'omisionesSeguidas': omisionesSeguidas,
+      'historialOmisiones': historialOmisiones,
     };
   }
 
@@ -186,6 +227,16 @@ class Rutina {
       idsPorOcurrencia: (json['idsPorOcurrencia'] as Map<String, dynamic>?)
               ?.map((k, v) => MapEntry(k, (v as List<dynamic>).map((e) => e as int).toList())) ??
           const {},
+      // Rutinas guardadas antes de la función "omitir" no tendrán estos
+      // campos: los valores por defecto (sin omitir, sin historial) son
+      // seguros y no requieren ninguna migración especial.
+      omitida: json['omitida'] as bool? ?? false,
+      fechaOmitida: json['fechaOmitida'] as String?,
+      omisionesSeguidas: json['omisionesSeguidas'] as int? ?? 0,
+      historialOmisiones: (json['historialOmisiones'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
     );
   }
 }

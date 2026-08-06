@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/configuracion_provider.dart';
+import '../providers/monedas_provider.dart';
 import '../providers/nota_provider.dart';
 import '../providers/plantilla_provider.dart';
 import '../providers/rutina_provider.dart';
@@ -36,6 +37,7 @@ const String _claveNotas = 'lista_notas_postit_v2';
 const String _claveTema = 'tema_seleccionado';
 const String _claveSonidoNotificacion = 'sonido_notificacion';
 const String _claveSonidoAlarma = 'sonido_alarma';
+const String _claveMonedas = 'monedas_racha_v1';
 
 class BackupService {
   /// Lee todas las claves relevantes de SharedPreferences, las combina en
@@ -55,6 +57,7 @@ class BackupService {
         _claveTema: prefs.getInt(_claveTema),
         _claveSonidoNotificacion: prefs.getString(_claveSonidoNotificacion),
         _claveSonidoAlarma: prefs.getString(_claveSonidoAlarma),
+        _claveMonedas: prefs.getInt(_claveMonedas),
       };
 
       final String contenidoJson = jsonEncode(backup);
@@ -136,6 +139,11 @@ class BackupService {
       if (sonidoAlarma is String) {
         await prefs.setString(_claveSonidoAlarma, sonidoAlarma);
       }
+
+      final monedas = backup[_claveMonedas];
+      if (monedas is int) {
+        await prefs.setInt(_claveMonedas, monedas);
+      }
     } on FileSystemException {
       throw BackupException(
         'No se pudo escribir la información restaurada. Verifica que tengas '
@@ -153,6 +161,7 @@ class BackupService {
     await ref.read(notaProvider.notifier).recargarDesdeDisco();
     await ref.read(temaProvider.notifier).recargarDesdeDisco();
     await ref.read(sonidoProvider.notifier).recargarDesdeDisco();
+    await ref.read(monedasProvider.notifier).recargarDesdeDisco();
 
     // Los IDs de notificacionesActivas del dispositivo viejo no tienen
     // validez aquí: recargamos las rutinas (con notificacionesActivas ya

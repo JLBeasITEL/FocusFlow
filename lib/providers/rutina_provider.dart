@@ -5,6 +5,23 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/rutina.dart';
 import '../services/notificaciones_service.dart';
 import '../services/widget_rutinas_service.dart';
+import 'monedas_provider.dart';
+
+// ============================================================
+// rachaPorMoneda — unidad fija del hito de racha que otorga moneda
+// ------------------------------------------------------------
+// FIJO en 7, sin importar cuántos días/semana tenga programada la
+// rutina: antes se usaba rutina.horarios.length (diasPorSemana) como
+// divisor, pero eso hacía que rutinas de pocos días/semana festejaran
+// demasiado seguido (con 1 día/semana, CADA completada festejaba,
+// porque cualquier racha % 1 == 0) y que el "hito semanal" no
+// significara lo mismo entre rutinas. Con 7 fijo, el hito es el mismo
+// para todas: racha=7 → 1 moneda, racha=14 → 2 monedas, racha=21 → 3,
+// y así sucesivamente sin tope — compartido por rutina_card.dart (el
+// diálogo de felicitación) y por toggleCompletada (el otorgamiento
+// real), para que ambos disparen exactamente en los mismos hitos.
+// ============================================================
+const int rachaPorMoneda = 7;
 
 class RutinaNotifier extends Notifier<List<Rutina>> {
   static const String _storageKey = 'lista_rutinas_v2';
@@ -57,17 +74,31 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           huboCambios = true;
         }
 
+        // 1b. Lo mismo para "omitida" (ver toggleOmitida): es un estado de
+        // SOLO hoy, igual que completada.
+        if (r.fechaOmitida != hoyStr && r.omitida) {
+          rutinaActualizada = rutinaActualizada.copyWith(omitida: false);
+          huboCambios = true;
+        }
+
         // 2. Verificar rachas perdidas instantáneamente
         if (rutinaActualizada.racha > 0 && rutinaActualizada.fechaCompletada != null) {
           try {
             DateTime ultima = DateTime.parse(rutinaActualizada.fechaCompletada!);
             final fechaUltima = DateTime(ultima.year, ultima.month, ultima.day);
-            
+
             if (!fechaUltima.isAtSameMomentAs(hoyFecha)) {
               int diasPasados = hoyFecha.difference(fechaUltima).inDays;
               for (int i = 1; i < diasPasados; i++) {
                 final diaRevision = hoyFecha.subtract(Duration(days: i));
                 if (rutinaActualizada.horarios.containsKey(diaRevision.weekday - 1)) {
+                  // Si ese día programado fue OMITIDO a propósito (pagado con
+                  // monedas), no cuenta como racha perdida: es justamente el
+                  // efecto que la moneda compra. Seguimos revisando días más
+                  // atrás en vez de cortar acá.
+                  if (rutinaActualizada.historialOmisiones.contains(_claveFecha(diaRevision))) {
+                    continue;
+                  }
                   rutinaActualizada = rutinaActualizada.copyWith(racha: 0);
                   huboCambios = true;
                   break;
@@ -651,6 +682,9 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
               completada: !r.completada,
               racha: !r.completada ? r.racha + 1 : (r.racha > 0 ? r.racha - 1 : 0),
               fechaCompletada: !r.completada ? hoy : null,
+              // Una completada real "paga" cualquier racha de omisiones
+              // seguidas: la próxima omisión vuelve a costar 1 moneda.
+              omisionesSeguidas: !r.completada ? 0 : r.omisionesSeguidas,
               // Quitamos los IDs de hoy (ya cancelados) de ambos registros,
               // para que la contabilidad del colchón siga siendo exacta.
               // Solo si de verdad los cancelamos arriba (nunca al desmarcar).
@@ -675,6 +709,135 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       // falta un reset completo (la cancelación prioritaria de arriba ya
       // se encargó de la notificación de HOY).
       await _rellenarColchonSiHaceFalta(rutinaActualizada);
+
+      // ============================================================
+      // OTORGAMIENTO DE MONEDAS DE RACHA
+      // ------------------------------------------------------------
+      // Solo al MARCAR como completada (no al desmarcar), y usando
+      // EXACTAMENTE el mismo criterio de "racha cumplida" que dispara
+      // el diálogo de felicitación en rutina_card.dart: cada vez que
+      // la racha llega a un nuevo múltiplo de rachaPorMoneda (7, 14,
+      // 21, 28...) se otorga 1 moneda MÁS — sin tope, se repite
+      // indefinidamente mientras la racha siga creciendo. Vive acá (no
+      // en el widget) para que sea la fuente de verdad única, sin
+      // depender de que la UI esté montada.
+      // ============================================================
+      if (!rutinaAntes.completada) {
+        final int nuevaRacha = rutinaActualizada.racha;
+        if (nuevaRacha % rachaPorMoneda == 0) {
+          await ref.read(monedasProvider.notifier).agregar(1);
+          print("🪙 DEBUG: +1 moneda de racha por hito cumplido en '${rutinaAntes.titulo}' (racha=$nuevaRacha)");
+        }
+      }
+    } finally {
+      _idsEnProceso.remove(id);
+    }
+  }
+
+  // ============================================================
+  // toggleOmitida — "comodín" pagado con monedas de racha
+  // ------------------------------------------------------------
+  // Permite saltar la ocurrencia de HOY sin romper la racha (ver el
+  // chequeo de historialOmisiones en _cargarRutinas), pagando con
+  // monedas ganadas al alcanzar hitos de racha (ver el otorgamiento en
+  // toggleCompletada). El costo sube con cada omisión CONSECUTIVA de
+  // la MISMA rutina (sin una completada real de por medio) para
+  // desalentar el abuso: 1ª omisión = 1 moneda, 2ª = 2, 3ª = 3...
+  //
+  // Es un toggle, igual que toggleCompletada: si ya estaba omitida,
+  // deshacerlo reembolsa EXACTAMENTE lo que costó (omisionesSeguidas
+  // ya incrementado equivale al costo que se cobró). Igual que al
+  // desmarcar una completada (ver toggleCompletada), NO se reprograma
+  // la notificación puntual de hoy que quedó cancelada — sería una
+  // reprogramación cara (cancela y reconstruye TODO el colchón) solo
+  // para un aviso cuya hora probablemente ya pasó de todos modos.
+  //
+  // Devuelve false SOLO cuando no alcanzan las monedas para omitir (no
+  // se cambia nada en ese caso, para que la UI pueda avisarle al
+  // usuario); true en cualquier otro resultado.
+  // ============================================================
+  Future<bool> toggleOmitida(String id) async {
+    if (_idsEnProceso.contains(id)) return false;
+    _idsEnProceso.add(id);
+    try {
+      final rutinaAntes = state.firstWhere((r) => r.id == id);
+      final hoy = DateTime.now().toIso8601String().split('T')[0];
+
+      if (rutinaAntes.omitida) {
+        // --- Deshacer la omisión: reembolso ---
+        final int reembolso = rutinaAntes.omisionesSeguidas;
+        await ref.read(monedasProvider.notifier).agregar(reembolso);
+
+        state = [
+          for (final r in state)
+            if (r.id == id)
+              r.copyWith(
+                omitida: false,
+                omisionesSeguidas: r.omisionesSeguidas > 0 ? r.omisionesSeguidas - 1 : 0,
+                historialOmisiones: r.historialOmisiones.where((f) => f != hoy).toList(),
+              )
+            else
+              r,
+        ];
+        await _guardarRutinas();
+
+        // Mismo criterio que toggleCompletada al desmarcar: no hace falta
+        // ninguna llamada nativa acá (el colchón restante sigue intacto y
+        // sigue siendo válido), _rellenarColchonSiHaceFalta solo actúa si
+        // de verdad hace falta.
+        final rutinaActualizada = state.firstWhere((r) => r.id == id);
+        await _rellenarColchonSiHaceFalta(rutinaActualizada);
+        return true;
+      }
+
+      // --- Marcar como omitida: exige monedas suficientes ---
+      final int costo = rutinaAntes.omisionesSeguidas + 1;
+      final bool pudoPagar = await ref.read(monedasProvider.notifier).gastar(costo);
+      if (!pudoPagar) {
+        print("🪙 DEBUG: omisión rechazada para '${rutinaAntes.titulo}': faltan monedas (costo=$costo)");
+        return false;
+      }
+
+      // Cancelación prioritaria de la notificación de HOY, mismo criterio
+      // que toggleCompletada.
+      final List<int> idsDeHoy = rutinaAntes.idsPorOcurrencia[hoy] ?? const [];
+      if (idsDeHoy.isNotEmpty) {
+        await NotificacionesService().cancelarListaDeIds(idsDeHoy);
+      }
+
+      final DateTime limiteHistorial = DateTime.now().subtract(const Duration(days: 60));
+
+      state = [
+        for (final r in state)
+          if (r.id == id)
+            r.copyWith(
+              omitida: true,
+              fechaOmitida: hoy,
+              omisionesSeguidas: r.omisionesSeguidas + 1,
+              notificacionesActivas: idsDeHoy.isEmpty
+                  ? null
+                  : r.notificacionesActivas.where((i) => !idsDeHoy.contains(i)).toList(),
+              idsPorOcurrencia: idsDeHoy.isEmpty
+                  ? null
+                  : ({...r.idsPorOcurrencia}..remove(hoy)),
+              // Recortado a 60 días: alcanza de sobra para el chequeo de
+              // racha perdida en _cargarRutinas sin crecer sin límite.
+              historialOmisiones: [
+                ...r.historialOmisiones.where((f) {
+                  final fecha = DateTime.tryParse(f);
+                  return fecha != null && fecha.isAfter(limiteHistorial);
+                }),
+                hoy,
+              ],
+            )
+          else
+            r,
+      ];
+      await _guardarRutinas();
+
+      final rutinaActualizada = state.firstWhere((r) => r.id == id);
+      await _rellenarColchonSiHaceFalta(rutinaActualizada);
+      return true;
     } finally {
       _idsEnProceso.remove(id);
     }

@@ -13,6 +13,7 @@ import '../../models/nota.dart';
 import '../../providers/nota_provider.dart';
 import '../widgets/add_tarea_modal.dart';
 import '../../providers/rutina_provider.dart';
+import '../../providers/monedas_provider.dart';
 import '../widgets/rutina_card.dart';
 import 'rutina_form_screen.dart';
 import '../../providers/tema_provider.dart';
@@ -22,6 +23,7 @@ import '../widgets/onboarding_permisos.dart';
 import '../../services/notificaciones_service.dart';
 import '../widgets/progreso_rutinas_bar.dart';
 import '../../core/app_messenger.dart';
+import '../../core/colores_estado_rutina.dart';
 import '../widgets/nota_dialog.dart';
 import '../widgets/grupo_notas_card.dart';
 import '../widgets/post_it_card.dart';
@@ -1032,6 +1034,7 @@ class _SeccionRutinasHoy extends ConsumerWidget {
                   ],
                 ),
               ),
+              const _BadgeMonedasRacha(),
               IconButton(
                 icon: Icon(Icons.mode_edit_outline_rounded, color: colorPrincipal),
                 tooltip: 'Configurar Horario Semanal',
@@ -1092,6 +1095,60 @@ class _SeccionRutinasHoy extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// Texto explicativo de las monedas de racha, compartido entre el SnackBar
+// que aparece al tocar el saldo (_BadgeMonedasRacha) y cualquier otro lugar
+// que quiera explicarlas con las mismas palabras.
+const String explicacionMonedasRacha =
+    '🪙 Ganas 1 moneda cada vez que una rutina llega a una racha de 7 (y de '
+    'nuevo en 14, 21...). Úsalas para omitir un día sin romper tu racha: '
+    'cuesta más cuanto más seguido omitas la misma rutina.';
+
+// Saldo de monedas de racha: se ganan al alcanzar un hito de racha semanal
+// en cualquier rutina y se gastan al omitir una ocurrencia de hoy sin
+// romper la racha (ver toggleOmitida en rutina_provider.dart). Vive junto
+// al botón de "Configurar Horario Semanal" para que el usuario lo tenga a
+// la vista mientras decide si le conviene omitir algo hoy. Es tocable: al
+// presionarlo muestra un SnackBar explicando cómo funcionan (el Tooltip
+// solo se ve con long-press/hover, poco descubrible).
+class _BadgeMonedasRacha extends ConsumerWidget {
+  const _BadgeMonedasRacha();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final int monedas = ref.watch(monedasProvider);
+    return Tooltip(
+      message: explicacionMonedasRacha,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => mostrarSnackBarSimple(
+          mensaje: explicacionMonedasRacha,
+          colorFondo: colorOmitidaRutina,
+          colorTexto: Colors.white,
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          margin: const EdgeInsets.only(top: 4),
+          decoration: BoxDecoration(
+            color: colorOmitidaRutina.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🪙', style: TextStyle(fontSize: 14)),
+              const SizedBox(width: 4),
+              Text(
+                '$monedas',
+                style: TextStyle(fontWeight: FontWeight.bold, color: colorOmitidaRutina, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
