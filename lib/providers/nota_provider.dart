@@ -70,13 +70,46 @@ class NotaNotifier extends Notifier<List<NotaPostIt>> {
     _guardarNotas(nuevoEstado);
   }
 
-  void editarNota(String id, String nuevoTexto, {TipoNota? tipo, List<ItemLista>? elementosLista, int? colorValue}) {
+  void editarNota(String id, String nuevoTexto, {TipoNota? tipo, List<ItemLista>? elementosLista, int? colorValue, String? titulo}) {
     final nuevoEstado = [
       for (final nota in state)
         if (nota.id == id)
-          nota.copyWith(texto: nuevoTexto, tipo: tipo, elementosLista: elementosLista, colorValue: colorValue)
+          nota.copyWith(texto: nuevoTexto, tipo: tipo, elementosLista: elementosLista, colorValue: colorValue, titulo: titulo)
         else
           nota,
+    ];
+    state = nuevoEstado;
+    _guardarNotas(nuevoEstado);
+  }
+
+  // Junta las notas indicadas bajo un mismo nombre de grupo. Si el nombre
+  // coincide con uno ya existente, las notas seleccionadas simplemente se
+  // suman a ese grupo.
+  void agruparNotas(List<String> ids, String nombreGrupo) {
+    final idsSet = ids.toSet();
+    final nuevoEstado = [
+      for (final nota in state)
+        if (idsSet.contains(nota.id)) nota.copyWith(grupoNombre: nombreGrupo) else nota,
+    ];
+    state = nuevoEstado;
+    _guardarNotas(nuevoEstado);
+  }
+
+  // Saca una nota de su grupo; vuelve a mostrarse suelta en el tablero.
+  void quitarDeGrupo(String id) {
+    final nuevoEstado = [
+      for (final nota in state)
+        if (nota.id == id) nota.copyWith(grupoNombre: '') else nota,
+    ];
+    state = nuevoEstado;
+    _guardarNotas(nuevoEstado);
+  }
+
+  // Disuelve el grupo completo: todas sus notas vuelven a quedar sueltas.
+  void disolverGrupo(String nombreGrupo) {
+    final nuevoEstado = [
+      for (final nota in state)
+        if (nota.grupoNombre == nombreGrupo) nota.copyWith(grupoNombre: '') else nota,
     ];
     state = nuevoEstado;
     _guardarNotas(nuevoEstado);

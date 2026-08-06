@@ -21,6 +21,14 @@ class NotaPostIt {
   double rotacion;
   TipoNota tipo;
   List<ItemLista> elementosLista;
+  // Título opcional ('' = sin título). Se muestra más grande que el
+  // cuerpo, tanto en el diálogo de edición como en la tarjeta del tablero.
+  String titulo;
+  // Nombre del grupo al que pertenece ('' = suelta, sin grupo). La
+  // identidad del grupo es su propio nombre: no existe una entidad
+  // "grupo" separada, así que cuando la última nota con ese nombre se
+  // desagrupa o se elimina, el grupo simplemente deja de existir.
+  String grupoNombre;
 
   NotaPostIt({
     required this.id,
@@ -29,6 +37,8 @@ class NotaPostIt {
     required this.rotacion,
     this.tipo = TipoNota.texto,
     List<ItemLista>? elementosLista,
+    this.titulo = '',
+    this.grupoNombre = '',
   }) : elementosLista = elementosLista ?? [];
 
   Color get color => Color(colorValue);
@@ -38,6 +48,8 @@ class NotaPostIt {
     int? colorValue,
     TipoNota? tipo,
     List<ItemLista>? elementosLista,
+    String? titulo,
+    String? grupoNombre,
   }) {
     return NotaPostIt(
       id: id,
@@ -46,6 +58,8 @@ class NotaPostIt {
       rotacion: rotacion,
       tipo: tipo ?? this.tipo,
       elementosLista: elementosLista ?? this.elementosLista.map((e) => ItemLista(texto: e.texto, completado: e.completado)).toList(),
+      titulo: titulo ?? this.titulo,
+      grupoNombre: grupoNombre ?? this.grupoNombre,
     );
   }
 
@@ -56,6 +70,8 @@ class NotaPostIt {
     'rotacion': rotacion,
     'tipo': tipo.name,
     'elementosLista': elementosLista.map((e) => e.toMap()).toList(),
+    'titulo': titulo,
+    'grupoNombre': grupoNombre,
   };
 
   factory NotaPostIt.fromMap(Map<String, dynamic> map) => NotaPostIt(
@@ -65,5 +81,7 @@ class NotaPostIt {
     rotacion: (map['rotacion'] as num?)?.toDouble() ?? 0.0,
     tipo: TipoNota.values.firstWhere((e) => e.name == map['tipo'], orElse: () => TipoNota.texto),
     elementosLista: (map['elementosLista'] as List?)?.map((e) => ItemLista.fromMap(e as Map<String, dynamic>)).toList() ?? [],
+    titulo: map['titulo'] ?? '',
+    grupoNombre: map['grupoNombre'] ?? '',
   );
 }
