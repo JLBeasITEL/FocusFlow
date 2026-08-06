@@ -21,7 +21,7 @@ class _FeedbackModalState extends State<FeedbackModal> {
     final Email email = Email(
       body: 'Categoría: $_tipoFeedback\n\nDetalles del mensaje:\n$texto\n\n--- \nEnviado desde FocusFlow App',
       subject: 'Feedback App de Tareas - $_tipoFeedback',
-      recipients: ['jl.beas_itel@outlook.com'], 
+      recipients: ['jl.beas.itel@gmail.com'], 
       isHTML: false,
     );
 

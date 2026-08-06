@@ -3,7 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../providers/tarea_provider.dart';
+import '../../providers/plantilla_provider.dart';
+import '../../providers/tema_provider.dart';
 import '../../models/tarea.dart';
+import '../../models/plantilla.dart';
+import '../../core/app_messenger.dart';
 import 'ayuda_formulario_button.dart';
 
 class AddTareaModal extends ConsumerStatefulWidget {
@@ -67,7 +71,12 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
         _horaSeleccionada = TimeOfDay(hour: _fechaSeleccionada!.hour, minute: _fechaSeleccionada!.minute);
       }
       _mostrarAvanzadas = true;
-    } else if (_descripcionController.text.isNotEmpty || _horasController.text.isNotEmpty) {
+    } else if (_descripcionController.text.isNotEmpty ||
+        _horasController.text.isNotEmpty ||
+        _subtareasTemp.isNotEmpty) {
+      // Subtareas ahora vive dentro de "Más opciones": si la tarea que se
+      // edita ya trae subtareas, hay que expandir la sección o quedarían
+      // escondidas sin que el usuario sepa que existen.
       _mostrarAvanzadas = true;
     }
     if (_subtareasTemp.isNotEmpty) _mostrarSubtareas = true;
@@ -102,6 +111,14 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     final limpio = (valor ?? '').trim();
     if (limpio.isEmpty) return null;
     return limpio[0].toUpperCase() + limpio.substring(1).toLowerCase();
+  }
+
+  // Mismo patrón que home_screen.dart/gestor_rutinas_screen.dart: los avisos
+  // llevan los colores del tema elegido en vez del color por defecto de
+  // Flutter, para no verse "fuera de lugar" frente al resto de la app.
+  void _avisar(String mensaje) {
+    final tema = ref.read(temaProvider);
+    mostrarSnackBarSimple(mensaje: mensaje, colorFondo: tema.colorPrincipal, colorTexto: tema.colorSobrePrincipal);
   }
 
   void _refrescarGruposDisponibles() {
@@ -233,6 +250,198 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
       },
     );
     _refrescarGruposDisponibles();
+  }
+
+  // Guarda el estado actual del formulario (título, subtareas, grupo y
+  // urgencia; NO fecha/horas, que son propias de cada ocasión) como una
+  // plantilla reutilizable.
+  Future<void> _guardarComoPlantilla() async {
+    final titulo = _tituloController.text.trim();
+    if (titulo.isEmpty) {
+      _avisar('Escribe un título antes de guardar la plantilla');
+      return;
+    }
+
+    final controller = TextEditingController(text: titulo);
+    final nombre = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Guardar como plantilla'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(hintText: 'Nombre de la plantilla'),
+          onSubmitted: (val) => Navigator.pop(dialogContext, val),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, controller.text), child: const Text('Guardar')),
+        ],
+      ),
+    );
+
+    final nombreLimpio = nombre?.trim();
+    if (nombreLimpio == null || nombreLimpio.isEmpty) return;
+
+    final plantilla = Plantilla(
+      nombre: nombreLimpio,
+      titulo: titulo,
+      grupo: _grupoSeleccionado,
+      urgenciaBase: _urgenciaMostrada,
+      // Copiamos solo el texto: una plantilla siempre arranca "sin marcar".
+      subtareas: _subtareasTemp.map((s) => ItemSubtarea(texto: s.texto)).toList(),
+    );
+    await ref.read(plantillaProvider.notifier).agregarPlantilla(plantilla);
+    if (!mounted) return;
+    _avisar('Plantilla "$nombreLimpio" guardada');
+  }
+
+  // Rellena el formulario con los datos de una plantilla guardada. La fecha,
+  // hora, descripción y horas estimadas no se tocan: son propias de cada
+  // ocasión y quedan tal como el usuario las haya dejado.
+  void _aplicarPlantilla(Plantilla plantilla) {
+    setState(() {
+      _tituloController.text = plantilla.titulo;
+      _grupoSeleccionado = plantilla.grupo;
+      if (!_gruposDisponibles.contains(_grupoSeleccionado)) {
+        _gruposDisponibles = [..._gruposDisponibles, _grupoSeleccionado];
+      }
+      _urgenciaBase = plantilla.urgenciaBase;
+      _subtareasTemp = plantilla.subtareas.map((s) => ItemSubtarea(texto: s.texto)).toList();
+      if (_subtareasTemp.isNotEmpty) _mostrarSubtareas = true;
+    });
+    _avisar('Plantilla "${plantilla.nombre}" aplicada');
+  }
+
+  // Selector de plantillas: tocar una fila la aplica al formulario actual y
+  // cierra el diálogo. Solo para elegir; renombrar/eliminar vive en
+  // _gestionarPlantillas (el lápiz).
+  Future<void> _usarPlantilla() async {
+    final plantillas = ref.read(plantillaProvider);
+    if (plantillas.isEmpty) {
+      _avisar('Todavía no tienes plantillas guardadas');
+      return;
+    }
+
+    final plantillaElegida = await showDialog<Plantilla>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Usar plantilla'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: plantillas.length,
+            itemBuilder: (context, index) {
+              final plantilla = plantillas[index];
+              return ListTile(
+                title: Text(plantilla.nombre),
+                subtitle: Text(plantilla.titulo, maxLines: 1, overflow: TextOverflow.ellipsis),
+                onTap: () => Navigator.pop(dialogContext, plantilla),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+        ],
+      ),
+    );
+
+    if (plantillaElegida != null) _aplicarPlantilla(plantillaElegida);
+  }
+
+  // Diálogo para renombrar/eliminar plantillas existentes (mismo patrón que
+  // "Editar grupos" en _gestionarGrupos). Aplicar una plantilla al
+  // formulario se hace desde el botón "Usar plantilla", no desde acá.
+  Future<void> _gestionarPlantillas() async {
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setStateDialog) {
+            final plantillas = ref.read(plantillaProvider);
+            return AlertDialog(
+              title: const Text('Editar plantillas'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: plantillas.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text('Todavía no tienes plantillas guardadas.'),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: plantillas.length,
+                        itemBuilder: (context, index) {
+                          final plantilla = plantillas[index];
+                          return ListTile(
+                            title: Text(plantilla.nombre),
+                            subtitle: Text(plantilla.titulo, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, size: 20),
+                                  tooltip: 'Renombrar',
+                                  onPressed: () async {
+                                    final renombreController = TextEditingController(text: plantilla.nombre);
+                                    final nuevoNombre = await showDialog<String>(
+                                      context: dialogContext,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Renombrar plantilla'),
+                                        content: TextField(
+                                          controller: renombreController,
+                                          autofocus: true,
+                                          textCapitalization: TextCapitalization.sentences,
+                                        ),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                                          TextButton(onPressed: () => Navigator.pop(ctx, renombreController.text), child: const Text('Guardar')),
+                                        ],
+                                      ),
+                                    );
+                                    final nombreLimpio = nuevoNombre?.trim();
+                                    if (nombreLimpio == null || nombreLimpio.isEmpty || nombreLimpio == plantilla.nombre) return;
+                                    await ref.read(plantillaProvider.notifier).renombrarPlantilla(plantilla.id, nombreLimpio);
+                                    setStateDialog(() {});
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                                  tooltip: 'Eliminar',
+                                  onPressed: () async {
+                                    final confirmar = await showDialog<bool>(
+                                      context: dialogContext,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Eliminar plantilla'),
+                                        content: Text('¿Eliminar la plantilla "${plantilla.nombre}"?'),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirmar != true) return;
+                                    await ref.read(plantillaProvider.notifier).eliminarPlantilla(plantilla.id);
+                                    setStateDialog(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cerrar')),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _elegirFecha() async {
@@ -397,14 +606,15 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                       'Fecha y Hora: Fecha límite para completarla. Si no eliges hora, se usa las 23:59 por defecto.',
                       'Urgencia: Qué tan prioritaria es. Si defines horas estimadas, se calcula sola según el tiempo restante.',
                       'Horas estimadas: Tiempo que crees que tomará. Al definirlas, la urgencia deja de elegirse manualmente.',
-                      'Subtareas: Pasos pequeños dentro de la tarea que puedes marcar como completados por separado.',
+                      'Subtareas: Pasos pequeños dentro de la tarea que puedes marcar como completados por separado. Está dentro de "Más opciones".',
+                      'Plantillas: Para tareas que repites seguido (pero no todos los días). También dentro de "Más opciones". Guarda el título, las subtareas, el grupo y la urgencia con "Guardar como plantilla"; usa "Usar plantilla" para aplicar una ya guardada (puedes seguir ajustando cualquier campo a mano después); y el lápiz para renombrarlas o eliminarlas.',
                     ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 24),
-            
+
             TextField(
               controller: _tituloController,
               autofocus: true,
@@ -449,13 +659,13 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                _BotonAccionGrupo(
+                _BotonAccionCuadrado(
                   icon: Icons.add_rounded,
                   tooltip: 'Nuevo grupo',
                   onPressed: _crearNuevoGrupo,
                 ),
                 const SizedBox(width: 8),
-                _BotonAccionGrupo(
+                _BotonAccionCuadrado(
                   icon: Icons.edit_rounded,
                   tooltip: 'Editar grupos',
                   onPressed: _gestionarGrupos,
@@ -552,136 +762,193 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
               ),
             ],
 
-            // --- SECCIÓN DE SUBTAREAS (COLAPSABLE) ---
-            const SizedBox(height: 24),
-            InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () => setState(() => _mostrarSubtareas = !_mostrarSubtareas),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    const Icon(Icons.checklist_rounded, size: 18, color: Colors.black54),
-                    const SizedBox(width: 8),
-                    const Text('Subtareas', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                    if (_subtareasTemp.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(10)),
-                        child: Text(
-                          '${_subtareasTemp.where((s) => s.completado).length}/${_subtareasTemp.length}',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
-                        ),
-                      ),
-                    ],
-                    const Spacer(),
-                    Icon(_mostrarSubtareas ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.grey),
-                  ],
-                ),
-              ),
-            ),
+            // Subtareas y Plantillas viven dentro de "Más opciones": son
+            // funciones secundarias que no todas las tareas necesitan, así
+            // que no ocupan espacio en el formulario simple por defecto.
+            // Con AnimatedSize (mismo patrón que ya usa Subtareas más abajo)
+            // el bloque completo aparece con una animación de ~250ms en vez
+            // de saltar de golpe: al mover Subtareas y Plantillas adentro de
+            // "Más opciones" el salto instantáneo se volvió bastante más
+            // grande (más widgets aparecen en el mismo frame) y se sentía
+            // como un tirón al tocar el botón.
             AnimatedSize(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
               alignment: Alignment.topCenter,
-              child: !_mostrarSubtareas
+              child: !_mostrarAvanzadas
                   ? const SizedBox(width: double.infinity, height: 0)
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SizedBox(height: 12),
-                        if (_subtareasTemp.isNotEmpty)
-                          ReorderableListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            buildDefaultDragHandles: false,
-                            itemCount: _subtareasTemp.length,
-                            onReorder: (oldIndex, newIndex) {
-                              setState(() {
-                                var destino = newIndex;
-                                if (destino > oldIndex) destino -= 1;
-                                final item = _subtareasTemp.removeAt(oldIndex);
-                                _subtareasTemp.insert(destino, item);
-                              });
-                            },
-                            itemBuilder: (context, index) {
-                              final sub = _subtareasTemp[index];
-                              return Dismissible(
-                                key: ValueKey(sub.id),
-                                direction: DismissDirection.endToStart,
-                                background: Container(
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 16),
-                                  margin: const EdgeInsets.only(bottom: 4),
-                                  decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(12)),
-                                  child: const Icon(Icons.delete_outline, color: Colors.red),
-                                ),
-                                onDismissed: (_) => setState(() => _subtareasTemp.removeAt(index)),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Row(
-                                    children: [
-                                      ReorderableDragStartListener(
-                                        index: index,
-                                        child: const Padding(
-                                          padding: EdgeInsets.only(right: 4),
-                                          child: Icon(Icons.drag_indicator, size: 20, color: Colors.black26),
-                                        ),
-                                      ),
-                                      SizedBox(
-                                        height: 24, width: 24,
-                                        child: Checkbox(
-                                          value: sub.completado,
-                                          activeColor: Colors.black87,
-                                          onChanged: (val) => setState(() => sub.completado = val ?? false),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          sub.texto,
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            decoration: sub.completado ? TextDecoration.lineThrough : null,
-                                            color: sub.completado ? Colors.black38 : Colors.black87,
+              // --- SECCIÓN DE SUBTAREAS (COLAPSABLE) ---
+              const SizedBox(height: 24),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => setState(() => _mostrarSubtareas = !_mostrarSubtareas),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.checklist_rounded, size: 18, color: Colors.black54),
+                      const SizedBox(width: 8),
+                      const Text('Subtareas', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      if (_subtareasTemp.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(10)),
+                          child: Text(
+                            '${_subtareasTemp.where((s) => s.completado).length}/${_subtareasTemp.length}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      Icon(_mostrarSubtareas ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.grey),
+                    ],
+                  ),
+                ),
+              ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                alignment: Alignment.topCenter,
+                child: !_mostrarSubtareas
+                    ? const SizedBox(width: double.infinity, height: 0)
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const SizedBox(height: 12),
+                          if (_subtareasTemp.isNotEmpty)
+                            ReorderableListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              buildDefaultDragHandles: false,
+                              itemCount: _subtareasTemp.length,
+                              onReorder: (oldIndex, newIndex) {
+                                setState(() {
+                                  var destino = newIndex;
+                                  if (destino > oldIndex) destino -= 1;
+                                  final item = _subtareasTemp.removeAt(oldIndex);
+                                  _subtareasTemp.insert(destino, item);
+                                });
+                              },
+                              itemBuilder: (context, index) {
+                                final sub = _subtareasTemp[index];
+                                return Dismissible(
+                                  key: ValueKey(sub.id),
+                                  direction: DismissDirection.endToStart,
+                                  background: Container(
+                                    alignment: Alignment.centerRight,
+                                    padding: const EdgeInsets.only(right: 16),
+                                    margin: const EdgeInsets.only(bottom: 4),
+                                    decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(12)),
+                                    child: const Icon(Icons.delete_outline, color: Colors.red),
+                                  ),
+                                  onDismissed: (_) => setState(() => _subtareasTemp.removeAt(index)),
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Row(
+                                      children: [
+                                        ReorderableDragStartListener(
+                                          index: index,
+                                          child: const Padding(
+                                            padding: EdgeInsets.only(right: 4),
+                                            child: Icon(Icons.drag_indicator, size: 20, color: Colors.black26),
                                           ),
                                         ),
-                                      ),
-                                      GestureDetector(
-                                        onTap: () => setState(() => _subtareasTemp.removeAt(index)),
-                                        child: const Icon(Icons.close, size: 18, color: Colors.black38),
-                                      ),
-                                    ],
+                                        SizedBox(
+                                          height: 24, width: 24,
+                                          child: Checkbox(
+                                            value: sub.completado,
+                                            activeColor: Colors.black87,
+                                            onChanged: (val) => setState(() => sub.completado = val ?? false),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            sub.texto,
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              decoration: sub.completado ? TextDecoration.lineThrough : null,
+                                              color: sub.completado ? Colors.black38 : Colors.black87,
+                                            ),
+                                          ),
+                                        ),
+                                        GestureDetector(
+                                          onTap: () => setState(() => _subtareasTemp.removeAt(index)),
+                                          child: const Icon(Icons.close, size: 18, color: Colors.black38),
+                                        ),
+                                      ],
+                                    ),
                                   ),
+                                );
+                              },
+                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _nuevaSubtareaController,
+                                  decoration: InputDecoration(
+                                    hintText: 'Agregar paso...',
+                                    isDense: true,
+                                    filled: true, fillColor: Colors.grey.shade50,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+                                  ),
+                                  textInputAction: TextInputAction.done,
+                                  onSubmitted: (_) => _agregarSubtareaTemp(),
                                 ),
-                              );
-                            },
-                          ),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _nuevaSubtareaController,
-                                decoration: InputDecoration(
-                                  hintText: 'Agregar paso...',
-                                  isDense: true,
-                                  filled: true, fillColor: Colors.grey.shade50,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
-                                ),
-                                textInputAction: TextInputAction.done,
-                                onSubmitted: (_) => _agregarSubtareaTemp(),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.add_circle, size: 28, color: Colors.black87),
-                              onPressed: _agregarSubtareaTemp,
-                            ),
-                          ],
-                        ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.add_circle, size: 28, color: Colors.black87),
+                                onPressed: _agregarSubtareaTemp,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+              ),
+
+              // --- SECCIÓN DE PLANTILLAS ---
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _guardarComoPlantilla,
+                    icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+                    label: const Text('Guardar como plantilla'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      side: BorderSide(color: Colors.grey.shade400, width: 1.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _usarPlantilla,
+                    icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
+                    label: const Text('Usar plantilla'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      side: BorderSide(color: Colors.grey.shade400, width: 1.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  _BotonAccionCuadrado(
+                    icon: Icons.edit_rounded,
+                    tooltip: 'Editar plantillas',
+                    onPressed: _gestionarPlantillas,
+                  ),
+                ],
+              ),
+              // --- FIN DE LA SECCIÓN DE PLANTILLAS ---
                       ],
                     ),
             ),
@@ -696,7 +963,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
               ),
               child: const Text('Guardar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
-            
+
             if (!_mostrarAvanzadas)
               TextButton.icon(
                 onPressed: () => setState(() => _mostrarAvanzadas = true),
@@ -710,14 +977,15 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   }
 }
 
-// Botón cuadrado junto al desplegable de grupo (crear / editar grupos),
-// con el mismo trazo y radio que los campos de texto del formulario.
-class _BotonAccionGrupo extends StatelessWidget {
+// Botón cuadrado junto al desplegable de grupo (crear / editar grupos) y a
+// la fila de plantillas (editar plantillas), con el mismo trazo y radio que
+// los campos de texto del formulario.
+class _BotonAccionCuadrado extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onPressed;
 
-  const _BotonAccionGrupo({
+  const _BotonAccionCuadrado({
     required this.icon,
     required this.tooltip,
     required this.onPressed,

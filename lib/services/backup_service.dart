@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/configuracion_provider.dart';
 import '../providers/nota_provider.dart';
+import '../providers/plantilla_provider.dart';
 import '../providers/rutina_provider.dart';
 import '../providers/tarea_provider.dart';
 import '../providers/tema_provider.dart';
@@ -30,6 +31,7 @@ const int _versionBackupActual = 1;
 const String _claveRutinas = 'lista_rutinas_v2';
 const String _claveTareas = 'lista_tareas_v1';
 const String _claveGrupos = 'lista_grupos_v1';
+const String _clavePlantillas = 'lista_plantillas_tareas_v1';
 const String _claveNotas = 'lista_notas_postit_v2';
 const String _claveTema = 'tema_seleccionado';
 const String _claveSonidoNotificacion = 'sonido_notificacion';
@@ -48,6 +50,7 @@ class BackupService {
         _claveRutinas: _decodificarListaSinNotificaciones(prefs.getString(_claveRutinas)),
         _claveTareas: _decodificarLista(prefs.getString(_claveTareas)),
         _claveGrupos: _decodificarLista(prefs.getString(_claveGrupos)),
+        _clavePlantillas: _decodificarLista(prefs.getString(_clavePlantillas)),
         _claveNotas: _decodificarLista(prefs.getString(_claveNotas)),
         _claveTema: prefs.getInt(_claveTema),
         _claveSonidoNotificacion: prefs.getString(_claveSonidoNotificacion),
@@ -116,6 +119,7 @@ class BackupService {
       await _restaurarLista(prefs, _claveRutinas, backup[_claveRutinas]);
       await _restaurarLista(prefs, _claveTareas, backup[_claveTareas]);
       await _restaurarLista(prefs, _claveGrupos, backup[_claveGrupos]);
+      await _restaurarLista(prefs, _clavePlantillas, backup[_clavePlantillas]);
       await _restaurarLista(prefs, _claveNotas, backup[_claveNotas]);
 
       final temaGuardado = backup[_claveTema];
@@ -145,6 +149,7 @@ class BackupService {
     // recién importados sin necesidad de reiniciar la app.
     await ref.read(tareaProvider.notifier).recargarDesdeDisco();
     await ref.read(ordenGruposProvider.notifier).recargarDesdeDisco();
+    await ref.read(plantillaProvider.notifier).recargarDesdeDisco();
     await ref.read(notaProvider.notifier).recargarDesdeDisco();
     await ref.read(temaProvider.notifier).recargarDesdeDisco();
     await ref.read(sonidoProvider.notifier).recargarDesdeDisco();
