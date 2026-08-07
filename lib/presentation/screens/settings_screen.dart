@@ -10,6 +10,7 @@ import '../widgets/feedback_modal.dart';
 import '../../services/backup_service.dart';
 import '../../services/notificaciones_service.dart';
 import '../../providers/rutina_provider.dart';
+import '../../providers/tarea_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -131,7 +132,7 @@ class SettingsScreen extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'FocusFlow v2.0.9',
+                  'FocusFlow v2.1.0',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -287,8 +288,12 @@ class SettingsScreen extends ConsumerWidget {
               // 1. Cancelamos TODO lo que haya en el sistema, sin excepción
               await NotificacionesService().limpiarTodasLasAlarmasDelSistema();
 
-              // 2. Reprogramamos desde cero basándonos en el estado real guardado
+              // 2. Reprogramamos desde cero basándonos en el estado real guardado.
+              // Las dos: cancelAll() no distingue entre alarmas de rutinas y de
+              // tareas, así que si solo reprogramáramos rutinas, las tareas
+              // quedarían sin ninguna alerta programada.
               await ref.read(rutinaProvider.notifier).resincronizarTodasLasAlarmas();
+              await ref.read(tareaProvider.notifier).resincronizarTodasLasAlarmas();
 
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(

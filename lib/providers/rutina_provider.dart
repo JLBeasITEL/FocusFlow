@@ -51,7 +51,23 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     return completadas / rutinasDeHoy.length;
   }
 
+  // Todo el cuerpo va envuelto en try/catch (igual que NotaNotifier._cargarNotas):
+  // sin esto, CUALQUIER excepción imprevista a mitad de esta función (parseo,
+  // relleno de colchón, plugin de notificaciones, etc.) queda sin capturar y
+  // aborta silenciosamente esta llamada. Eso es especialmente grave cuando
+  // _cargarRutinas se invoca desde BackupService.importarBackup: al ser una
+  // cadena de awaits secuencial sobre varios providers, una excepción acá
+  // puede impedir que se recarguen los que faltan, dejándolos con el estado
+  // viejo en memoria aunque los datos ya se hayan escrito bien en disco.
   Future<void> _cargarRutinas() async {
+    try {
+      await _cargarRutinasInterno();
+    } catch (e) {
+      debugPrint('Error al cargar rutinas: $e');
+    }
+  }
+
+  Future<void> _cargarRutinasInterno() async {
     final prefs = await SharedPreferences.getInstance();
     final String? rutinasJson = prefs.getString(_storageKey);
 

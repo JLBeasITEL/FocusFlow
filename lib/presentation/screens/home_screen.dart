@@ -112,6 +112,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         await NotificacionesService().limpiarTodasLasAlarmasDelSistema();
         await prefs.setBool('fantasmas_borrados', true);
         print('🧹 Limpieza nuclear ejecutada por única vez');
+
+        // A diferencia de las rutinas (que RutinaNotifier.build() ya
+        // reprograma por su cuenta al abrir la app, ver el comentario de
+        // "FIX APLICADO" abajo), nada más vuelve a programar las alertas de
+        // las tareas tras este cancelAll(): sin esto, todas las tareas con
+        // fecha límite se quedaban sin ninguna alarma (incluidas las de
+        // cambio de nivel de urgencia) hasta que el usuario editara o
+        // marcara/desmarcara cada una manualmente.
+        await ref.read(tareaProvider.notifier).resincronizarTodasLasAlarmas();
       }
 
       // ============================================================

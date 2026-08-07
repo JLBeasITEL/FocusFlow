@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/tarea.dart';
@@ -18,7 +19,22 @@ class TareaNotifier extends Notifier<List<Tarea>> {
   }
 
   // --- CARGAR DATOS Y LIMPIEZA AUTOMÁTICA ---
+  // Envuelto en try/catch (igual que NotaNotifier._cargarNotas): sin esto,
+  // cualquier excepción imprevista durante la carga o la limpieza diaria
+  // queda sin capturar. Eso es especialmente grave cuando esta función se
+  // invoca desde BackupService.importarBackup, donde es un eslabón de una
+  // cadena secuencial de recargas de varios providers: una excepción acá
+  // podría impedir que los providers siguientes se recarguen, dejándolos
+  // con el estado viejo en memoria aunque los datos ya estén bien en disco.
   Future<void> _cargarTareas() async {
+    try {
+      await _cargarTareasInterno();
+    } catch (e) {
+      debugPrint('Error al cargar tareas: $e');
+    }
+  }
+
+  Future<void> _cargarTareasInterno() async {
     final prefs = await SharedPreferences.getInstance();
     final String? tareasJson = prefs.getString(_storageKey);
 
@@ -73,6 +89,25 @@ class TareaNotifier extends Notifier<List<Tarea>> {
   // estado en memoria. Se usa tras restaurar un respaldo.
   Future<void> recargarDesdeDisco() async {
     await _cargarTareas();
+  }
+
+  // Reprograma desde cero las alertas de TODAS las tareas pendientes con
+  // fecha límite (incluidas las de cambio de nivel de urgencia, ver
+  // NotificacionesService.programarAlertaDefinitiva). Equivalente, para
+  // tareas, de RutinaNotifier.resincronizarTodasLasAlarmas: hace falta
+  // llamarla junto con esa cada vez que se use
+  // NotificacionesService().limpiarTodasLasAlarmasDelSistema() (el botón
+  // "Reparar notificaciones" y la limpieza única de "fantasmas_borrados" al
+  // abrir la app), porque cancelAll() no distingue entre alarmas de rutinas
+  // y de tareas: sin este método, esa limpieza dejaba SIN NINGUNA alerta
+  // programada a todas las tareas hasta que el usuario las editara o
+  // marcara/desmarcara una por una.
+  Future<void> resincronizarTodasLasAlarmas() async {
+    for (final tarea in state) {
+      if (!tarea.esCompletada && tarea.fechaLimite != null) {
+        await NotificacionesService().programarAlertaDefinitiva(tarea);
+      }
+    }
   }
 
   // --- MÉTODOS DE ACCIÓN ---

@@ -154,21 +154,39 @@ class BackupService {
     }
 
     // Recargamos cada provider desde disco para que la UI refleje los datos
-    // recién importados sin necesidad de reiniciar la app.
-    await ref.read(tareaProvider.notifier).recargarDesdeDisco();
-    await ref.read(ordenGruposProvider.notifier).recargarDesdeDisco();
-    await ref.read(plantillaProvider.notifier).recargarDesdeDisco();
-    await ref.read(notaProvider.notifier).recargarDesdeDisco();
-    await ref.read(temaProvider.notifier).recargarDesdeDisco();
-    await ref.read(sonidoProvider.notifier).recargarDesdeDisco();
-    await ref.read(monedasProvider.notifier).recargarDesdeDisco();
+    // recién importados sin necesidad de reiniciar la app. Cada recarga va
+    // aislada en su propio try/catch: los datos ya quedaron escritos
+    // correctamente en SharedPreferences arriba (eso es lo que de verdad
+    // importa para no perder información), así que si UNA sola de estas
+    // recargas en memoria falla por lo que sea, no debe impedir que las
+    // demás se ejecuten ni dejar al resto de los providers mostrando datos
+    // viejos por culpa de un error ajeno a ellos.
+    await _recargarSinPropagar('tareas', () => ref.read(tareaProvider.notifier).recargarDesdeDisco());
+    await _recargarSinPropagar('grupos', () => ref.read(ordenGruposProvider.notifier).recargarDesdeDisco());
+    await _recargarSinPropagar('plantillas', () => ref.read(plantillaProvider.notifier).recargarDesdeDisco());
+    await _recargarSinPropagar('notas', () => ref.read(notaProvider.notifier).recargarDesdeDisco());
+    await _recargarSinPropagar('tema', () => ref.read(temaProvider.notifier).recargarDesdeDisco());
+    await _recargarSinPropagar('sonido', () => ref.read(sonidoProvider.notifier).recargarDesdeDisco());
+    await _recargarSinPropagar('monedas', () => ref.read(monedasProvider.notifier).recargarDesdeDisco());
 
     // Los IDs de notificacionesActivas del dispositivo viejo no tienen
     // validez aquí: recargamos las rutinas (con notificacionesActivas ya
     // vacío, ver _decodificarListaSinNotificaciones) y reprogramamos todas
     // las alarmas desde cero en este dispositivo.
-    await ref.read(rutinaProvider.notifier).recargarDesdeDisco();
-    await ref.read(rutinaProvider.notifier).resincronizarTodasLasAlarmas();
+    await _recargarSinPropagar('rutinas', () => ref.read(rutinaProvider.notifier).recargarDesdeDisco());
+    await _recargarSinPropagar(
+      'resincronización de alarmas',
+      () => ref.read(rutinaProvider.notifier).resincronizarTodasLasAlarmas(),
+    );
+  }
+
+  Future<void> _recargarSinPropagar(String nombre, Future<void> Function() accion) async {
+    try {
+      await accion();
+    } catch (e) {
+      // ignore: avoid_print
+      print('BackupService.importarBackup: fallo no crítico al recargar "$nombre" -> $e');
+    }
   }
 
   void _validarVersion(Map<String, dynamic> backup) {
