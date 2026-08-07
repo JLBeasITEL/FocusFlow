@@ -47,3 +47,5 @@ app.*.map.json
 # Archivos de firma de Android
 key.properties
 *.jks
+# Logs de depuración
+alarma_retraso*.txt
