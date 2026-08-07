@@ -10,7 +10,6 @@ const List<Permission> _permisosGestionados = [
   Permission.notification,
   Permission.scheduleExactAlarm,
   Permission.ignoreBatteryOptimizations,
-  Permission.systemAlertWindow,
 ];
 
 class OnboardingPermisos extends StatefulWidget {
@@ -138,7 +137,7 @@ class _OnboardingPermisosState extends State<OnboardingPermisos>
       return;
     }
 
-    // scheduleExactAlarm, ignoreBatteryOptimizations, systemAlertWindow:
+    // scheduleExactAlarm, ignoreBatteryOptimizations:
     // Android no tiene diálogo nativo para estos, permission_handler abre
     // la pantalla de Ajustes correspondiente. El Future de aquí puede
     // resolverse ANTES de que el usuario termine de activar el switch,
@@ -219,25 +218,14 @@ class _OnboardingPermisosState extends State<OnboardingPermisos>
         onPressed: () => _manejarPermiso(permisoActual),
         onSaltar: _saltarPaso,
       );
-    } else if (permisoActual == Permission.ignoreBatteryOptimizations) {
+    } else {
+      // ignoreBatteryOptimizations
       return _PasoContenido(
         key: const ValueKey('battery'),
         icono: Icons.battery_saver_rounded,
         titulo: 'Ahorro de batería',
         descripcion:
             'Desactiva el ahorro de batería para esta app para que las alarmas no se retrasen ni se cancelen.',
-        textoBoton: 'Ir a Ajustes',
-        onPressed: () => _manejarPermiso(permisoActual),
-        onSaltar: _saltarPaso,
-      );
-    } else {
-      // systemAlertWindow
-      return _PasoContenido(
-        key: const ValueKey('overlay'),
-        icono: Icons.screen_lock_portrait_rounded,
-        titulo: 'Pantalla de bloqueo',
-        descripcion:
-            'Para que la alarma pueda encender tu pantalla cuando el teléfono esté bloqueado (vital en Xiaomi, Poco, etc.), activa "Mostrar sobre otras apps".',
         textoBoton: 'Ir a Ajustes',
         onPressed: () => _manejarPermiso(permisoActual),
         onSaltar: _saltarPaso,
