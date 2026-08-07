@@ -24,7 +24,9 @@ class GestorRutinasScreen extends ConsumerWidget {
         backgroundColor: colorTema,
         foregroundColor: colorSobreTema,
       ),
-      body: rutinas.isEmpty
+      body: SafeArea(
+        top: false,
+        child: rutinas.isEmpty
           ? const Center(child: Text('No hay rutinas configuradas'))
           : ListView.builder(
               padding: const EdgeInsets.all(16),
@@ -69,6 +71,7 @@ class GestorRutinasScreen extends ConsumerWidget {
                 );
               },
             ),
+      ),
       // Botón para crear una rutina completamente nueva
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {

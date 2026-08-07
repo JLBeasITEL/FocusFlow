@@ -246,7 +246,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     const double espaciado = 12;
     const double padHorizontal = 20;
     const double padTop = 8;
-    const double padBottom = 100; // deja libre el área que tapa el FAB
+    // 100 deja libre el área que tapa el FAB; se le suma el inset real del
+    // sistema (barra de gestos) para que en edge-to-edge tampoco quede tapado.
+    final double padBottom = 100 + MediaQuery.of(context).padding.bottom;
 
     return Column(
       children: [
@@ -266,7 +268,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
               );
 
               return SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(padHorizontal, padTop, padHorizontal, padBottom),
+                padding: EdgeInsets.fromLTRB(padHorizontal, padTop, padHorizontal, padBottom),
                 child: StaggeredGrid.count(
                   crossAxisCount: columnas,
                   mainAxisSpacing: espaciado,
@@ -600,7 +602,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             ),
           ),
         ),
-        child: TabBarView(
+        child: SafeArea(
+          top: false,
+          bottom: false,
+          child: TabBarView(
           controller: _tabController,
           children: [
             Column(
@@ -674,7 +679,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       ? Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withOpacity(0.6))))
                       : !vistaAgrupada
                       ? ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                          padding: EdgeInsets.fromLTRB(16, 16, 16, 100 + MediaQuery.of(context).padding.bottom),
                           itemCount: tareas.length,
                           itemBuilder: (context, index) => Padding(
                             padding: const EdgeInsets.only(bottom: 8.0),
@@ -706,7 +711,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                           // Es reordenable: el usuario puede arrastrar la cabecera de
                           // cada carpeta para cambiar el orden de los grupos.
                           return ReorderableListView.builder(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                            padding: EdgeInsets.fromLTRB(16, 16, 16, 100 + MediaQuery.of(context).padding.bottom),
                             buildDefaultDragHandles: false,
                             itemCount: listaGrupos.length,
                             onReorderStart: (index) {
@@ -811,6 +816,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             const _SeccionRutinasHoy(),
             _buildTabNotas(colorPrincipal, notasGuardadas),
           ],
+        ),
         ),
       ),
     );
@@ -1092,7 +1098,7 @@ class _SeccionRutinasHoy extends ConsumerWidget {
                         ),
                       )
                     : ListView.builder(
-                        padding: const EdgeInsets.only(top: 16, bottom: 100, left: 16, right: 16),
+                        padding: EdgeInsets.only(top: 16, bottom: 100 + MediaQuery.of(context).padding.bottom, left: 16, right: 16),
                         itemCount: rutinasDeHoy.length,
                         itemBuilder: (context, index) => RutinaCard(
                           rutina: rutinasDeHoy[index], 

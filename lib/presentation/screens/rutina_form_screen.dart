@@ -164,7 +164,9 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
       ),
       body: Stack(
         children: [
-          SingleChildScrollView(
+          SafeArea(
+            top: false,
+            child: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -318,6 +320,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
             const SizedBox(height: 20),
           ],
         ),
+          ),
           ),
           // Overlay de carga: bloquea el formulario y explica la demora
           // (programar notificaciones de varios días toma varios segundos).

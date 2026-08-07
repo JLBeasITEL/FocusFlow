@@ -41,7 +41,9 @@ class SettingsScreen extends ConsumerWidget {
         surfaceTintColor: Colors.transparent,
         foregroundColor: colorPrincipal,
       ),
-      body: ListView(
+      body: SafeArea(
+        top: false,
+        child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 12),
         children: [
           _SectionHeader(title: 'Apariencia', color: colorPrincipal),
@@ -158,6 +160,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
