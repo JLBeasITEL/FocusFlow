@@ -70,22 +70,43 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
     const double sliderHeight = 64.0;
     const double handleDiameter = sliderHeight;
 
+    // Interpolación entre el layout de portrait (alto disponible >= 600dp,
+    // sin cambios respecto al diseño original) y una versión compacta para
+    // landscape de teléfono (alto disponible <= 380dp), donde el ícono y los
+    // dos espaciadores grandes se comprimen para que el botón "Entendido" y
+    // el slider de posponer quepan sin salirse de la pantalla. El botón y el
+    // slider mantienen sus 64dp fijos (son objetivos táctiles). El
+    // SingleChildScrollView de abajo es la red de seguridad final para
+    // cualquier caso extremo que ni así entre.
+    const double alturaCompacta = 380.0;
+    const double alturaCompleta = 600.0;
+
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40.0),
-          child: Column(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final double t = ((constraints.maxHeight - alturaCompacta) / (alturaCompleta - alturaCompacta)).clamp(0.0, 1.0);
+              final double tamanoIcono = 56.0 + (100.0 - 56.0) * t;
+              final double espacioTrasLabel = 12.0 + (40.0 - 12.0) * t;
+              final double espacioGrande = 16.0 + (80.0 - 16.0) * t;
+
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('TAREA PENDIENTE', 
+              Text('TAREA PENDIENTE',
                 style: TextStyle(color: textColor.withValues(alpha: 0.6), letterSpacing: 3, fontWeight: FontWeight.bold)
               ),
-              const SizedBox(height: 40),
-              
+              SizedBox(height: espacioTrasLabel),
+
               Icon(
-                IconData(widget.iconoCode, fontFamily: 'MaterialIcons'), 
-                size: 100, 
+                IconData(widget.iconoCode, fontFamily: 'MaterialIcons'),
+                size: tamanoIcono,
                 color: accentColor
               ),
               const SizedBox(height: 20),
@@ -105,8 +126,8 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
                 ),
               ],
               
-              const SizedBox(height: 80),
-              
+              SizedBox(height: espacioGrande),
+
               // --- BOTÓN ENTENDIDO (INTACTO SEGÚN TU CÓDIGO) ---
               // --- BOTÓN ENTENDIDO MODIFICADO ---
               SizedBox(
@@ -258,6 +279,10 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
               ),
               const SizedBox(height: 40),
             ],
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),
