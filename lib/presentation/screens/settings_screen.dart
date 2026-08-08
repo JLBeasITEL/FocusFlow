@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../providers/tema_provider.dart';
 import '../../providers/configuracion_provider.dart';
 import '../widgets/feedback_modal.dart';
@@ -377,23 +379,74 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _importarRespaldo(BuildContext context, WidgetRef ref) async {
-    final archivoSeleccionado = await FilePicker.pickFile(
+    // pickFiles (en vez del atajo pickFile) para poder distinguir la
+    // cancelación real del usuario (resultado nulo) de un archivo elegido
+    // cuyo contenido no se pudo leer. withData:true pide los bytes
+    // directamente: en Android, elegir un archivo desde un proveedor SAF
+    // (p. ej. Descargas) puede devolver PlatformFile.path == null aunque
+    // el usuario sí seleccionó un archivo válido, así que no podemos
+    // depender solo de path.
+    final FilePickerResult? resultado = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json'],
+      // ignore: deprecated_member_use
+      allowMultiple: false, // evita un StateError si el picker permitiera selección múltiple
+      // ignore: deprecated_member_use
+      withData: true, // requerido para leer bytes en vez de depender de path (ver comentario arriba)
     );
 
-    final rutaSeleccionada = archivoSeleccionado?.path;
-    if (rutaSeleccionada == null) return; // El usuario canceló la selección
+    if (resultado == null) {
+      debugPrint('BackupImport: selección cancelada por el usuario.');
+      return;
+    }
+
+    final PlatformFile seleccionado = resultado.files.single;
+    File? archivoParaImportar;
+    File? temporalCreado;
+
+    try {
+      // ignore: deprecated_member_use
+      final bytes = seleccionado.bytes; // necesitamos el valor nullable para el fallback a path, no readAsBytes()
+      if (bytes != null) {
+        debugPrint('BackupImport: bytes disponibles (${bytes.length} bytes), decodificando con utf8.');
+        final String contenido = utf8.decode(bytes);
+        final directorio = await getTemporaryDirectory();
+        temporalCreado = File('${directorio.path}/focusflow_import_temp.json');
+        await temporalCreado.writeAsString(contenido);
+        archivoParaImportar = temporalCreado;
+      } else if (seleccionado.path != null) {
+        debugPrint('BackupImport: bytes nulo, usando fallback a path=${seleccionado.path}');
+        archivoParaImportar = File(seleccionado.path!);
+      } else {
+        debugPrint('BackupImport: bytes y path nulos, no se puede leer el archivo seleccionado.');
+      }
+    } catch (e) {
+      debugPrint('BackupImport: fallo al leer/decodificar el archivo seleccionado -> $e');
+      archivoParaImportar = null;
+    }
+
+    if (archivoParaImportar == null) {
+      if (context.mounted) {
+        _mostrarSnackBar(
+          context,
+          '❌ No se pudo leer el archivo seleccionado. Intenta elegirlo de nuevo.',
+          esError: true,
+        );
+      }
+      return;
+    }
 
     if (!context.mounted) return;
     _mostrarCargando(context);
     try {
-      await BackupService().importarBackup(File(rutaSeleccionada), ref);
+      await BackupService().importarBackup(archivoParaImportar, ref);
+      debugPrint('BackupImport: importación completada con éxito.');
       if (context.mounted) {
         Navigator.pop(context); // Cierra el diálogo de carga
         _mostrarSnackBar(context, '✅ Respaldo importado correctamente');
       }
     } catch (e) {
+      debugPrint('BackupImport: fallo al importar -> $e');
       if (context.mounted) {
         Navigator.pop(context);
         _mostrarSnackBar(
@@ -401,6 +454,10 @@ class SettingsScreen extends ConsumerWidget {
           e is BackupException ? '❌ ${e.mensaje}' : '❌ No se pudo importar el respaldo.',
           esError: true,
         );
+      }
+    } finally {
+      if (temporalCreado != null && await temporalCreado.exists()) {
+        await temporalCreado.delete();
       }
     }
   }
