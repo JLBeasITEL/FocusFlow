@@ -457,32 +457,46 @@ class SettingsScreen extends ConsumerWidget {
           '❌ No se pudo leer el archivo seleccionado. Intenta elegirlo de nuevo.',
           esError: true,
         );
+      } else {
+        debugPrint('BackupImport: context no montado, se omite snackbar de error de lectura.');
       }
       return;
     }
 
-    if (!context.mounted) {
-      debugPrint('BackupImport: context ya no está montado antes de llamar a importarBackup, se aborta.');
-      return;
+    // A partir de aquí YA tenemos un archivo válido: importarBackup() recibe
+    // un File y un WidgetRef, no un BuildContext, así que debe ejecutarse
+    // siempre, sin importar si la pantalla de Ajustes sigue montada. El
+    // BuildContext solo hace falta para el feedback visual (diálogo de
+    // carga, SnackBar) — eso se muestra "si se puede", pero nunca condiciona
+    // si la importación ocurre o no.
+    bool dialogoCargandoMostrado = false;
+    if (context.mounted) {
+      _mostrarCargando(context);
+      dialogoCargandoMostrado = true;
+    } else {
+      debugPrint('BackupImport: context no montado antes de importar, se omite diálogo de carga pero SÍ se importa.');
     }
-    _mostrarCargando(context);
     try {
       debugPrint('BackupImport: antes de importarBackup().');
       await BackupService().importarBackup(archivoParaImportar, ref);
       debugPrint('BackupImport: después de importarBackup(), completó sin lanzar.');
       if (context.mounted) {
-        Navigator.pop(context); // Cierra el diálogo de carga
+        if (dialogoCargandoMostrado) Navigator.pop(context); // Cierra el diálogo de carga
         _mostrarSnackBar(context, '✅ Respaldo importado correctamente');
+      } else {
+        debugPrint('BackupImport: context no montado tras importar con éxito, se omite feedback visual.');
       }
     } catch (e, st) {
       debugPrint('BackupImport: fallo al importar -> $e\n$st');
       if (context.mounted) {
-        Navigator.pop(context);
+        if (dialogoCargandoMostrado) Navigator.pop(context);
         _mostrarSnackBar(
           context,
           e is BackupException ? '❌ ${e.mensaje}' : '❌ No se pudo importar el respaldo.',
           esError: true,
         );
+      } else {
+        debugPrint('BackupImport: context no montado tras fallo de importación, se omite feedback visual.');
       }
     } finally {
       if (temporalCreado != null && await temporalCreado.exists()) {
