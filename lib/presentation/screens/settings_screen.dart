@@ -324,7 +324,17 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   void _mostrarSnackBar(BuildContext context, String mensaje, {bool esError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    _mostrarSnackBarConMessenger(ScaffoldMessenger.of(context), mensaje, esError: esError);
+  }
+
+  // Variante que recibe el ScaffoldMessengerState ya capturado en vez de un
+  // BuildContext. Necesaria para casos como _importarRespaldo, donde el
+  // context puede desmontarse mientras hay un selector nativo en primer
+  // plano (ver FASE D/E): ScaffoldMessenger.of(context) fallaría en ese
+  // punto, pero un ScaffoldMessengerState capturado ANTES sigue siendo
+  // válido.
+  void _mostrarSnackBarConMessenger(ScaffoldMessengerState messenger, String mensaje, {bool esError = false}) {
+    messenger.showSnackBar(
       SnackBar(
         content: Text(mensaje),
         behavior: SnackBarBehavior.floating,
@@ -390,6 +400,15 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _importarRespaldoInterno(BuildContext context, WidgetRef ref) async {
+    // Capturamos ScaffoldMessenger y Navigator ANTES de abrir el selector,
+    // mientras el context todavía está montado. FASE D confirmó que el
+    // context vuelve desmontado tras cerrar el selector nativo de archivos
+    // (aunque la pantalla sigue viva); un ScaffoldMessengerState/
+    // NavigatorState ya capturado sigue siendo válido para mostrar un
+    // SnackBar o cerrar el diálogo de carga aunque eso pase.
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final NavigatorState navigator = Navigator.of(context);
+
     // pickFiles (en vez del atajo pickFile) para poder distinguir la
     // cancelación real del usuario (resultado nulo) de un archivo elegido
     // cuyo contenido no se pudo leer. withData:true pide los bytes
@@ -451,24 +470,24 @@ class SettingsScreen extends ConsumerWidget {
 
     if (archivoParaImportar == null) {
       debugPrint('BackupImport: sin archivo legible, mostrando snackbar de error.');
-      if (context.mounted) {
-        _mostrarSnackBar(
-          context,
-          '❌ No se pudo leer el archivo seleccionado. Intenta elegirlo de nuevo.',
-          esError: true,
-        );
-      } else {
-        debugPrint('BackupImport: context no montado, se omite snackbar de error de lectura.');
-      }
+      // Usamos el messenger capturado al principio, no context: FASE D
+      // mostró que el context puede llegar desmontado hasta aquí, pero el
+      // messenger capturado antes del selector sigue siendo válido.
+      _mostrarSnackBarConMessenger(
+        messenger,
+        '❌ No se pudo leer el archivo seleccionado. Intenta elegirlo de nuevo.',
+        esError: true,
+      );
       return;
     }
 
     // A partir de aquí YA tenemos un archivo válido: importarBackup() recibe
     // un File y un WidgetRef, no un BuildContext, así que debe ejecutarse
     // siempre, sin importar si la pantalla de Ajustes sigue montada. El
-    // BuildContext solo hace falta para el feedback visual (diálogo de
-    // carga, SnackBar) — eso se muestra "si se puede", pero nunca condiciona
-    // si la importación ocurre o no.
+    // diálogo de carga sí necesita un context válido para abrirse (se omite
+    // si no lo hay), pero cerrarlo y mostrar el resultado usan navigator y
+    // messenger capturados arriba, así que no dependen de si el context
+    // sigue montado en ese momento.
     bool dialogoCargandoMostrado = false;
     if (context.mounted) {
       _mostrarCargando(context);
@@ -480,24 +499,16 @@ class SettingsScreen extends ConsumerWidget {
       debugPrint('BackupImport: antes de importarBackup().');
       await BackupService().importarBackup(archivoParaImportar, ref);
       debugPrint('BackupImport: después de importarBackup(), completó sin lanzar.');
-      if (context.mounted) {
-        if (dialogoCargandoMostrado) Navigator.pop(context); // Cierra el diálogo de carga
-        _mostrarSnackBar(context, '✅ Respaldo importado correctamente');
-      } else {
-        debugPrint('BackupImport: context no montado tras importar con éxito, se omite feedback visual.');
-      }
+      if (dialogoCargandoMostrado) navigator.pop(); // Cierra el diálogo de carga
+      _mostrarSnackBarConMessenger(messenger, '✅ Respaldo importado correctamente');
     } catch (e, st) {
       debugPrint('BackupImport: fallo al importar -> $e\n$st');
-      if (context.mounted) {
-        if (dialogoCargandoMostrado) Navigator.pop(context);
-        _mostrarSnackBar(
-          context,
-          e is BackupException ? '❌ ${e.mensaje}' : '❌ No se pudo importar el respaldo.',
-          esError: true,
-        );
-      } else {
-        debugPrint('BackupImport: context no montado tras fallo de importación, se omite feedback visual.');
-      }
+      if (dialogoCargandoMostrado) navigator.pop();
+      _mostrarSnackBarConMessenger(
+        messenger,
+        e is BackupException ? '❌ ${e.mensaje}' : '❌ No se pudo importar el respaldo.',
+        esError: true,
+      );
     } finally {
       if (temporalCreado != null && await temporalCreado.exists()) {
         debugPrint('BackupImport: borrando archivo temporal ${temporalCreado.path}');
