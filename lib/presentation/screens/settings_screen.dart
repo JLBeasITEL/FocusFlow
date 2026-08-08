@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -379,6 +378,18 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _importarRespaldo(BuildContext context, WidgetRef ref) async {
+    // Catch de último recurso: nada en este método debe poder morir en
+    // silencio. Cualquier excepción no prevista por los try/catch internos
+    // de abajo cae aquí y se logea igual, sin condicionar a context.mounted
+    // ni a ninguna otra cosa.
+    try {
+      await _importarRespaldoInterno(context, ref);
+    } catch (e, st) {
+      debugPrint('BackupImport: fallo inesperado no manejado en _importarRespaldo -> $e\n$st');
+    }
+  }
+
+  Future<void> _importarRespaldoInterno(BuildContext context, WidgetRef ref) async {
     // pickFiles (en vez del atajo pickFile) para poder distinguir la
     // cancelación real del usuario (resultado nulo) de un archivo elegido
     // cuyo contenido no se pudo leer. withData:true pide los bytes
@@ -386,6 +397,7 @@ class SettingsScreen extends ConsumerWidget {
     // (p. ej. Descargas) puede devolver PlatformFile.path == null aunque
     // el usuario sí seleccionó un archivo válido, así que no podemos
     // depender solo de path.
+    debugPrint('BackupImport: abriendo selector de archivos.');
     final FilePickerResult? resultado = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json'],
@@ -394,6 +406,7 @@ class SettingsScreen extends ConsumerWidget {
       // ignore: deprecated_member_use
       withData: true, // requerido para leer bytes en vez de depender de path (ver comentario arriba)
     );
+    debugPrint('BackupImport: selector de archivos retornó.');
 
     if (resultado == null) {
       debugPrint('BackupImport: selección cancelada por el usuario.');
@@ -406,13 +419,24 @@ class SettingsScreen extends ConsumerWidget {
 
     try {
       // ignore: deprecated_member_use
-      final bytes = seleccionado.bytes; // necesitamos el valor nullable para el fallback a path, no readAsBytes()
+      final bytes = seleccionado.bytes; // necesitamos el valor nullable para el fallback a path
       if (bytes != null) {
-        debugPrint('BackupImport: bytes disponibles (${bytes.length} bytes), decodificando con utf8.');
-        final String contenido = utf8.decode(bytes);
+        debugPrint('BackupImport: bytes disponibles (${bytes.length} bytes).');
+
+        debugPrint('BackupImport: antes de getTemporaryDirectory().');
         final directorio = await getTemporaryDirectory();
+        debugPrint('BackupImport: después de getTemporaryDirectory() -> ${directorio.path}');
+
         temporalCreado = File('${directorio.path}/focusflow_import_temp.json');
-        await temporalCreado.writeAsString(contenido);
+
+        // writeAsBytes directo: los bytes ya son el contenido exacto del
+        // archivo, no hace falta decodificar a String con utf8 y volver a
+        // codificar al escribir — un paso menos y sin FormatException
+        // posible por un archivo que no fuera UTF-8 válido.
+        debugPrint('BackupImport: antes de writeAsBytes() -> ${temporalCreado.path}');
+        await temporalCreado.writeAsBytes(bytes);
+        debugPrint('BackupImport: después de writeAsBytes().');
+
         archivoParaImportar = temporalCreado;
       } else if (seleccionado.path != null) {
         debugPrint('BackupImport: bytes nulo, usando fallback a path=${seleccionado.path}');
@@ -420,12 +444,13 @@ class SettingsScreen extends ConsumerWidget {
       } else {
         debugPrint('BackupImport: bytes y path nulos, no se puede leer el archivo seleccionado.');
       }
-    } catch (e) {
-      debugPrint('BackupImport: fallo al leer/decodificar el archivo seleccionado -> $e');
+    } catch (e, st) {
+      debugPrint('BackupImport: fallo al leer el archivo seleccionado -> $e\n$st');
       archivoParaImportar = null;
     }
 
     if (archivoParaImportar == null) {
+      debugPrint('BackupImport: sin archivo legible, mostrando snackbar de error.');
       if (context.mounted) {
         _mostrarSnackBar(
           context,
@@ -436,17 +461,21 @@ class SettingsScreen extends ConsumerWidget {
       return;
     }
 
-    if (!context.mounted) return;
+    if (!context.mounted) {
+      debugPrint('BackupImport: context ya no está montado antes de llamar a importarBackup, se aborta.');
+      return;
+    }
     _mostrarCargando(context);
     try {
+      debugPrint('BackupImport: antes de importarBackup().');
       await BackupService().importarBackup(archivoParaImportar, ref);
-      debugPrint('BackupImport: importación completada con éxito.');
+      debugPrint('BackupImport: después de importarBackup(), completó sin lanzar.');
       if (context.mounted) {
         Navigator.pop(context); // Cierra el diálogo de carga
         _mostrarSnackBar(context, '✅ Respaldo importado correctamente');
       }
-    } catch (e) {
-      debugPrint('BackupImport: fallo al importar -> $e');
+    } catch (e, st) {
+      debugPrint('BackupImport: fallo al importar -> $e\n$st');
       if (context.mounted) {
         Navigator.pop(context);
         _mostrarSnackBar(
@@ -457,6 +486,7 @@ class SettingsScreen extends ConsumerWidget {
       }
     } finally {
       if (temporalCreado != null && await temporalCreado.exists()) {
+        debugPrint('BackupImport: borrando archivo temporal ${temporalCreado.path}');
         await temporalCreado.delete();
       }
     }
