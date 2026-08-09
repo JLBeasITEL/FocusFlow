@@ -72,6 +72,10 @@ class NotificacionesService {
     }
   }
 
+  // El prefijo 'alarma|' también lo lee MainActivity.kt (nativo) de forma
+  // síncrona en onCreate/onNewIntent, para activar showWhenLocked/
+  // turnScreenOn antes de que el engine de Flutter llegue a correr este
+  // método. Si este prefijo cambia, hay que replicarlo allá.
   void _manejarNavegacionAlarma(String payload) {
     if (payload.startsWith('alarma|')) {
       final partes = payload.split('|');
@@ -232,6 +236,7 @@ class NotificacionesService {
         NotificationDetails(android: detalles),
         androidScheduleMode: AndroidScheduleMode.alarmClock, 
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        // Prefijo 'alarma|' también leído por MainActivity.kt (nativo).
         payload: esAlarmaFullScreen ? 'alarma|$id|$titulo|$body' : null,
       );
     } catch (e) {
@@ -266,6 +271,7 @@ class NotificacionesService {
           ? AndroidNotificationDetails(canalDinamicoId, 'Alarmas Urgentes', importance: Importance.max, priority: Priority.max, color: const Color(0xFF276749), fullScreenIntent: true, playSound: true, sound: RawResourceAndroidNotificationSound(sonidoElegido), additionalFlags: flags != null ? Int32List.fromList(flags) : null)
           : AndroidNotificationDetails(canalDinamicoId, 'Recordatorios', importance: Importance.high, priority: Priority.high, color: const Color(0xFF276749), fullScreenIntent: false, playSound: true, sound: RawResourceAndroidNotificationSound(sonidoElegido));
 
+      // Prefijo 'alarma|' también leído por MainActivity.kt (nativo).
       final String payloadData = esAlarmaFullScreen ? 'alarma|$id|$titulo|$body|${iconoCode ?? 0}' : '';
 
       await _plugin.zonedSchedule(
@@ -413,7 +419,8 @@ class NotificacionesService {
     await _plugin.cancel(idAlarma);
 
     final tz.TZDateTime nuevaHora = tz.TZDateTime.now(tz.local).add(Duration(minutes: minutos));
-    final String datosPayload = 'alarma|$idAlarma|$titulo|$cuerpo|0'; 
+    // Prefijo 'alarma|' también leído por MainActivity.kt (nativo).
+    final String datosPayload = 'alarma|$idAlarma|$titulo|$cuerpo|0';
 
     try {
       final prefs = await SharedPreferences.getInstance();
