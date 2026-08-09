@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../providers/tema_provider.dart';
 import '../../providers/configuracion_provider.dart';
 import '../widgets/feedback_modal.dart';
@@ -12,6 +13,13 @@ import '../../services/backup_service.dart';
 import '../../services/notificaciones_service.dart';
 import '../../providers/rutina_provider.dart';
 import '../../providers/tarea_provider.dart';
+
+/// Expone la versión y el build number leídos directamente del build
+/// actual (lo que Flutter generó a partir de `version:` en pubspec.yaml),
+/// para que lo mostrado en Ajustes nunca se desincronice del build real.
+final packageInfoProvider = FutureProvider<PackageInfo>((ref) {
+  return PackageInfo.fromPlatform();
+});
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -21,6 +29,7 @@ class SettingsScreen extends ConsumerWidget {
     // Escuchamos activamente los estados de audio y apariencia
     final temaActual = ref.watch(temaProvider);
     final sonidos = ref.watch(sonidoProvider);
+    final infoPaquete = ref.watch(packageInfoProvider);
     
     // Obtenemos la paleta de colores correspondiente al tema activo
     final colorPrincipal = temaActual.colorPrincipal;
@@ -135,7 +144,11 @@ class SettingsScreen extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'FocusFlow v2.1.1',
+                  infoPaquete.when(
+                    data: (info) => 'FocusFlow v${info.version} (${info.buildNumber})',
+                    loading: () => 'FocusFlow',
+                    error: (_, __) => 'FocusFlow',
+                  ),
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,

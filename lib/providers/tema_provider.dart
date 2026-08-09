@@ -40,6 +40,21 @@ extension TemaColores on TemaApp {
     return null;
   }
 
+  // Superficie tipo "tarjeta/panel" (sidebar y tarjetas compactas del layout
+  // horizontal): blanco en los 4 temas claros, tintada y oscura en Medianoche
+  // para no perder el contraste que ya cuida TareaCard en ese tema.
+  Color get colorSuperficieCard {
+    if (this == TemaApp.medianoche) return colorPrincipal.withValues(alpha: 0.08);
+    return Colors.white;
+  }
+
+  // Texto/íconos por defecto sobre colorSuperficieCard. Mismo criterio que
+  // colorTituloGrupo: solo Medianoche necesita invertir a un tono claro.
+  Color get colorTextoSuperficie {
+    if (this == TemaApp.medianoche) return const Color(0xFFF1F5F9);
+    return Colors.black87;
+  }
+
   Color get colorFondo {
     if (this == TemaApp.clasico) return Colors.white;
     if (this == TemaApp.brisaMarina) return const Color(0xFFF0F8FF);
