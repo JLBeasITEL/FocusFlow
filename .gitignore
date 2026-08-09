@@ -49,3 +49,7 @@ key.properties
 *.jks
 # Logs de depuración
 alarma_retraso*.txt
+
+# Capturas de diagnostico (logcat)
+import*.txt
+*.logcat.txt
