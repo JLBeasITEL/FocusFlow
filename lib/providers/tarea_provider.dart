@@ -362,6 +362,23 @@ final ordenGruposProvider = NotifierProvider<OrdenGruposNotifier, List<String>>(
 
 enum TipoOrden { creacion, alfabetico, urgencia, fecha }
 
+// Etiqueta legible de cada orden, compartida entre el menú de portrait
+// (home_screen.dart) y el panel lateral del layout horizontal.
+extension TipoOrdenLabel on TipoOrden {
+  String get label {
+    switch (this) {
+      case TipoOrden.creacion:
+        return 'Original';
+      case TipoOrden.alfabetico:
+        return 'Alfabético (A-Z)';
+      case TipoOrden.urgencia:
+        return 'Mayor urgencia';
+      case TipoOrden.fecha:
+        return 'Próximas a vencer';
+    }
+  }
+}
+
 class OrdenNotifier extends Notifier<TipoOrden> {
   @override
   TipoOrden build() => TipoOrden.creacion;

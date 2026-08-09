@@ -694,6 +694,10 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                       onPressed: _elegirFecha,
                       icon: const Icon(Icons.calendar_today, size: 18),
                       label: Text(_fechaSeleccionada == null ? 'Fecha' : DateFormat('dd MMM').format(_fechaSeleccionada!)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        visualDensity: VisualDensity.compact,
+                      ),
                     ),
                   ),
                   if (_fechaSeleccionada != null)
@@ -709,6 +713,10 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                       onPressed: _elegirHora,
                       icon: const Icon(Icons.access_time, size: 18),
                       label: Text(_horaSeleccionada == null ? 'Hora' : _horaSeleccionada!.format(context)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        visualDensity: VisualDensity.compact,
+                      ),
                     ),
                   ),
                   if (_horaSeleccionada != null)
@@ -731,6 +739,10 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
             Opacity(
               opacity: _urgenciaEsAutomatica ? 0.5 : 1.0,
               child: SegmentedButton<int>(
+                style: SegmentedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                ),
                 segments: const [
                   ButtonSegment(value: 1, label: Text('Bajo')),
                   ButtonSegment(value: 2, label: Text('Medio')),
@@ -781,7 +793,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
               // --- SECCIÓN DE SUBTAREAS (COLAPSABLE) ---
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               InkWell(
                 borderRadius: BorderRadius.circular(8),
                 onTap: () => setState(() => _mostrarSubtareas = !_mostrarSubtareas),
@@ -915,32 +927,48 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
               ),
 
               // --- SECCIÓN DE PLANTILLAS ---
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  OutlinedButton.icon(
-                    onPressed: _guardarComoPlantilla,
-                    icon: const Icon(Icons.bookmark_add_outlined, size: 18),
-                    label: const Text('Guardar como plantilla'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                      side: BorderSide(color: Colors.grey.shade400, width: 1.5),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _guardarComoPlantilla,
+                      icon: const Icon(Icons.bookmark_add_outlined, size: 16),
+                      label: const Text(
+                        'Guardar como plantilla',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12.5),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                        visualDensity: VisualDensity.compact,
+                        side: BorderSide(color: Colors.grey.shade400, width: 1.5),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
                     ),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: _usarPlantilla,
-                    icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
-                    label: const Text('Usar plantilla'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                      side: BorderSide(color: Colors.grey.shade400, width: 1.5),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _usarPlantilla,
+                      icon: const Icon(Icons.playlist_add_check_rounded, size: 16),
+                      label: const Text(
+                        'Usar plantilla',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12.5),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                        visualDensity: VisualDensity.compact,
+                        side: BorderSide(color: Colors.grey.shade400, width: 1.5),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   _BotonAccionCuadrado(
                     icon: Icons.edit_rounded,
                     tooltip: 'Editar plantillas',
@@ -1002,7 +1030,7 @@ class _BotonAccionCuadrado extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           onTap: onPressed,
           child: Container(
-            width: 48, height: 48,
+            width: 44, height: 44,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.grey.shade400, width: 1.5),

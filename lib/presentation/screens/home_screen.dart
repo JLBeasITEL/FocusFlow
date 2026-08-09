@@ -28,6 +28,10 @@ import '../widgets/nota_dialog.dart';
 import '../widgets/grupo_notas_card.dart';
 import '../widgets/post_it_card.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import '../../core/colores_estado_tarea.dart';
+import '../widgets/tarea_card_landscape.dart';
+import '../widgets/rutina_card_landscape.dart';
+import '../widgets/home_sidebar_landscape.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -187,17 +191,206 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     super.dispose();
   }
 
-  String _labelOrden(TipoOrden tipo) {
-    switch (tipo) {
-      case TipoOrden.creacion:
-        return 'Original';
-      case TipoOrden.alfabetico:
-        return 'Alfabético (A-Z)';
-      case TipoOrden.urgencia:
-        return 'Mayor urgencia';
-      case TipoOrden.fecha:
-        return 'Próximas a vencer';
+  String _labelOrden(TipoOrden tipo) => tipo.label;
+
+  // =====================================================================
+  // LAYOUT HORIZONTAL (landscape): header propio + sidebar + grilla, en
+  // vez del AppBar+TabBar / TabBarView de portrait. Reutiliza el mismo
+  // estado (_currentIndex, _tabController) y, para Notas, el mismo
+  // _buildTabNotas de arriba — solo Tareas y Rutinas necesitan un
+  // contenido nuevo porque su tarjeta compacta no existe en portrait.
+  // =====================================================================
+
+  Widget _buildBodyLandscape({
+    required TemaApp temaActual,
+    required Color colorPrincipal,
+    required List<Tarea> tareas,
+    required bool vistaAgrupada,
+    required List<String> ordenGrupos,
+    required List<NotaPostIt> notasGuardadas,
+  }) {
+    return Column(
+      children: [
+        _buildHeaderLandscape(temaActual, colorPrincipal),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                HomeSidebarLandscape(currentIndex: _currentIndex, tema: temaActual),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: switch (_currentIndex) {
+                    0 => _buildContenidoTareasLandscape(tareas, vistaAgrupada, ordenGrupos, temaActual, colorPrincipal),
+                    1 => _buildContenidoRutinasLandscape(temaActual, colorPrincipal),
+                    _ => _buildTabNotas(colorPrincipal, notasGuardadas),
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeaderLandscape(TemaApp temaActual, Color colorPrincipal) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      child: Row(
+        children: [
+          Text('FocusFlow', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: colorPrincipal)),
+          const SizedBox(width: 20),
+          _PildoraTab(icon: Icons.check_circle_outline, label: 'Tareas', seleccionado: _currentIndex == 0, tema: temaActual, onTap: () => _tabController.animateTo(0)),
+          const SizedBox(width: 8),
+          _PildoraTab(icon: Icons.repeat_rounded, label: 'Rutinas', seleccionado: _currentIndex == 1, tema: temaActual, onTap: () => _tabController.animateTo(1)),
+          const SizedBox(width: 8),
+          _PildoraTab(icon: Icons.sticky_note_2_rounded, label: 'Notas', seleccionado: _currentIndex == 2, tema: temaActual, onTap: () => _tabController.animateTo(2)),
+          const Spacer(),
+          if (_currentIndex == 1) ...[
+            const _BadgeMonedasRacha(),
+            const SizedBox(width: 10),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => GestorRutinasScreen(colorTema: colorPrincipal))),
+              icon: Icon(Icons.mode_edit_outline_rounded, size: 16, color: colorPrincipal),
+              label: Text('Editar rutina', style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.w600, fontSize: 13)),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: colorPrincipal.withValues(alpha: 0.4)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          IconButton(
+            icon: Icon(Icons.more_vert_rounded, color: colorPrincipal),
+            tooltip: 'Configuraciones',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContenidoTareasLandscape(List<Tarea> tareas, bool vistaAgrupada, List<String> ordenGrupos, TemaApp temaActual, Color colorPrincipal) {
+    if (tareas.isEmpty) {
+      return Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6))));
     }
+
+    if (!vistaAgrupada) {
+      return _gridTareasLandscape(tareas, temaActual);
+    }
+
+    // Mismo agrupado y orden de carpetas que la vista agrupada de portrait
+    // (ver _GrupoTareasSection más abajo), simplificado sin colapsar ni
+    // reordenar por arrastre: en landscape hay poco alto disponible como
+    // para que valga la pena esa interacción.
+    final mapaGrupos = <String, List<Tarea>>{};
+    for (var tarea in tareas) {
+      mapaGrupos.putIfAbsent(tarea.grupo, () => []).add(tarea);
+    }
+    final listaGrupos = mapaGrupos.keys.toList()
+      ..sort((a, b) {
+        final ia = ordenGrupos.indexOf(a);
+        final ib = ordenGrupos.indexOf(b);
+        if (ia == -1 && ib == -1) return a.compareTo(b);
+        if (ia == -1) return 1;
+        if (ib == -1) return -1;
+        return ia.compareTo(ib);
+      });
+
+    return ListView.builder(
+      padding: EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
+      itemCount: listaGrupos.length,
+      itemBuilder: (context, index) {
+        final grupo = listaGrupos[index];
+        final tareasDelGrupo = mapaGrupos[grupo]!;
+        return Padding(
+          padding: EdgeInsets.only(top: index == 0 ? 0 : 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.folder_rounded, size: 20, color: colorPrincipal),
+                  const SizedBox(width: 8),
+                  Text(grupo, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: temaActual.colorTituloGrupo ?? temaActual.colorTextoSuperficie)),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: colorPrincipal.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                    child: Text('${tareasDelGrupo.length}', style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _gridTareasLandscape(tareasDelGrupo, temaActual, shrinkWrap: true),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _gridTareasLandscape(List<Tarea> tareas, TemaApp temaActual, {bool shrinkWrap = false}) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const double anchoTarget = 260;
+        const double espaciado = 12;
+        final int columnas = math.max(2, ((constraints.maxWidth + espaciado) / (anchoTarget + espaciado)).floor());
+        return GridView.builder(
+          shrinkWrap: shrinkWrap,
+          physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+          padding: shrinkWrap ? EdgeInsets.zero : EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columnas,
+            mainAxisSpacing: espaciado,
+            crossAxisSpacing: espaciado,
+            childAspectRatio: 2.9,
+          ),
+          itemCount: tareas.length,
+          itemBuilder: (context, index) => TareaLandscapeCard(tarea: tareas[index], tema: temaActual),
+        );
+      },
+    );
+  }
+
+  Widget _buildContenidoRutinasLandscape(TemaApp temaActual, Color colorPrincipal) {
+    final listaCompleta = ref.watch(rutinaProvider);
+    final int diaActual = DateTime.now().weekday - 1;
+    final rutinasDeHoy = listaCompleta.where((r) => r.horarios.containsKey(diaActual) && r.activa).toList();
+
+    if (rutinasDeHoy.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Text(
+            'Cada que agregas un nuevo hábito a tu vida,\nte acercas más a la persona que quieres ser.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6), fontSize: 15, height: 1.4),
+          ),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const double anchoTarget = 170;
+        const double espaciado = 12;
+        final int columnas = math.max(2, ((constraints.maxWidth + espaciado) / (anchoTarget + espaciado)).floor());
+        return GridView.builder(
+          padding: EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columnas,
+            mainAxisSpacing: espaciado,
+            crossAxisSpacing: espaciado,
+            childAspectRatio: 1.05,
+          ),
+          itemCount: rutinasDeHoy.length,
+          itemBuilder: (context, index) => RutinaLandscapeCard(rutina: rutinasDeHoy[index], tema: temaActual),
+        );
+      },
+    );
   }
 
   // --- VISTA DE NOTAS ESTILO TABLERO ---
@@ -520,10 +713,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     // Opacidad sutil ajustada para alta legibilidad
     final double opacidadLoto = temaActual == TemaApp.clasico ? 0.20 : 0.35;
 
+    // El layout horizontal (sidebar + grilla) solo se usa con el dispositivo
+    // apaisado; en vertical la app se ve exactamente igual que siempre.
+    final bool esLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
-      backgroundColor: colorFondoAppBar, 
-      
-      appBar: AppBar(
+      backgroundColor: colorFondoAppBar,
+
+      appBar: esLandscape ? null : AppBar(
         backgroundColor: colorFondoAppBar,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
@@ -550,7 +747,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           tabs: const [
             Tab(icon: Icon(Icons.check_circle_outline), text: 'Tareas'),
             Tab(icon: Icon(Icons.repeat_rounded), text: 'Rutinas'),
-            Tab(icon: Icon(Icons.sticky_note_2_rounded), text: 'Notas'), 
+            Tab(icon: Icon(Icons.sticky_note_2_rounded), text: 'Notas'),
           ],
         ),
       ),
@@ -602,7 +799,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             ),
           ),
         ),
-        child: SafeArea(
+        child: esLandscape
+            ? SafeArea(
+                child: _buildBodyLandscape(
+                  temaActual: temaActual,
+                  colorPrincipal: colorPrincipal,
+                  tareas: tareas,
+                  vistaAgrupada: vistaAgrupada,
+                  ordenGrupos: ordenGrupos,
+                  notasGuardadas: notasGuardadas,
+                ),
+              )
+            : SafeArea(
           top: false,
           bottom: false,
           child: TabBarView(
@@ -1129,6 +1337,45 @@ const String explicacionMonedasRacha =
 // la vista mientras decide si le conviene omitir algo hoy. Es tocable: al
 // presionarlo muestra un SnackBar explicando cómo funcionan (el Tooltip
 // solo se ve con long-press/hover, poco descubrible).
+// Selector de pestaña tipo píldora del header en landscape (reemplaza al
+// TabBar de portrait). Solo cambia de apariencia; quien manda en cuál
+// pestaña está activa sigue siendo _tabController, así que rotar el
+// dispositivo entre portrait y landscape nunca deja el índice desincronizado.
+class _PildoraTab extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool seleccionado;
+  final TemaApp tema;
+  final VoidCallback onTap;
+
+  const _PildoraTab({required this.icon, required this.label, required this.seleccionado, required this.tema, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color colorPrincipal = tema.colorPrincipal;
+    final Color colorInactivo = colorPrincipal.withValues(alpha: 0.55);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: seleccionado ? colorPrincipal : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: seleccionado ? tema.colorSobrePrincipal : colorInactivo),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: seleccionado ? tema.colorSobrePrincipal : colorInactivo)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _BadgeMonedasRacha extends ConsumerWidget {
   const _BadgeMonedasRacha();
 
@@ -1408,28 +1655,9 @@ class _TareaCardState extends ConsumerState<TareaCard> {
     )).toList();
   }
 
-  Color _getColorUrgencia(int urgencia, TemaApp tema) {
-    if (tema == TemaApp.clasico) {
-      switch (urgencia) { case 1: return Colors.teal; case 2: return Colors.blue; case 3: return Colors.orange; case 4: return Colors.red; default: return Colors.grey; }
-    } else if (tema == TemaApp.zenClasico) {
-      switch (urgencia) { case 1: return const Color(0xFFA5C4A6); case 2: return const Color(0xFF80A681); case 3: return const Color(0xFF5A855C); case 4: return const Color(0xFF3B633D); default: return Colors.grey; }
-    } else if (tema == TemaApp.brisaMarina) {
-      switch (urgencia) { case 1: return const Color(0xFF90CDF4); case 2: return const Color(0xFF63B3ED); case 3: return const Color(0xFF3182CE); case 4: return const Color(0xFF2B6CB0); default: return Colors.grey; }
-    } else if (tema == TemaApp.medianoche) {
-      // Escala morada (violeta claro -> violeta intenso) en vez de colores
-      // dispares por nivel. Actúan como TEXTO sobre una tarjeta oscura
-      // (colorBase@25% sobre fondo casi negro), no como relleno claro, así
-      // que necesitan alta luminancia para mantener ≥4.5:1 de contraste;
-      // el nivel 4 (#8B5CF6) es el más oscuro que aún cumple ese mínimo.
-      switch (urgencia) { case 1: return const Color(0xFFDDD6FE); case 2: return const Color(0xFFC4B5FD); case 3: return const Color(0xFFA78BFA); case 4: return const Color(0xFF8B5CF6); default: return Colors.grey.shade400; }
-    } else {
-      switch (urgencia) { case 1: return const Color(0xFFFBD38D); case 2: return const Color(0xFFF6AD55); case 3: return const Color(0xFFDD6B20); case 4: return const Color(0xFFC05621); default: return Colors.grey; }
-    }
-  }
+  Color _getColorUrgencia(int urgencia, TemaApp tema) => colorUrgenciaTarea(urgencia, tema);
 
-  String _getLabelUrgencia(int urgencia) {
-    switch (urgencia) { case 1: return 'BAJO'; case 2: return 'MEDIO'; case 3: return 'ALTO'; case 4: return 'MUY ALTO'; default: return '???'; }
-  }
+  String _getLabelUrgencia(int urgencia) => labelUrgenciaTarea(urgencia);
 
   
 }

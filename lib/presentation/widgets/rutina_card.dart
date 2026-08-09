@@ -13,6 +13,7 @@ import '../../providers/monedas_provider.dart'; // Saldo de monedas de racha, pa
 import '../../models/rutina.dart';             // El modelo de datos "Rutina"
 import '../../core/colores_estado_rutina.dart';
 import '../../core/app_messenger.dart';
+import '../../core/celebracion_racha.dart';
 
 // ConsumerWidget: es un widget "sin estado propio" (stateless) pero que SÍ puede
 // leer/escuchar el provider de Riverpod a través del parámetro `ref`.
@@ -93,99 +94,12 @@ class RutinaCard extends ConsumerWidget {
                 // Es "async" porque adentro vamos a usar "await" para esperar
                 // a que termine el proceso de cancelar/reprogramar notificaciones
                 // ANTES de continuar con el resto de la lógica (evita condiciones de carrera).
-                : (bool? valor) async {
-
-                  // PASO 1: Cambiamos el estado de "completada" en el provider,
-                  // y ESPERAMOS (await) a que termine todo el proceso interno:
-                  // - Actualizar el estado en memoria
-                  // - Guardar en SharedPreferences
-                  // - Cancelar las notificaciones/alarmas viejas
-                  // - Reprogramar las nuevas (si aplica)
-                  // Gracias al await, este código no continúa hasta que TODO eso termine.
-                  await ref.read(rutinaProvider.notifier).toggleCompletada(rutina.id);
-
-                  // El await anterior puede tardar (guardado, notificaciones); si el
-                  // usuario ya salió de la pantalla, el context ya no es válido para UI.
-                  if (!context.mounted) return;
-
-                  // PASO 2: Solo si el usuario ACABA de marcarla como completada
-                  // (no si la está desmarcando), revisamos si merece festejo por racha.
-                  if (valor == true) {
-
-                    // Calculamos cuál sería la nueva racha (sumando 1 a la actual).
-                    // Nota: usamos "rutina.racha" (el valor ANTES del toggle) porque
-                    // este widget todavía no se ha reconstruido con el nuevo valor.
-                    final nuevaRacha = rutina.racha + 1;
-
-                    // PASO 3: Verificamos si la nueva racha completa un nuevo múltiplo
-                    // de rachaPorMoneda (7, 14, 21, 28... sin tope, se repite cada vez
-                    // que la racha vuelve a cruzar un múltiplo). Es EXACTAMENTE el
-                    // mismo hito, fijo para TODAS las rutinas sin importar cuántos
-                    // días/semana tengan programados, que usa toggleCompletada en
-                    // rutina_provider.dart para otorgar la moneda real — este chequeo
-                    // acá solo decide cuándo MOSTRAR el diálogo, la moneda en sí ya se
-                    // otorgó en el provider antes de que este código se ejecute.
-                    if (nuevaRacha % rachaPorMoneda == 0) {
-
-                      // PASO 4: Texto de felicitación. Ya no distingue por días/semana
-                      // (con el hito fijo en 7, la racha no corresponde 1 a 1 con
-                      // semanas de calendario para rutinas de pocos días/semana), así
-                      // que es el mismo mensaje para cualquier frecuencia.
-                      final String textoFelicidades =
-                          '¡Felicidades! Llevas $nuevaRacha veces seguidas sin fallar con este hábito.\n'
-                          '+1 moneda de racha 🪙';
-
-                      // PASO 5: Mostramos un diálogo emergente de felicitación.
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          // Bordes redondeados del diálogo.
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                          content: Column(
-                            // El tamaño de la columna se ajusta al contenido (no ocupa toda la pantalla).
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Emoji grande de fuego como ícono central.
-                              const Text('🔥', style: TextStyle(fontSize: 72)),
-                              const SizedBox(height: 16),
-
-                              // Título del diálogo.
-                              const Text(
-                                '¡Racha Cumplida!',
-                                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 12),
-
-                              // Texto dinámico de felicitación (el que armamos en el paso 4).
-                              Text(
-                                textoFelicidades,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 16, color: Colors.grey.shade700, height: 1.4),
-                              ),
-                              const SizedBox(height: 24),
-
-                              // Botón para cerrar el diálogo.
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange.shade700,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                  minimumSize: const Size(double.infinity, 50), // Ocupa todo el ancho disponible
-                                ),
-                                // Al presionar, cierra el diálogo (pop = quitar de la pila de navegación).
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text(
-                                  '¡A seguir así!',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-                  }
-                },
+                : (bool? valor) => alternarCompletadaConCelebracion(
+                    context: context,
+                    ref: ref,
+                    rutina: rutina,
+                    marcarCompleta: valor == true,
+                  ),
             ),
 
             // Contenedor circular que envuelve el ícono de la rutina.
