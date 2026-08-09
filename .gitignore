@@ -53,3 +53,6 @@ alarma_retraso*.txt
 # Capturas de diagnostico (logcat)
 import*.txt
 *.logcat.txt
+
+# Capturas de diagnostico
+import*.txt
