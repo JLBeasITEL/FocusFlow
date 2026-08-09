@@ -10,6 +10,29 @@ import '../../models/plantilla.dart';
 import '../../core/app_messenger.dart';
 import 'ayuda_formulario_button.dart';
 
+// Punto de entrada único para abrir "Nueva/Editar Tarea": en portrait sigue
+// siendo el bottom sheet de siempre (sin cambios); en landscape, el
+// formulario de dos columnas necesita más espacio del que un sheet puede
+// dar, así que se empuja como pantalla completa. Los dos call sites
+// (home_screen.dart y tarea_card_landscape.dart) usan este helper en vez de
+// invocar showModalBottomSheet directamente para no duplicar esta rama.
+void abrirFormularioTarea(BuildContext context, {Tarea? tareaAEditar}) {
+  final bool esLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+  if (esLandscape) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(fullscreenDialog: true, builder: (_) => AddTareaModal(tareaAEditar: tareaAEditar)),
+    );
+  } else {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AddTareaModal(tareaAEditar: tareaAEditar),
+    );
+  }
+}
+
 class AddTareaModal extends ConsumerStatefulWidget {
   final Tarea? tareaAEditar;
 
@@ -567,6 +590,15 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
 
   @override
   Widget build(BuildContext context) {
+    // Dos layouts completamente separados (no interpolación): mismo patrón
+    // que home_screen.dart usa para decidir entre su Scaffold portrait y
+    // _buildBodyLandscape. Portrait no se toca; landscape es un widget
+    // nuevo que reutiliza el mismo estado y los mismos handlers.
+    final bool esLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    return esLandscape ? _buildLandscape(context) : _buildPortrait(context);
+  }
+
+  Widget _buildPortrait(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -1001,6 +1033,401 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
           ],
         ),
       ),
+    );
+  }
+
+  // =====================================================================
+  // LAYOUT HORIZONTAL (landscape): dos columnas + riel de subtareas fijo a
+  // la derecha, en vez del formulario vertical de una sola columna con
+  // "Más opciones" colapsado. Reutiliza exactamente los mismos
+  // controllers/handlers/providers que _buildPortrait — no hay estado
+  // nuevo. A diferencia de portrait, acá descripción/fecha/hora/horas
+  // estimadas/plantillas se muestran siempre (sin el toggle "Más
+  // opciones": con dos columnas de espacio no tiene sentido esconderlas).
+  // =====================================================================
+
+  Widget _buildLandscape(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(28, 20, 28, 20),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 5, child: _buildColumnaIzquierdaLandscape(context)),
+              const SizedBox(width: 32),
+              Expanded(flex: 4, child: _buildColumnaCentralLandscape(context)),
+              const SizedBox(width: 24),
+              Container(width: 1, color: Colors.grey.shade300),
+              const SizedBox(width: 24),
+              SizedBox(width: 300, child: _buildColumnaSubtareasLandscape(context)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Columna izquierda: título de la pantalla + ayuda, campo de título de
+  // tarea, descripción, y al pie las acciones de plantillas.
+  Widget _buildColumnaIzquierdaLandscape(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                widget.tareaAEditar != null ? 'Editar Tarea' : 'Nueva Tarea',
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+              ),
+              const SizedBox(width: 8),
+              AyudaFormularioButton(
+                titulo: 'Ayuda: Nueva Tarea',
+                puntos: const [
+                  '¿Qué hay que hacer?: Título de la tarea, es obligatorio.',
+                  'Grupo: Categoría para organizar tus tareas (ej. Trabajo, Casa). Elige una del listado; usa el ícono "+" para crear una nueva y el lápiz para renombrar o eliminar las existentes.',
+                  'Descripción: Notas adicionales opcionales sobre la tarea.',
+                  'Fecha y Hora: Fecha límite para completarla. Si no eliges hora, se usa las 23:59 por defecto.',
+                  'Urgencia: Qué tan prioritaria es. Si defines horas estimadas, se calcula sola según el tiempo restante.',
+                  'Horas estimadas: Tiempo que crees que tomará. Al definirlas, la urgencia deja de elegirse manualmente.',
+                  'Subtareas: Pasos pequeños dentro de la tarea que puedes marcar como completados por separado.',
+                  'Plantillas: Para tareas que repites seguido (pero no todos los días). Guarda el título, las subtareas, el grupo y la urgencia con "Guardar como plantilla"; usa "Usar plantilla" para aplicar una ya guardada; y el lápiz para renombrarlas o eliminarlas.',
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _tituloController,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: '¿Qué hay que hacer?',
+              filled: true, fillColor: Colors.grey.shade100,
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade400, width: 1.5)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black87, width: 2.0)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: TextField(
+              controller: _descripcionController,
+              maxLines: null,
+              expands: true,
+              textAlignVertical: TextAlignVertical.top,
+              decoration: InputDecoration(
+                labelText: 'Descripción',
+                alignLabelWithHint: true,
+                filled: true, fillColor: Colors.grey.shade50,
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _guardarComoPlantilla,
+                  icon: const Icon(Icons.bookmark_add_outlined, size: 16),
+                  label: const Text('Guardar plantilla', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide(color: Colors.grey.shade400, width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _usarPlantilla,
+                  icon: const Icon(Icons.playlist_add_check_rounded, size: 16),
+                  label: const Text('Usar plantilla', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide(color: Colors.grey.shade400, width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _BotonAccionCuadrado(
+                icon: Icons.edit_rounded,
+                tooltip: 'Editar plantillas',
+                onPressed: _gestionarPlantillas,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Columna central: grupo, fecha/hora, urgencia manual/base y horas
+  // estimadas — siempre visibles, sin el toggle "Más opciones" de portrait.
+  Widget _buildColumnaCentralLandscape(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _grupoSeleccionado,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black54),
+                  borderRadius: BorderRadius.circular(16),
+                  dropdownColor: Colors.white,
+                  elevation: 2,
+                  style: const TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.w500),
+                  decoration: InputDecoration(
+                    labelText: 'Grupo',
+                    prefixIcon: const Icon(Icons.folder_outlined, size: 20),
+                    filled: true, fillColor: Colors.grey.shade100,
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade400, width: 1.5)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black87, width: 2.0)),
+                  ),
+                  items: [
+                    for (final grupo in _gruposDisponibles)
+                      DropdownMenuItem(value: grupo, child: Text(grupo, overflow: TextOverflow.ellipsis)),
+                  ],
+                  onChanged: (valor) {
+                    if (valor != null) setState(() => _grupoSeleccionado = valor);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              _BotonAccionCuadrado(icon: Icons.add_rounded, tooltip: 'Nuevo grupo', onPressed: _crearNuevoGrupo),
+              const SizedBox(width: 8),
+              _BotonAccionCuadrado(icon: Icons.edit_rounded, tooltip: 'Editar grupos', onPressed: _gestionarGrupos),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _elegirFecha,
+                  icon: const Icon(Icons.calendar_today, size: 18),
+                  label: Text(_fechaSeleccionada == null ? 'Fecha' : DateFormat('dd MMM').format(_fechaSeleccionada!)),
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12), visualDensity: VisualDensity.compact),
+                ),
+              ),
+              if (_fechaSeleccionada != null)
+                IconButton(onPressed: _limpiarFecha, icon: const Icon(Icons.close, size: 18), tooltip: 'Quitar fecha', visualDensity: VisualDensity.compact),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _elegirHora,
+                  icon: const Icon(Icons.access_time, size: 18),
+                  label: Text(_horaSeleccionada == null ? 'Hora' : _horaSeleccionada!.format(context)),
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12), visualDensity: VisualDensity.compact),
+                ),
+              ),
+              if (_horaSeleccionada != null)
+                IconButton(onPressed: _limpiarHora, icon: const Icon(Icons.close, size: 18), tooltip: 'Quitar hora', visualDensity: VisualDensity.compact),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Text(
+            _urgenciaEsAutomatica ? 'Urgencia (automática por horas estimadas)' : 'Urgencia Manual / Base',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          Opacity(
+            opacity: _urgenciaEsAutomatica ? 0.5 : 1.0,
+            child: SegmentedButton<int>(
+              style: SegmentedButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4)),
+              segments: const [
+                ButtonSegment(value: 1, label: Text('Bajo')),
+                ButtonSegment(value: 2, label: Text('Medio')),
+                ButtonSegment(value: 3, label: Text('Alto')),
+                ButtonSegment(value: 4, label: Text('Muy alto')),
+              ],
+              selected: {_urgenciaMostrada},
+              onSelectionChanged: _urgenciaEsAutomatica ? null : (Set<int> sel) => setState(() => _urgenciaBase = sel.first),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _horasController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+            decoration: InputDecoration(
+              labelText: 'Horas estimadas',
+              helperText: 'Si la defines, la urgencia se ajusta sola con el tiempo restante',
+              errorText: _horasSinFecha ? 'Elige una fecha límite para poder guardar' : null,
+              prefixIcon: const Icon(Icons.timer_outlined, size: 20),
+              filled: true, fillColor: Colors.grey.shade50,
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Riel derecho fijo: subtareas (colapsables igual que en portrait, con
+  // scroll interno propio si la lista no entra) y, al pie, Guardar/Cancelar.
+  Widget _buildColumnaSubtareasLandscape(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => setState(() => _mostrarSubtareas = !_mostrarSubtareas),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.checklist_rounded, size: 18, color: Colors.black54),
+                const SizedBox(width: 8),
+                const Text('SUBTAREAS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 0.5)),
+                if (_subtareasTemp.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(10)),
+                    child: Text(
+                      '${_subtareasTemp.length}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                Icon(_mostrarSubtareas ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.grey),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: !_mostrarSubtareas
+                ? const SizedBox(width: double.infinity, height: 0)
+                : SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_subtareasTemp.isNotEmpty)
+                          ReorderableListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            buildDefaultDragHandles: false,
+                            itemCount: _subtareasTemp.length,
+                            onReorder: (oldIndex, newIndex) {
+                              setState(() {
+                                var destino = newIndex;
+                                if (destino > oldIndex) destino -= 1;
+                                final item = _subtareasTemp.removeAt(oldIndex);
+                                _subtareasTemp.insert(destino, item);
+                              });
+                            },
+                            itemBuilder: (context, index) {
+                              final sub = _subtareasTemp[index];
+                              return Dismissible(
+                                key: ValueKey(sub.id),
+                                direction: DismissDirection.endToStart,
+                                background: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 16),
+                                  margin: const EdgeInsets.only(bottom: 4),
+                                  decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(12)),
+                                  child: const Icon(Icons.delete_outline, color: Colors.red),
+                                ),
+                                onDismissed: (_) => setState(() => _subtareasTemp.removeAt(index)),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Row(
+                                    children: [
+                                      ReorderableDragStartListener(
+                                        index: index,
+                                        child: const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.drag_indicator, size: 20, color: Colors.black26)),
+                                      ),
+                                      SizedBox(
+                                        height: 24, width: 24,
+                                        child: Checkbox(
+                                          value: sub.completado,
+                                          activeColor: Colors.black87,
+                                          onChanged: (val) => setState(() => sub.completado = val ?? false),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          sub.texto,
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            decoration: sub.completado ? TextDecoration.lineThrough : null,
+                                            color: sub.completado ? Colors.black38 : Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                      GestureDetector(
+                                        onTap: () => setState(() => _subtareasTemp.removeAt(index)),
+                                        child: const Icon(Icons.close, size: 18, color: Colors.black38),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _nuevaSubtareaController,
+                                decoration: InputDecoration(
+                                  hintText: 'Agregar paso...',
+                                  isDense: true,
+                                  filled: true, fillColor: Colors.grey.shade50,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+                                ),
+                                textInputAction: TextInputAction.done,
+                                onSubmitted: (_) => _agregarSubtareaTemp(),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(icon: const Icon(Icons.add_circle, size: 28, color: Colors.black87), onPressed: _agregarSubtareaTemp),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: _horasSinFecha ? null : _guardarTarea,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.black87, foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: const Text('Guardar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.black54)),
+          ),
+        ),
+      ],
     );
   }
 }

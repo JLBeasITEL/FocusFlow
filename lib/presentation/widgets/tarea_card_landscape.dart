@@ -65,12 +65,7 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
   }
 
   void _abrirEdicion(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => AddTareaModal(tareaAEditar: widget.tarea),
-    );
+    abrirFormularioTarea(context, tareaAEditar: widget.tarea);
   }
 
   @override
