@@ -120,8 +120,26 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
   }
 }
 
+  // Mismos puntos de ayuda para portrait y landscape — un solo lugar para
+  // no tener que mantener dos copias sincronizadas.
+  static const List<String> _puntosAyuda = [
+    'Título del hábito: Nombre de la rutina que quieres repetir.',
+    'Descripción: Detalle opcional sobre el hábito.',
+    'Horario personalizado por día: Actívalo para elegir una hora distinta cada día; desactívalo para usar siempre la misma hora.',
+    'Hora general / Días de repetición: Hora fija y los días en que se repetirá (modo simple, sin horario personalizado).',
+    'Horarios específicos: Hora individual para cada día que actives (modo horario personalizado).',
+    'Ícono: Imagen que identifica al hábito en la lista.',
+  ];
+
   @override
   Widget build(BuildContext context) {
+    // Este screen siempre se abre con Navigator.push (nunca como bottom
+    // sheet, a diferencia de AddTareaModal), así que rotar con el
+    // formulario abierto no tiene el problema de "contenedor equivocado":
+    // el mismo Scaffold se queda montado y solo cambia qué body construye,
+    // igual que ya hace home_screen.dart entre su vista portrait y
+    // _buildBodyLandscape.
+    final bool esLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     return PopScope(
       // Evita salir del formulario a medias mientras se están programando
       // las notificaciones — no rompería nada (el guardado sigue corriendo
@@ -129,19 +147,12 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
       // todavía mientras el proceso sigue en curso.
       canPop: !_guardando,
       child: Scaffold(
-      appBar: AppBar(
+      appBar: esLandscape ? null : AppBar(
         title: Text(widget.rutinaAEditar == null ? 'Crear hábito' : 'Editar Rutina'),
         actions: [
           AyudaFormularioButton(
             titulo: 'Ayuda: Hábito',
-            puntos: const [
-              'Título del hábito: Nombre de la rutina que quieres repetir.',
-              'Descripción: Detalle opcional sobre el hábito.',
-              'Horario personalizado por día: Actívalo para elegir una hora distinta cada día; desactívalo para usar siempre la misma hora.',
-              'Hora general / Días de repetición: Hora fija y los días en que se repetirá (modo simple, sin horario personalizado).',
-              'Horarios específicos: Hora individual para cada día que actives (modo horario personalizado).',
-              'Ícono: Imagen que identifica al hábito en la lista.',
-            ],
+            puntos: _puntosAyuda,
           ),
           // BOTÓN DE GUARDADO EN LA PARTE SUPERIOR (SIEMPRE VISIBLE)
           if (_guardando)
@@ -162,7 +173,13 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Stack(
+      body: esLandscape ? _buildBodyLandscape(context) : _buildBodyPortrait(context),
+      ),
+    );
+  }
+
+  Widget _buildBodyPortrait(BuildContext context) {
+    return Stack(
         children: [
           SafeArea(
             top: false,
@@ -350,7 +367,295 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
               ),
             ),
         ],
+      );
+  }
+
+  // =====================================================================
+  // LAYOUT HORIZONTAL (landscape): encabezado propio (sin AppBar) + fila de
+  // ícono/título/descripción + grilla de 7 días, con Guardar/Cancelar fijos
+  // al pie. Reutiliza exactamente el mismo estado y los mismos handlers que
+  // portrait (_esFlexible, _horarios, _diasFijos, _horaFija,
+  // _iconoSeleccionado, _guardarRutina) — es 100% reacomodo visual.
+  // =====================================================================
+
+  static const List<String> _letrasDias = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  static const List<String> _abreviaturasDias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+  bool _diaActivo(int idx) => _esFlexible ? _horarios.containsKey(idx) : _diasFijos[idx];
+
+  void _alternarDia(int idx) {
+    setState(() {
+      if (_esFlexible) {
+        if (_horarios.containsKey(idx)) {
+          _horarios.remove(idx);
+        } else {
+          _horarios[idx] = const TimeOfDay(hour: 8, minute: 0);
+        }
+      } else {
+        _diasFijos[idx] = !_diasFijos[idx];
+      }
+    });
+  }
+
+  Future<void> _elegirHoraDia(int idx) async {
+    final actual = _horarios[idx] ?? const TimeOfDay(hour: 8, minute: 0);
+    final elegida = await showTimePicker(context: context, initialTime: actual);
+    if (elegida != null) setState(() => _horarios[idx] = elegida);
+  }
+
+  // Mismo Wrap de 24 íconos que ya vive dentro del ExpansionTile de
+  // portrait, pero en un diálogo: en landscape no hay alto de sobra para
+  // dejarlo expandido debajo del avatar (mismo patrón que "Nuevo grupo" /
+  // "Guardar como plantilla" en el formulario de tareas).
+  Future<void> _elegirIconoDialogo() async {
+    final elegido = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Elegir ícono'),
+        content: SizedBox(
+          width: 360,
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: _opcionesIconos.map((icono) {
+              final bool seleccionado = _iconoSeleccionado == icono.codePoint;
+              return GestureDetector(
+                onTap: () => Navigator.pop(dialogContext, icono.codePoint),
+                child: CircleAvatar(
+                  backgroundColor: seleccionado ? Colors.deepPurple.withValues(alpha: 0.2) : Colors.grey.shade200,
+                  child: Icon(icono, color: seleccionado ? Colors.deepPurple : Colors.grey),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cerrar')),
+        ],
       ),
+    );
+    if (elegido != null) setState(() => _iconoSeleccionado = elegido);
+  }
+
+  Widget _buildBodyLandscape(BuildContext context) {
+    final diasActivos = List.generate(7, _diaActivo);
+    final resumenDias = diasActivos.contains(true)
+        ? diasActivos.asMap().entries.where((e) => e.value).map((e) => _abreviaturasDias[e.key]).join(' · ')
+        : 'Sin días seleccionados';
+
+    return SafeArea(
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: _guardando ? null : () => Navigator.pop(context),
+                    ),
+                    Text(
+                      widget.rutinaAEditar == null ? 'Crear hábito' : 'Editar Rutina',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        resumenDias,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    ),
+                    AyudaFormularioButton(titulo: 'Ayuda: Hábito', puntos: _puntosAyuda),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            GestureDetector(
+                              onTap: _elegirIconoDialogo,
+                              child: CircleAvatar(
+                                radius: 28,
+                                backgroundColor: Colors.deepPurple.withValues(alpha: 0.1),
+                                child: Icon(
+                                  IconData(_iconoSeleccionado, fontFamily: 'MaterialIcons'),
+                                  color: Colors.deepPurple,
+                                  size: 28,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextField(
+                                controller: _tituloController,
+                                decoration: InputDecoration(
+                                  labelText: 'Título del hábito',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                                  prefixIcon: const Icon(Icons.repeat_rounded),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextField(
+                                controller: _descripcionController,
+                                decoration: InputDecoration(
+                                  labelText: 'Descripción (Opcional)',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                                  prefixIcon: const Icon(Icons.description_outlined),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            const Text('Días de repetición', style: TextStyle(fontWeight: FontWeight.bold)),
+                            const Spacer(),
+                            const Text('Horario personalizado por día'),
+                            Switch(
+                              value: _esFlexible,
+                              activeThumbColor: Colors.deepPurple,
+                              onChanged: (val) => setState(() => _esFlexible = val),
+                            ),
+                          ],
+                        ),
+                        if (!_esFlexible) ...[
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.access_time, size: 18),
+                              onPressed: () async {
+                                final select = await showTimePicker(context: context, initialTime: _horaFija);
+                                if (select != null) setState(() => _horaFija = select);
+                              },
+                              label: Text('Hora general: ${_horaFija.format(context)}'),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        Row(
+                          children: List.generate(7, (idx) {
+                            final bool activo = diasActivos[idx];
+                            return Expanded(
+                              child: GestureDetector(
+                                onTap: () => _alternarDia(idx),
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: activo ? Colors.deepPurple.withValues(alpha: 0.1) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor: activo ? Colors.deepPurple : Colors.grey.shade300,
+                                        foregroundColor: Colors.white,
+                                        child: Text(_letrasDias[idx]),
+                                      ),
+                                      if (_esFlexible) ...[
+                                        const SizedBox(height: 8),
+                                        GestureDetector(
+                                          onTap: activo ? () => _elegirHoraDia(idx) : null,
+                                          child: Text(
+                                            activo
+                                                ? _horarios[idx]!.format(context)
+                                                : const TimeOfDay(hour: 9, minute: 0).format(context),
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: activo ? Colors.deepPurple : Colors.grey.shade400,
+                                              fontWeight: activo ? FontWeight.w600 : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                        const SizedBox(height: 16),
+                        // Cancelar/Guardar viven DENTRO del scroll (no fijos
+                        // como un footer aparte): con el teclado abierto, el
+                        // alto disponible en landscape se reduce mucho, y un
+                        // footer fijo por fuera del área que se encoge se
+                        // desborda (overflow) en vez de simplemente
+                        // desplazarse — mismo ajuste que ya se hizo para el
+                        // riel de subtareas del formulario de tareas.
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: _guardando ? null : () => Navigator.pop(context),
+                              child: const Text('Cancelar'),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.deepPurple,
+                                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                              ),
+                              onPressed: _guardando ? null : _guardarRutina,
+                              child: _guardando
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                                    )
+                                  : Text(
+                                      widget.rutinaAEditar == null ? 'Guardar Rutina' : 'Actualizar Rutina',
+                                      style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_guardando)
+            Positioned.fill(
+              child: AbsorbPointer(
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  child: Center(
+                    child: Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 28, vertical: 22),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 14),
+                            Text('Guardando y programando notificaciones...'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
