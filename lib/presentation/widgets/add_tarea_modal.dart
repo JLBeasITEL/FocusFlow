@@ -730,7 +730,6 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
 
             TextField(
               controller: _tituloController,
-              autofocus: true,
               decoration: InputDecoration(
                 labelText: '¿Qué hay que hacer?',
                 filled: true, fillColor: Colors.grey.shade100,
@@ -1182,7 +1181,6 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
           const SizedBox(height: 20),
           TextField(
             controller: _tituloController,
-            autofocus: true,
             decoration: InputDecoration(
               labelText: '¿Qué hay que hacer?',
               filled: true, fillColor: Colors.grey.shade100,
