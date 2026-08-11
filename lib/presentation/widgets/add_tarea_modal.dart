@@ -23,8 +23,19 @@ import '../../main.dart' show navigatorKey;
 // cerrarlo y reabrirlo con el contenedor correcto (ver comentario ahí), y
 // `borrador` lleva los valores que ya había escrito para no perderlos. A
 // diferencia de `tareaAEditar`, nunca decide el modo guardar/actualizar.
-void abrirFormularioTarea(BuildContext context, {Tarea? tareaAEditar, Tarea? borrador}) {
-  final bool esLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+//
+// `orientacion`, si se pasa, se usa en vez de volver a leer
+// MediaQuery.of(context).orientation. Solo lo usa
+// _reabrirTrasCambioDeOrientacion: ahí `context` es el del Overlay (para que
+// el nuevo contenido sí encuentre Theme/Material), pero justo por no ser el
+// context del formulario, su MediaQuery puede ir un paso atrás del real —
+// eligiendo por ejemplo Navigator.push (pantalla completa) mientras
+// AddTareaModal, con SU PROPIO MediaQuery ya actualizado, construye el
+// contenido de portrait. Portrait sin el Material que pone BottomSheet
+// truena con "No Material widget found" (TextField/DropdownButton). Pasar
+// la orientación ya conocida evita que estas dos lecturas se desincronicen.
+void abrirFormularioTarea(BuildContext context, {Tarea? tareaAEditar, Tarea? borrador, Orientation? orientacion}) {
+  final bool esLandscape = (orientacion ?? MediaQuery.of(context).orientation) == Orientation.landscape;
   if (esLandscape) {
     Navigator.push(
       context,
@@ -141,7 +152,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     _orientacionAlAbrir ??= actual;
     if (!_reabriendoPorRotacion && actual != _orientacionAlAbrir) {
       _reabriendoPorRotacion = true;
-      _reabrirTrasCambioDeOrientacion();
+      _reabrirTrasCambioDeOrientacion(actual);
     }
   }
 
@@ -149,16 +160,26 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   // para la nueva orientación, pasando un borrador con lo que el usuario ya
   // había escrito para no perderlo. navigatorKey (no `context`) porque tras
   // el pop este State se desmonta y su contexto deja de ser válido.
-  void _reabrirTrasCambioDeOrientacion() {
+  //
+  // El pop y el reabrir van en DOS addPostFrameCallback anidados, no uno
+  // solo: hacerlo todo en el mismo frame reabre el formulario antes de que
+  // el Overlay termine de acomodarse tras el pop.
+  //
+  // `nuevaOrientacion` se pasa tal cual a abrirFormularioTarea en vez de
+  // dejar que la vuelva a leer sola, para no depender de qué tan al día
+  // esté el MediaQuery del context del Overlay en ese instante.
+  void _reabrirTrasCambioDeOrientacion(Orientation nuevaOrientacion) {
     final tareaOriginal = widget.tareaAEditar;
     final borrador = _construirBorrador();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       Navigator.of(context).pop();
-      final ctx = navigatorKey.currentContext;
-      if (ctx != null) {
-        abrirFormularioTarea(ctx, tareaAEditar: tareaOriginal, borrador: borrador);
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = navigatorKey.currentState?.overlay?.context;
+        if (ctx != null) {
+          abrirFormularioTarea(ctx, tareaAEditar: tareaOriginal, borrador: borrador, orientacion: nuevaOrientacion);
+        }
+      });
     });
   }
 
@@ -675,7 +696,23 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     // que home_screen.dart usa para decidir entre su Scaffold portrait y
     // _buildBodyLandscape. Portrait no se toca; landscape es un widget
     // nuevo que reutiliza el mismo estado y los mismos handlers.
-    final bool esLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    //
+    // _reabriendoPorRotacion congela esta lectura en la orientación con la
+    // que se abrió (_orientacionAlAbrir) en vez de volver a mirar
+    // MediaQuery: apenas didChangeDependencies detecta la rotación, ESTE
+    // build() también reacciona al mismo cambio de MediaQuery y, sin este
+    // freeze, intenta dibujar el layout nuevo (p. ej. portrait) mientras la
+    // instancia sigue montada dentro de su contenedor viejo (p. ej. el
+    // MaterialPageRoute de landscape, que no trae su propio Material como
+    // sí lo hace el BottomSheet) — eso es lo que tronaba con "No Material
+    // widget found" en TextField/DropdownButton, ANTES de que el pop y el
+    // reabrir programados en _reabrirTrasCambioDeOrientacion llegaran a
+    // ejecutarse. Mientras se está por cerrar, sigue mostrando el layout
+    // original hasta que la instancia nueva (ya en el contenedor correcto)
+    // la reemplaza.
+    final bool esLandscape = _reabriendoPorRotacion
+        ? _orientacionAlAbrir == Orientation.landscape
+        : MediaQuery.of(context).orientation == Orientation.landscape;
     return esLandscape ? _buildLandscape(context) : _buildPortrait(context);
   }
 
