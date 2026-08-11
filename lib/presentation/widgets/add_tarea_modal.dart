@@ -9,6 +9,7 @@ import '../../models/tarea.dart';
 import '../../models/plantilla.dart';
 import '../../core/app_messenger.dart';
 import 'ayuda_formulario_button.dart';
+import '../../main.dart' show navigatorKey;
 
 // Punto de entrada único para abrir "Nueva/Editar Tarea": en portrait sigue
 // siendo el bottom sheet de siempre (sin cambios); en landscape, el
@@ -16,27 +17,34 @@ import 'ayuda_formulario_button.dart';
 // dar, así que se empuja como pantalla completa. Los dos call sites
 // (home_screen.dart y tarea_card_landscape.dart) usan este helper en vez de
 // invocar showModalBottomSheet directamente para no duplicar esta rama.
-void abrirFormularioTarea(BuildContext context, {Tarea? tareaAEditar}) {
+//
+// `borrador` es exclusivamente para _reabrirTrasCambioDeOrientacion: cuando
+// el usuario rota el dispositivo con el formulario ya abierto, hay que
+// cerrarlo y reabrirlo con el contenedor correcto (ver comentario ahí), y
+// `borrador` lleva los valores que ya había escrito para no perderlos. A
+// diferencia de `tareaAEditar`, nunca decide el modo guardar/actualizar.
+void abrirFormularioTarea(BuildContext context, {Tarea? tareaAEditar, Tarea? borrador}) {
   final bool esLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
   if (esLandscape) {
     Navigator.push(
       context,
-      MaterialPageRoute(fullscreenDialog: true, builder: (_) => AddTareaModal(tareaAEditar: tareaAEditar)),
+      MaterialPageRoute(fullscreenDialog: true, builder: (_) => AddTareaModal(tareaAEditar: tareaAEditar, borrador: borrador)),
     );
   } else {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => AddTareaModal(tareaAEditar: tareaAEditar),
+      builder: (_) => AddTareaModal(tareaAEditar: tareaAEditar, borrador: borrador),
     );
   }
 }
 
 class AddTareaModal extends ConsumerStatefulWidget {
   final Tarea? tareaAEditar;
+  final Tarea? borrador;
 
-  const AddTareaModal({super.key, this.tareaAEditar});
+  const AddTareaModal({super.key, this.tareaAEditar, this.borrador});
 
   @override
   ConsumerState<AddTareaModal> createState() => _AddTareaModalState();
@@ -64,23 +72,28 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   @override
   void initState() {
     super.initState();
-    _tituloController = TextEditingController(text: widget.tareaAEditar?.titulo ?? '');
-    _descripcionController = TextEditingController(text: widget.tareaAEditar?.descripcion ?? '');
+    // widget.borrador solo llega desde _reabrirTrasCambioDeOrientacion (ver
+    // más abajo): valores en progreso a restaurar tras rotar el dispositivo
+    // con el formulario abierto. widget.tareaAEditar sigue siendo la única
+    // fuente para decidir si _guardarTarea actualiza o crea.
+    final datosIniciales = widget.tareaAEditar ?? widget.borrador;
+    _tituloController = TextEditingController(text: datosIniciales?.titulo ?? '');
+    _descripcionController = TextEditingController(text: datosIniciales?.descripcion ?? '');
     // Cargamos las horas estimadas si existen (sin ".0" sobrante si es un entero)
-    final horasGuardadas = widget.tareaAEditar?.horasEstimadas;
+    final horasGuardadas = datosIniciales?.horasEstimadas;
     _horasController = TextEditingController(
       text: horasGuardadas == null
           ? ''
           : (horasGuardadas % 1 == 0 ? horasGuardadas.toInt().toString() : horasGuardadas.toString())
     );
-    _grupoSeleccionado = widget.tareaAEditar?.grupo ?? 'General';
+    _grupoSeleccionado = datosIniciales?.grupo ?? 'General';
     _gruposDisponibles = ref.read(tareaProvider.notifier).obtenerGruposExistentes();
     if (!_gruposDisponibles.contains(_grupoSeleccionado)) {
       _gruposDisponibles = [..._gruposDisponibles, _grupoSeleccionado];
     }
-    _urgenciaBase = widget.tareaAEditar?.urgenciaBase ?? 1;
-    _fechaSeleccionada = widget.tareaAEditar?.fechaLimite;
-    _subtareasTemp = widget.tareaAEditar?.subtareas
+    _urgenciaBase = datosIniciales?.urgenciaBase ?? 1;
+    _fechaSeleccionada = datosIniciales?.fechaLimite;
+    _subtareasTemp = datosIniciales?.subtareas
             .map((s) => ItemSubtarea(id: s.id, texto: s.texto, completado: s.completado))
             .toList() ??
         [];
@@ -108,6 +121,74 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     // necesitamos reconstruir para deshabilitar el selector manual y
     // recalcular el nivel mostrado.
     _horasController.addListener(() => setState(() {}));
+  }
+
+  // Orientación con la que se abrió este formulario. abrirFormularioTarea ya
+  // elige bottom sheet (portrait) o pantalla completa (landscape) al abrir,
+  // pero si el usuario ROTA el dispositivo con el formulario ya abierto esa
+  // elección queda vieja: seguiría siendo, por ejemplo, un bottom sheet con
+  // el contenido de landscape adentro, sin ancho para nada (justo el bug
+  // reportado). didChangeDependencies corre en cada cambio de MediaQuery
+  // (también por el teclado), así que solo actuamos si la orientación en sí
+  // cambió.
+  Orientation? _orientacionAlAbrir;
+  bool _reabriendoPorRotacion = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final actual = MediaQuery.of(context).orientation;
+    _orientacionAlAbrir ??= actual;
+    if (!_reabriendoPorRotacion && actual != _orientacionAlAbrir) {
+      _reabriendoPorRotacion = true;
+      _reabrirTrasCambioDeOrientacion();
+    }
+  }
+
+  // Cierra este formulario y lo vuelve a abrir con el contenedor correcto
+  // para la nueva orientación, pasando un borrador con lo que el usuario ya
+  // había escrito para no perderlo. navigatorKey (no `context`) porque tras
+  // el pop este State se desmonta y su contexto deja de ser válido.
+  void _reabrirTrasCambioDeOrientacion() {
+    final tareaOriginal = widget.tareaAEditar;
+    final borrador = _construirBorrador();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null) {
+        abrirFormularioTarea(ctx, tareaAEditar: tareaOriginal, borrador: borrador);
+      }
+    });
+  }
+
+  // Misma construcción que _guardarTarea, pero sin persistir nada: solo para
+  // pasar los valores en progreso a la instancia que se abre después de
+  // rotar. Mantiene el id/tipo (nueva vs. edición) del widget original.
+  Tarea _construirBorrador() {
+    final descripcion = _descripcionController.text.trim();
+    final horas = double.tryParse(_horasController.text.trim());
+    final base = widget.tareaAEditar;
+    if (base != null) {
+      return base.copyWith(
+        titulo: _tituloController.text,
+        descripcion: descripcion.isEmpty ? null : descripcion,
+        fechaLimite: _fechaFinalActual,
+        horasEstimadas: horas,
+        urgenciaBase: _urgenciaBase,
+        grupo: _grupoSeleccionado,
+        subtareas: _subtareasTemp,
+      );
+    }
+    return Tarea(
+      titulo: _tituloController.text,
+      descripcion: descripcion.isEmpty ? null : descripcion,
+      fechaLimite: _fechaFinalActual,
+      horasEstimadas: horas,
+      urgenciaBase: _urgenciaBase,
+      grupo: _grupoSeleccionado,
+      subtareas: _subtareasTemp,
+    );
   }
 
   @override
