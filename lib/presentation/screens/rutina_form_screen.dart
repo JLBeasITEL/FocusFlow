@@ -447,18 +447,19 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
       child: Stack(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
             child: Column(
               children: [
                 Row(
                   children: [
                     IconButton(
                       icon: const Icon(Icons.arrow_back),
+                      visualDensity: VisualDensity.compact,
                       onPressed: _guardando ? null : () => Navigator.pop(context),
                     ),
                     Text(
                       widget.rutinaAEditar == null ? 'Crear hábito' : 'Editar Rutina',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -472,7 +473,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                     AyudaFormularioButton(titulo: 'Ayuda: Hábito', puntos: _puntosAyuda),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Expanded(
                   child: SingleChildScrollView(
                     child: Column(
@@ -583,45 +584,44 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                             );
                           }),
                         ),
-                        const SizedBox(height: 16),
-                        // Cancelar/Guardar viven DENTRO del scroll (no fijos
-                        // como un footer aparte): con el teclado abierto, el
-                        // alto disponible en landscape se reduce mucho, y un
-                        // footer fijo por fuera del área que se encoge se
-                        // desborda (overflow) en vez de simplemente
-                        // desplazarse — mismo ajuste que ya se hizo para el
-                        // riel de subtareas del formulario de tareas.
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton(
-                              onPressed: _guardando ? null : () => Navigator.pop(context),
-                              child: const Text('Cancelar'),
-                            ),
-                            const SizedBox(width: 12),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.deepPurple,
-                                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                              ),
-                              onPressed: _guardando ? null : _guardarRutina,
-                              child: _guardando
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                                    )
-                                  : Text(
-                                      widget.rutinaAEditar == null ? 'Guardar Rutina' : 'Actualizar Rutina',
-                                      style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
-                                    ),
-                            ),
-                          ],
-                        ),
                       ],
                     ),
                   ),
+                ),
+                const SizedBox(height: 4),
+                // Cancelar/Guardar fijos al pie (no scrollean con el resto):
+                // pedido explícito, aunque con el teclado abierto el alto
+                // disponible en landscape es poco — por eso el resto de los
+                // controles (arriba) sí está en su propio scroll, para que
+                // sea eso lo que se desplace y este footer nunca se mueva.
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: _guardando ? null : () => Navigator.pop(context),
+                      child: const Text('Cancelar'),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple,
+                        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 6),
+                        visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      ),
+                      onPressed: _guardando ? null : _guardarRutina,
+                      child: _guardando
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                            )
+                          : Text(
+                              widget.rutinaAEditar == null ? 'Guardar Rutina' : 'Actualizar Rutina',
+                              style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                    ),
+                  ],
                 ),
               ],
             ),
