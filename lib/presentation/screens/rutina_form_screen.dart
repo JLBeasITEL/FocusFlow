@@ -522,6 +522,17 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                           children: [
                             const Text('Días de repetición', style: TextStyle(fontWeight: FontWeight.bold)),
                             const Spacer(),
+                            if (!_esFlexible) ...[
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.access_time, size: 18),
+                                onPressed: () async {
+                                  final select = await showTimePicker(context: context, initialTime: _horaFija);
+                                  if (select != null) setState(() => _horaFija = select);
+                                },
+                                label: Text('Hora general: ${_horaFija.format(context)}'),
+                              ),
+                              const SizedBox(width: 16),
+                            ],
                             const Text('Horario personalizado por día'),
                             Switch(
                               value: _esFlexible,
@@ -530,20 +541,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                             ),
                           ],
                         ),
-                        if (!_esFlexible) ...[
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: OutlinedButton.icon(
-                              icon: const Icon(Icons.access_time, size: 18),
-                              onPressed: () async {
-                                final select = await showTimePicker(context: context, initialTime: _horaFija);
-                                if (select != null) setState(() => _horaFija = select);
-                              },
-                              label: Text('Hora general: ${_horaFija.format(context)}'),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
+                        const SizedBox(height: 8),
                         Row(
                           children: List.generate(7, (idx) {
                             final bool activo = diasActivos[idx];
@@ -564,18 +562,16 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                                         foregroundColor: Colors.white,
                                         child: Text(_letrasDias[idx]),
                                       ),
-                                      if (_esFlexible) ...[
+                                      if (_esFlexible && activo) ...[
                                         const SizedBox(height: 8),
                                         GestureDetector(
-                                          onTap: activo ? () => _elegirHoraDia(idx) : null,
+                                          onTap: () => _elegirHoraDia(idx),
                                           child: Text(
-                                            activo
-                                                ? _horarios[idx]!.format(context)
-                                                : const TimeOfDay(hour: 9, minute: 0).format(context),
-                                            style: TextStyle(
+                                            _horarios[idx]!.format(context),
+                                            style: const TextStyle(
                                               fontSize: 13,
-                                              color: activo ? Colors.deepPurple : Colors.grey.shade400,
-                                              fontWeight: activo ? FontWeight.w600 : FontWeight.normal,
+                                              color: Colors.deepPurple,
+                                              fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                         ),
