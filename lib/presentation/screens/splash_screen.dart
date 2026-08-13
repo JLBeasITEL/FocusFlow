@@ -50,7 +50,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     ]);
     if (!mounted) return;
     setState(() => _listo = true);
-    Future.delayed(const Duration(milliseconds: 2600), () {
+    Future.delayed(const Duration(milliseconds: 1500), () {
       if (mounted) setState(() => _overlayVisible = false);
     });
   }
@@ -97,16 +97,22 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   // Nombre y logo aparecen juntos recién cuando el precache
                   // de ambas imágenes termina (ver _precargarYMostrar).
                   opacity: _listo ? 1 : 0,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Image.asset(logo, width: 140, cacheWidth: _anchoCache(context), fit: BoxFit.contain),
-                      const SizedBox(height: 18),
-                      Text(
-                        'FocusFlow',
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: temaActual.colorPrincipal, letterSpacing: 0.5),
-                      ),
-                    ],
+                  // Es puro decorativo: sin esto, TalkBack/Accessibility
+                  // Scanner puede enfocar el texto "FocusFlow" por ser el
+                  // primer elemento en aparecer, dibujando su indicador de
+                  // foco (línea/recuadro) encima.
+                  child: ExcludeSemantics(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(logo, width: 140, cacheWidth: _anchoCache(context), fit: BoxFit.contain),
+                        const SizedBox(height: 18),
+                        Text(
+                          'FocusFlow',
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: temaActual.colorPrincipal, letterSpacing: 0.5),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

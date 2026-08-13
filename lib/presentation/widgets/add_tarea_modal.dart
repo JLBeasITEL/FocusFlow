@@ -9,11 +9,53 @@ import '../../models/tarea.dart';
 import '../../models/plantilla.dart';
 import '../../core/app_messenger.dart';
 import 'ayuda_formulario_button.dart';
+import '../../main.dart' show navigatorKey;
+
+// Punto de entrada único para abrir "Nueva/Editar Tarea": en portrait sigue
+// siendo el bottom sheet de siempre (sin cambios); en landscape, el
+// formulario de dos columnas necesita más espacio del que un sheet puede
+// dar, así que se empuja como pantalla completa. Los dos call sites
+// (home_screen.dart y tarea_card_landscape.dart) usan este helper en vez de
+// invocar showModalBottomSheet directamente para no duplicar esta rama.
+//
+// `borrador` es exclusivamente para _reabrirTrasCambioDeOrientacion: cuando
+// el usuario rota el dispositivo con el formulario ya abierto, hay que
+// cerrarlo y reabrirlo con el contenedor correcto (ver comentario ahí), y
+// `borrador` lleva los valores que ya había escrito para no perderlos. A
+// diferencia de `tareaAEditar`, nunca decide el modo guardar/actualizar.
+//
+// `orientacion`, si se pasa, se usa en vez de volver a leer
+// MediaQuery.of(context).orientation. Solo lo usa
+// _reabrirTrasCambioDeOrientacion: ahí `context` es el del Overlay (para que
+// el nuevo contenido sí encuentre Theme/Material), pero justo por no ser el
+// context del formulario, su MediaQuery puede ir un paso atrás del real —
+// eligiendo por ejemplo Navigator.push (pantalla completa) mientras
+// AddTareaModal, con SU PROPIO MediaQuery ya actualizado, construye el
+// contenido de portrait. Portrait sin el Material que pone BottomSheet
+// truena con "No Material widget found" (TextField/DropdownButton). Pasar
+// la orientación ya conocida evita que estas dos lecturas se desincronicen.
+void abrirFormularioTarea(BuildContext context, {Tarea? tareaAEditar, Tarea? borrador, Orientation? orientacion}) {
+  final bool esLandscape = (orientacion ?? MediaQuery.of(context).orientation) == Orientation.landscape;
+  if (esLandscape) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(fullscreenDialog: true, builder: (_) => AddTareaModal(tareaAEditar: tareaAEditar, borrador: borrador)),
+    );
+  } else {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AddTareaModal(tareaAEditar: tareaAEditar, borrador: borrador),
+    );
+  }
+}
 
 class AddTareaModal extends ConsumerStatefulWidget {
   final Tarea? tareaAEditar;
+  final Tarea? borrador;
 
-  const AddTareaModal({super.key, this.tareaAEditar});
+  const AddTareaModal({super.key, this.tareaAEditar, this.borrador});
 
   @override
   ConsumerState<AddTareaModal> createState() => _AddTareaModalState();
@@ -41,23 +83,28 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   @override
   void initState() {
     super.initState();
-    _tituloController = TextEditingController(text: widget.tareaAEditar?.titulo ?? '');
-    _descripcionController = TextEditingController(text: widget.tareaAEditar?.descripcion ?? '');
+    // widget.borrador solo llega desde _reabrirTrasCambioDeOrientacion (ver
+    // más abajo): valores en progreso a restaurar tras rotar el dispositivo
+    // con el formulario abierto. widget.tareaAEditar sigue siendo la única
+    // fuente para decidir si _guardarTarea actualiza o crea.
+    final datosIniciales = widget.tareaAEditar ?? widget.borrador;
+    _tituloController = TextEditingController(text: datosIniciales?.titulo ?? '');
+    _descripcionController = TextEditingController(text: datosIniciales?.descripcion ?? '');
     // Cargamos las horas estimadas si existen (sin ".0" sobrante si es un entero)
-    final horasGuardadas = widget.tareaAEditar?.horasEstimadas;
+    final horasGuardadas = datosIniciales?.horasEstimadas;
     _horasController = TextEditingController(
       text: horasGuardadas == null
           ? ''
           : (horasGuardadas % 1 == 0 ? horasGuardadas.toInt().toString() : horasGuardadas.toString())
     );
-    _grupoSeleccionado = widget.tareaAEditar?.grupo ?? 'General';
+    _grupoSeleccionado = datosIniciales?.grupo ?? 'General';
     _gruposDisponibles = ref.read(tareaProvider.notifier).obtenerGruposExistentes();
     if (!_gruposDisponibles.contains(_grupoSeleccionado)) {
       _gruposDisponibles = [..._gruposDisponibles, _grupoSeleccionado];
     }
-    _urgenciaBase = widget.tareaAEditar?.urgenciaBase ?? 1;
-    _fechaSeleccionada = widget.tareaAEditar?.fechaLimite;
-    _subtareasTemp = widget.tareaAEditar?.subtareas
+    _urgenciaBase = datosIniciales?.urgenciaBase ?? 1;
+    _fechaSeleccionada = datosIniciales?.fechaLimite;
+    _subtareasTemp = datosIniciales?.subtareas
             .map((s) => ItemSubtarea(id: s.id, texto: s.texto, completado: s.completado))
             .toList() ??
         [];
@@ -85,6 +132,91 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     // necesitamos reconstruir para deshabilitar el selector manual y
     // recalcular el nivel mostrado.
     _horasController.addListener(() => setState(() {}));
+  }
+
+  // Orientación con la que se abrió este formulario. abrirFormularioTarea ya
+  // elige bottom sheet (portrait) o pantalla completa (landscape) al abrir,
+  // pero si el usuario ROTA el dispositivo con el formulario ya abierto esa
+  // elección queda vieja: seguiría siendo, por ejemplo, un bottom sheet con
+  // el contenido de landscape adentro, sin ancho para nada (justo el bug
+  // reportado). didChangeDependencies corre en cada cambio de MediaQuery
+  // (también por el teclado), así que solo actuamos si la orientación en sí
+  // cambió.
+  Orientation? _orientacionAlAbrir;
+  bool _reabriendoPorRotacion = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // MediaQuery.orientationOf (no MediaQuery.of(context).orientation): este
+    // último se suscribe a todo el MediaQueryData completo, así que cualquier cambio de
+    // viewInsets (p. ej. el teclado abriéndose/cerrándose) también dispara
+    // este didChangeDependencies y, con él, un rebuild completo del
+    // formulario landscape en cada frame de la animación del teclado — eso
+    // era el "proceso pesado" que hacía verse lenta la apertura del teclado.
+    // orientationOf solo redispara cuando la orientación en sí cambia.
+    final actual = MediaQuery.orientationOf(context);
+    _orientacionAlAbrir ??= actual;
+    if (!_reabriendoPorRotacion && actual != _orientacionAlAbrir) {
+      _reabriendoPorRotacion = true;
+      _reabrirTrasCambioDeOrientacion(actual);
+    }
+  }
+
+  // Cierra este formulario y lo vuelve a abrir con el contenedor correcto
+  // para la nueva orientación, pasando un borrador con lo que el usuario ya
+  // había escrito para no perderlo. navigatorKey (no `context`) porque tras
+  // el pop este State se desmonta y su contexto deja de ser válido.
+  //
+  // El pop y el reabrir van en DOS addPostFrameCallback anidados, no uno
+  // solo: hacerlo todo en el mismo frame reabre el formulario antes de que
+  // el Overlay termine de acomodarse tras el pop.
+  //
+  // `nuevaOrientacion` se pasa tal cual a abrirFormularioTarea en vez de
+  // dejar que la vuelva a leer sola, para no depender de qué tan al día
+  // esté el MediaQuery del context del Overlay en ese instante.
+  void _reabrirTrasCambioDeOrientacion(Orientation nuevaOrientacion) {
+    final tareaOriginal = widget.tareaAEditar;
+    final borrador = _construirBorrador();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = navigatorKey.currentState?.overlay?.context;
+        if (ctx != null) {
+          abrirFormularioTarea(ctx, tareaAEditar: tareaOriginal, borrador: borrador, orientacion: nuevaOrientacion);
+        }
+      });
+    });
+  }
+
+  // Misma construcción que _guardarTarea, pero sin persistir nada: solo para
+  // pasar los valores en progreso a la instancia que se abre después de
+  // rotar. Mantiene el id/tipo (nueva vs. edición) del widget original.
+  Tarea _construirBorrador() {
+    final descripcion = _descripcionController.text.trim();
+    final horas = double.tryParse(_horasController.text.trim());
+    final base = widget.tareaAEditar;
+    if (base != null) {
+      return base.copyWith(
+        titulo: _tituloController.text,
+        descripcion: descripcion.isEmpty ? null : descripcion,
+        fechaLimite: _fechaFinalActual,
+        horasEstimadas: horas,
+        urgenciaBase: _urgenciaBase,
+        grupo: _grupoSeleccionado,
+        subtareas: _subtareasTemp,
+      );
+    }
+    return Tarea(
+      titulo: _tituloController.text,
+      descripcion: descripcion.isEmpty ? null : descripcion,
+      fechaLimite: _fechaFinalActual,
+      horasEstimadas: horas,
+      urgenciaBase: _urgenciaBase,
+      grupo: _grupoSeleccionado,
+      subtareas: _subtareasTemp,
+    );
   }
 
   @override
@@ -567,6 +699,34 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
 
   @override
   Widget build(BuildContext context) {
+    // Dos layouts completamente separados (no interpolación): mismo patrón
+    // que home_screen.dart usa para decidir entre su Scaffold portrait y
+    // _buildBodyLandscape. Portrait no se toca; landscape es un widget
+    // nuevo que reutiliza el mismo estado y los mismos handlers.
+    //
+    // _reabriendoPorRotacion congela esta lectura en la orientación con la
+    // que se abrió (_orientacionAlAbrir) en vez de volver a mirar
+    // MediaQuery: apenas didChangeDependencies detecta la rotación, ESTE
+    // build() también reacciona al mismo cambio de MediaQuery y, sin este
+    // freeze, intenta dibujar el layout nuevo (p. ej. portrait) mientras la
+    // instancia sigue montada dentro de su contenedor viejo (p. ej. el
+    // MaterialPageRoute de landscape, que no trae su propio Material como
+    // sí lo hace el BottomSheet) — eso es lo que tronaba con "No Material
+    // widget found" en TextField/DropdownButton, ANTES de que el pop y el
+    // reabrir programados en _reabrirTrasCambioDeOrientacion llegaran a
+    // ejecutarse. Mientras se está por cerrar, sigue mostrando el layout
+    // original hasta que la instancia nueva (ya en el contenedor correcto)
+    // la reemplaza.
+    // orientationOf (no MediaQuery.of(context).orientation) por la misma
+    // razón que en didChangeDependencies: evita que el teclado abriéndose
+    // dispare un rebuild completo de este formulario en cada frame.
+    final bool esLandscape = _reabriendoPorRotacion
+        ? _orientacionAlAbrir == Orientation.landscape
+        : MediaQuery.orientationOf(context) == Orientation.landscape;
+    return esLandscape ? _buildLandscape(context) : _buildPortrait(context);
+  }
+
+  Widget _buildPortrait(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -617,7 +777,6 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
 
             TextField(
               controller: _tituloController,
-              autofocus: true,
               decoration: InputDecoration(
                 labelText: '¿Qué hay que hacer?',
                 filled: true, fillColor: Colors.grey.shade100,
@@ -1001,6 +1160,487 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
           ],
         ),
       ),
+    );
+  }
+
+  // =====================================================================
+  // LAYOUT HORIZONTAL (landscape): dos columnas + riel de subtareas fijo a
+  // la derecha, en vez del formulario vertical de una sola columna con
+  // "Más opciones" colapsado. Reutiliza exactamente los mismos
+  // controllers/handlers/providers que _buildPortrait — no hay estado
+  // nuevo. A diferencia de portrait, acá descripción/fecha/hora/horas
+  // estimadas/plantillas se muestran siempre (sin el toggle "Más
+  // opciones": con dos columnas de espacio no tiene sentido esconderlas).
+  // =====================================================================
+
+  Widget _buildLandscape(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      // false a propósito: con resize automático, el teclado empuja/encoge
+      // todo el body y con él el pie fijo de cada columna (Fecha/Hora,
+      // Plantillas, Guardar/Cancelar) — pedido explícito del usuario: esos
+      // botones deben quedarse exactamente donde están, sin moverse por el
+      // teclado. Que el título/descripción y "Agregar paso" sigan visibles
+      // por encima del teclado ya NO depende de este flag: cada columna lo
+      // resuelve por su cuenta acotando solo su propio scroll de texto (ver
+      // los Builder dentro de _buildColumnaIzquierdaLandscape y
+      // _buildColumnaSubtareasLandscape).
+      resizeToAvoidBottomInset: false,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(28, 6, 28, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Mismo flex en las 3 (tercio de pantalla cada una), en vez de
+              // los anchos dispares de antes (4 / 5 / fijo 260) que dejaban
+              // a Subtareas visiblemente más angosta que las otras dos.
+              Expanded(child: _buildColumnaIzquierdaLandscape(context)),
+              const SizedBox(width: 24),
+              Expanded(child: _buildColumnaCentralLandscape(context)),
+              const SizedBox(width: 20),
+              Container(width: 1, color: Colors.grey.shade300),
+              const SizedBox(width: 20),
+              Expanded(child: _buildColumnaSubtareasLandscape(context)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Columna izquierda: título de la pantalla + ayuda, campo de título de
+  // tarea y descripción arriba (en su propio scroll), Fecha/Hora SIEMPRE
+  // fijos exactamente al pie (Stack + Positioned, no Expanded/Flexible): a
+  // diferencia del reparto por flex que se probó antes, acá Fecha/Hora no
+  // "flota" a una altura que depende de cuánto espacio sobre — su posición
+  // es siempre la misma, pegada al borde inferior. La forma del árbol es
+  // SIEMPRE la misma (nunca cambia según el teclado), porque alternar entre
+  // dos formas distintas hacía que Flutter destruyera y recreara el
+  // TextField (perdiendo el foco) apenas el teclado empezaba a abrirse. Si
+  // el teclado deja muy poco alto, Stack recorta (clipea) el contenido en
+  // vez de tirar un "RenderFlex overflow".
+  Widget _buildColumnaIzquierdaLandscape(BuildContext context) {
+    // Encabezado ("Nueva Tarea" + ayuda) separado del contenido con scroll:
+    // viviendo dentro del SingleChildScrollView, el auto-scroll que trae el
+    // campo enfocado por encima del teclado podía desplazar este encabezado
+    // fuera de vista, dejando un hueco blanco donde estaba. Al ser un
+    // Positioned fijo aparte, nunca se desplaza y ese hueco no aparece.
+    final Widget encabezado = Row(
+      children: [
+        Text(
+          widget.tareaAEditar != null ? 'Editar Tarea' : 'Nueva Tarea',
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+        ),
+        const SizedBox(width: 8),
+        AyudaFormularioButton(
+          titulo: 'Ayuda: Nueva Tarea',
+          puntos: const [
+            '¿Qué hay que hacer?: Título de la tarea, es obligatorio.',
+            'Grupo: Categoría para organizar tus tareas (ej. Trabajo, Casa). Elige una del listado; usa el ícono "+" para crear una nueva y el lápiz para renombrar o eliminar las existentes.',
+            'Descripción: Notas adicionales opcionales sobre la tarea.',
+            'Fecha y Hora: Fecha límite para completarla. Si no eliges hora, se usa las 23:59 por defecto.',
+            'Urgencia: Qué tan prioritaria es. Si defines horas estimadas, se calcula sola según el tiempo restante.',
+            'Horas estimadas: Tiempo que crees que tomará. Al definirlas, la urgencia deja de elegirse manualmente.',
+            'Subtareas: Pasos pequeños dentro de la tarea que puedes marcar como completados por separado.',
+            'Plantillas: Para tareas que repites seguido (pero no todos los días). Guarda el título, las subtareas, el grupo y la urgencia con "Guardar como plantilla"; usa "Usar plantilla" para aplicar una ya guardada; y el lápiz para renombrarlas o eliminarlas.',
+          ],
+        ),
+      ],
+    );
+
+    final Widget tituloYDescripcion = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _tituloController,
+          decoration: InputDecoration(
+            labelText: '¿Qué hay que hacer?',
+            filled: true, fillColor: Colors.grey.shade100,
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade400, width: 1.5)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black87, width: 2.0)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _descripcionController,
+          minLines: 3,
+          maxLines: 5,
+          textAlignVertical: TextAlignVertical.top,
+          decoration: InputDecoration(
+            labelText: 'Descripción',
+            alignLabelWithHint: true,
+            filled: true, fillColor: Colors.grey.shade50,
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+          ),
+        ),
+      ],
+    );
+
+    // Antes vivían acá los botones de Plantillas; se movieron al riel de la
+    // derecha (arriba de Guardar/Cancelar) y Fecha/Hora (que antes estaban
+    // en la columna central) ocuparon su lugar.
+    final Widget fechaYHora = Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _elegirFecha,
+            icon: const Icon(Icons.calendar_today, size: 16),
+            label: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(_fechaSeleccionada == null ? 'Fecha' : DateFormat('dd MMM').format(_fechaSeleccionada!), maxLines: 1),
+            ),
+            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8), visualDensity: VisualDensity.compact),
+          ),
+        ),
+        if (_fechaSeleccionada != null)
+          IconButton(onPressed: _limpiarFecha, icon: const Icon(Icons.close, size: 18), tooltip: 'Quitar fecha', visualDensity: VisualDensity.compact),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _elegirHora,
+            icon: const Icon(Icons.access_time, size: 16),
+            label: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(_horaSeleccionada == null ? 'Hora' : _horaSeleccionada!.format(context), maxLines: 1),
+            ),
+            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8), visualDensity: VisualDensity.compact),
+          ),
+        ),
+        if (_horaSeleccionada != null)
+          IconButton(onPressed: _limpiarHora, icon: const Icon(Icons.close, size: 18), tooltip: 'Quitar hora', visualDensity: VisualDensity.compact),
+      ],
+    );
+
+    return Stack(
+      children: [
+        // Encabezado fijo (48 ≈ alto del IconButton de ayuda, el más alto
+        // de la fila): nunca se mueve ni se desplaza, así que no puede
+        // dejar un hueco en blanco donde estaba.
+        Positioned(top: 0, left: 0, right: 0, height: 48, child: encabezado),
+        // top+bottom fijos (68 = 48 del encabezado + 20 de separación, 60
+        // para Fecha/Hora): el padding extra que antes se sumaba acá para
+        // encoger este scroll según el alto del teclado dejaba un hueco en
+        // blanco visible entre Descripción y Fecha/Hora — se quita, a
+        // costa de que el campo enfocado ya no se auto-ajusta al alto
+        // exacto del teclado (pedido explícito del usuario).
+        Positioned(
+          top: 68, left: 0, right: 0, bottom: 60,
+          child: SingleChildScrollView(child: tituloYDescripcion),
+        ),
+        // Nunca depende de MediaQuery/teclado, así que jamás se mueve por
+        // él — pedido explícito del usuario.
+        Positioned(
+          left: 0, right: 0, bottom: 0,
+          child: ColoredBox(color: Colors.white, child: fechaYHora),
+        ),
+      ],
+    );
+  }
+
+  // Columna central: grupo, fecha/hora, urgencia manual/base y horas
+  // estimadas — siempre visibles, sin el toggle "Más opciones" de portrait.
+  Widget _buildColumnaCentralLandscape(BuildContext context) {
+    final tema = ref.watch(temaProvider);
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: _grupoSeleccionado,
+            isExpanded: true,
+            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black54),
+            borderRadius: BorderRadius.circular(16),
+            dropdownColor: Colors.white,
+            elevation: 2,
+            style: const TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.w500),
+            decoration: InputDecoration(
+              labelText: 'Grupo',
+              prefixIcon: const Icon(Icons.folder_outlined, size: 20),
+              filled: true, fillColor: Colors.grey.shade100,
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade400, width: 1.5)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.black87, width: 2.0)),
+            ),
+            items: [
+              for (final grupo in _gruposDisponibles)
+                DropdownMenuItem(value: grupo, child: Text(grupo, overflow: TextOverflow.ellipsis)),
+            ],
+            onChanged: (valor) {
+              if (valor != null) setState(() => _grupoSeleccionado = valor);
+            },
+          ),
+          const SizedBox(height: 16),
+          // Antes vivían acá Fecha/Hora (movidos a la columna izquierda);
+          // estos dos botones ocupan su lugar, relocalizados desde la fila
+          // del desplegable de Grupo de arriba.
+          Row(
+            children: [
+              _BotonAccionCuadrado(icon: Icons.add_rounded, tooltip: 'Nuevo grupo', onPressed: _crearNuevoGrupo),
+              const SizedBox(width: 8),
+              _BotonAccionCuadrado(icon: Icons.edit_rounded, tooltip: 'Editar grupos', onPressed: _gestionarGrupos),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Text(
+            _urgenciaEsAutomatica ? 'Urgencia (automática por horas estimadas)' : 'Urgencia Manual / Base',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          Opacity(
+            opacity: _urgenciaEsAutomatica ? 0.5 : 1.0,
+            child: SegmentedButton<int>(
+              // Sin el check de selección: en 4 segmentos angostos ese ícono
+              // le robaba casi todo el ancho al texto, obligando a
+              // FittedBox a encogerlo hasta ilegible. El nivel elegido se
+              // distingue ahora por el relleno con el color del tema.
+              showSelectedIcon: false,
+              style: SegmentedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                selectedBackgroundColor: tema.colorPrincipal,
+                selectedForegroundColor: tema.colorSobrePrincipal,
+              ),
+              segments: const [
+                ButtonSegment(value: 1, label: FittedBox(fit: BoxFit.scaleDown, child: Text('Bajo', maxLines: 1))),
+                ButtonSegment(value: 2, label: FittedBox(fit: BoxFit.scaleDown, child: Text('Medio', maxLines: 1))),
+                ButtonSegment(value: 3, label: FittedBox(fit: BoxFit.scaleDown, child: Text('Alto', maxLines: 1))),
+                ButtonSegment(value: 4, label: FittedBox(fit: BoxFit.scaleDown, child: Text('Muy alto', maxLines: 1))),
+              ],
+              selected: {_urgenciaMostrada},
+              onSelectionChanged: _urgenciaEsAutomatica ? null : (Set<int> sel) => setState(() => _urgenciaBase = sel.first),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _horasController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+            decoration: InputDecoration(
+              labelText: 'Horas estimadas',
+              helperText: 'Si la defines, la urgencia se ajusta sola con el tiempo restante',
+              errorText: _horasSinFecha ? 'Elige una fecha límite para poder guardar' : null,
+              prefixIcon: const Icon(Icons.timer_outlined, size: 20),
+              filled: true, fillColor: Colors.grey.shade50,
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Riel derecho: subtareas arriba (su propio scroll) y, fijos SIEMPRE al
+  // pie (Stack + Positioned, mismo criterio que _buildColumnaIzquierdaLandscape
+  // — ver ese comentario), Plantillas + Guardar/Cancelar. Su posición no
+  // depende de cuánto contenido tenga Subtareas ni de cuánto espacio sobre:
+  // siempre pegados al borde inferior. Forma de árbol fija (nunca cambia
+  // según el teclado) para no perder el foco del campo "Agregar paso"; si el
+  // teclado deja muy poco alto, Stack recorta en vez de desbordar.
+  Widget _buildColumnaSubtareasLandscape(BuildContext context) {
+    final Widget subtareasContenido = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => setState(() => _mostrarSubtareas = !_mostrarSubtareas),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.checklist_rounded, size: 18, color: Colors.black54),
+                  const SizedBox(width: 8),
+                  const Text('SUBTAREAS', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 0.5)),
+                  if (_subtareasTemp.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(10)),
+                      child: Text(
+                        '${_subtareasTemp.length}',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54),
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  Icon(_mostrarSubtareas ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.grey),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: !_mostrarSubtareas
+                ? const SizedBox(width: double.infinity, height: 0)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_subtareasTemp.isNotEmpty)
+                        ReorderableListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          buildDefaultDragHandles: false,
+                          itemCount: _subtareasTemp.length,
+                          onReorder: (oldIndex, newIndex) {
+                            setState(() {
+                              var destino = newIndex;
+                              if (destino > oldIndex) destino -= 1;
+                              final item = _subtareasTemp.removeAt(oldIndex);
+                              _subtareasTemp.insert(destino, item);
+                            });
+                          },
+                          itemBuilder: (context, index) {
+                            final sub = _subtareasTemp[index];
+                            return Dismissible(
+                              key: ValueKey(sub.id),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 16),
+                                margin: const EdgeInsets.only(bottom: 4),
+                                decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(12)),
+                                child: const Icon(Icons.delete_outline, color: Colors.red),
+                              ),
+                              onDismissed: (_) => setState(() => _subtareasTemp.removeAt(index)),
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Row(
+                                  children: [
+                                    ReorderableDragStartListener(
+                                      index: index,
+                                      child: const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.drag_indicator, size: 20, color: Colors.black26)),
+                                    ),
+                                    SizedBox(
+                                      height: 24, width: 24,
+                                      child: Checkbox(
+                                        value: sub.completado,
+                                        activeColor: Colors.black87,
+                                        onChanged: (val) => setState(() => sub.completado = val ?? false),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        sub.texto,
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          decoration: sub.completado ? TextDecoration.lineThrough : null,
+                                          color: sub.completado ? Colors.black38 : Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () => setState(() => _subtareasTemp.removeAt(index)),
+                                      child: const Icon(Icons.close, size: 18, color: Colors.black38),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _nuevaSubtareaController,
+                              decoration: InputDecoration(
+                                hintText: 'Agregar paso...',
+                                isDense: true,
+                                filled: true, fillColor: Colors.grey.shade50,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+                              ),
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _agregarSubtareaTemp(),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(icon: const Icon(Icons.add_circle, size: 28, color: Colors.black87), onPressed: _agregarSubtareaTemp),
+                        ],
+                      ),
+                    ],
+                  ),
+          ),
+      ],
+    );
+
+    // Movidas acá desde la columna izquierda, arriba de Guardar/Cancelar. El
+    // botón de editar plantillas se quita de momento (sin reemplazo aún
+    // visible en este layout).
+    final Widget botonesPie = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _guardarComoPlantilla,
+          icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+          label: const Text('Guardar plantilla', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5)),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+            visualDensity: VisualDensity.compact,
+            side: BorderSide(color: Colors.grey.shade400, width: 1.5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _usarPlantilla,
+          icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
+          label: const Text('Usar plantilla', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5)),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+            visualDensity: VisualDensity.compact,
+            side: BorderSide(color: Colors.grey.shade400, width: 1.5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.black54)),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton(
+              onPressed: _horasSinFecha ? null : _guardarTarea,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black87, foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 28),
+                visualDensity: VisualDensity.compact,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Guardar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    return Stack(
+      children: [
+        // El padding extra que antes se sumaba acá para encoger este scroll
+        // según el alto del teclado dejaba un hueco en blanco visible entre
+        // Subtareas y Guardar/Cancelar — se quita (mismo ajuste que ya se
+        // hizo en _buildColumnaIzquierdaLandscape).
+        Positioned(
+          top: 0, left: 0, right: 0, bottom: 168,
+          child: SingleChildScrollView(child: subtareasContenido),
+        ),
+        // Nunca depende de MediaQuery/teclado, así que jamás se mueve por
+        // él — pedido explícito del usuario.
+        Positioned(
+          left: 0, right: 0, bottom: 0,
+          child: ColoredBox(color: Colors.white, child: botonesPie),
+        ),
+      ],
     );
   }
 }

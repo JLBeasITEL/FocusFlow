@@ -54,7 +54,17 @@ class _PostItCardState extends State<PostItCard> {
   Widget build(BuildContext context) {
     final bool clipAlaIzquierda = widget.index % 2 == 0;
     double factorEscala = 2 / widget.columnasTotales;
-    final int largoTexto = widget.nota.texto.length;
+    final bool tieneTitulo = widget.nota.titulo.isNotEmpty;
+    final bool esLista = widget.nota.tipo == TipoNota.lista;
+
+    // Para notas de lista, "texto" está vacío (el contenido vive en
+    // elementosLista), así que no sirve para medir el tramo de letra: se
+    // fuerza siempre el tramo chico para que quepan los renglones con
+    // checkbox. Si hay título, el cuerpo tiene menos alto disponible, así
+    // que también se baja un tramo para no desbordar la tarjeta.
+    final int largoTexto = esLista
+        ? 40
+        : widget.nota.texto.length + (tieneTitulo ? 20 : 0);
 
     double tamanoLetra;
     Alignment alineacionCaja;
@@ -71,8 +81,6 @@ class _PostItCardState extends State<PostItCard> {
     }
 
     if (tamanoLetra < 8) tamanoLetra = 8;
-
-    final bool tieneTitulo = widget.nota.titulo.isNotEmpty;
 
     final Widget cuerpo = widget.nota.tipo == TipoNota.lista
         ? Column(
@@ -141,6 +149,7 @@ class _PostItCardState extends State<PostItCard> {
                 opacity: widget.modoSeleccion && !widget.seleccionada ? 0.6 : 1.0,
                 child: Container(
                 alignment: tieneTitulo ? Alignment.topLeft : alineacionCaja,
+                clipBehavior: Clip.antiAlias,
                 padding: EdgeInsets.fromLTRB(
                   8 * factorEscala + 4,
                   18 * factorEscala + 18,

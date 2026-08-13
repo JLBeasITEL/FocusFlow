@@ -32,6 +32,7 @@ import '../../core/colores_estado_tarea.dart';
 import '../widgets/tarea_card_landscape.dart';
 import '../widgets/rutina_card_landscape.dart';
 import '../widgets/home_sidebar_landscape.dart';
+import '../widgets/overflow_scrollbar.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -76,6 +77,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   // _buildTabNotas / mostrarDialogoNota en widgets/nota_dialog.dart).
   bool _modoSeleccionNotas = false;
   final Set<String> _notasSeleccionadas = {};
+
+  // Un controller propio por sección (Tareas/Rutinas/Notas), reutilizado
+  // entre sus variantes portrait/landscape (nunca están montadas al mismo
+  // tiempo). Sin esto, cada ListView/GridView sin "controller" explícito se
+  // registra como scrollable "primary" del PrimaryScrollController que
+  // Scaffold comparte para toda esta pantalla; como el TabBarView de
+  // portrait mantiene las 3 pestañas montadas a la vez (no son lazy), las 3
+  // terminaban "primary" al mismo tiempo sobre ESE MISMO controller. Antes
+  // de agregar los Scrollbar nadie leía esa posición ambigua, así que no se
+  // notaba: Scrollbar sí la lee en cada frame para dibujar el thumb, y con
+  // 3 posiciones peleando por un solo controller el hilo de UI se colgaba
+  // (ANR real, confirmado en logcat: "Input dispatching timed out... MOVE").
+  final ScrollController _scrollTareas = ScrollController();
+  final ScrollController _scrollRutinas = ScrollController();
+  final ScrollController _scrollNotas = ScrollController();
 
   @override
   void initState() {
@@ -188,6 +204,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   @override
   void dispose() {
     _tabController.dispose();
+    _scrollTareas.dispose();
+    _scrollRutinas.dispose();
+    _scrollNotas.dispose();
     super.dispose();
   }
 
@@ -211,7 +230,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   }) {
     return Column(
       children: [
-        _buildHeaderLandscape(temaActual, colorPrincipal),
+        _buildHeaderLandscape(temaActual, colorPrincipal, notasGuardadas.length),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
@@ -224,7 +243,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                   child: switch (_currentIndex) {
                     0 => _buildContenidoTareasLandscape(tareas, vistaAgrupada, ordenGrupos, temaActual, colorPrincipal),
                     1 => _buildContenidoRutinasLandscape(temaActual, colorPrincipal),
-                    _ => _buildTabNotas(colorPrincipal, notasGuardadas),
+                    _ => _buildTabNotas(colorPrincipal, notasGuardadas, esLandscape: true),
                   },
                 ),
               ],
@@ -235,7 +254,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildHeaderLandscape(TemaApp temaActual, Color colorPrincipal) {
+  Widget _buildHeaderLandscape(TemaApp temaActual, Color colorPrincipal, int totalNotas) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
       child: Row(
@@ -262,6 +281,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             ),
             const SizedBox(width: 8),
           ],
+          if (_currentIndex == 2 && !_modoSeleccionNotas && totalNotas > 4) ...[
+            GestureDetector(
+              onTap: () => setState(() => _modoSeleccionNotas = true),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(color: colorPrincipal.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.style_rounded, size: 18, color: colorPrincipal),
+                    const SizedBox(width: 6),
+                    Text('Agrupar notas', style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           IconButton(
             icon: Icon(Icons.more_vert_rounded, color: colorPrincipal),
             tooltip: 'Configuraciones',
@@ -274,11 +311,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
   Widget _buildContenidoTareasLandscape(List<Tarea> tareas, bool vistaAgrupada, List<String> ordenGrupos, TemaApp temaActual, Color colorPrincipal) {
     if (tareas.isEmpty) {
-      return Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6))));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Text(
+            'Nada por aquí, disfruta de tu día.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6), fontSize: 15, height: 1.4),
+          ),
+        ),
+      );
     }
 
     if (!vistaAgrupada) {
-      return _gridTareasLandscape(tareas, temaActual);
+      return _gridTareasLandscape(tareas, temaActual, controller: _scrollTareas);
     }
 
     // Mismo agrupado y orden de carpetas que la vista agrupada de portrait
@@ -299,7 +345,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         return ia.compareTo(ib);
       });
 
-    return ListView.builder(
+    return OverflowScrollbar(
+      controller: _scrollTareas,
+      child: ListView.builder(
+      controller: _scrollTareas,
       padding: EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
       itemCount: listaGrupos.length,
       itemBuilder: (context, index) {
@@ -329,16 +378,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           ),
         );
       },
+      ),
     );
   }
 
-  Widget _gridTareasLandscape(List<Tarea> tareas, TemaApp temaActual, {bool shrinkWrap = false}) {
+  Widget _gridTareasLandscape(List<Tarea> tareas, TemaApp temaActual, {bool shrinkWrap = false, ScrollController? controller}) {
     return LayoutBuilder(
       builder: (context, constraints) {
         const double anchoTarget = 260;
         const double espaciado = 12;
         final int columnas = math.max(2, ((constraints.maxWidth + espaciado) / (anchoTarget + espaciado)).floor());
-        return GridView.builder(
+        final grid = GridView.builder(
+          controller: shrinkWrap ? null : controller,
           shrinkWrap: shrinkWrap,
           physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
           padding: shrinkWrap ? EdgeInsets.zero : EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
@@ -351,6 +402,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           itemCount: tareas.length,
           itemBuilder: (context, index) => TareaLandscapeCard(tarea: tareas[index], tema: temaActual),
         );
+        return shrinkWrap ? grid : OverflowScrollbar(controller: controller!, child: grid);
       },
     );
   }
@@ -375,35 +427,54 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const double anchoTarget = 170;
+        // Tarjeta compacta (RutinaLandscapeCard usa mainAxisSize.min, ~130px
+        // de alto real de contenido): childAspectRatio 1.05 forzaba celdas
+        // casi cuadradas con mucho espacio vacío debajo del texto, dejando
+        // ver solo 1-2 tarjetas por pantalla. mainAxisExtent fija el alto de
+        // celda directamente en vez de derivarlo del ancho (que varía con
+        // columnas/dispositivo), así el margen sobre el contenido real es
+        // predecible y no se desborda en pantallas angostas.
+        const double anchoTarget = 140;
         const double espaciado = 12;
         final int columnas = math.max(2, ((constraints.maxWidth + espaciado) / (anchoTarget + espaciado)).floor());
-        return GridView.builder(
+        return OverflowScrollbar(
+          controller: _scrollRutinas,
+          child: GridView.builder(
+          controller: _scrollRutinas,
           padding: EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columnas,
             mainAxisSpacing: espaciado,
             crossAxisSpacing: espaciado,
-            childAspectRatio: 1.05,
+            mainAxisExtent: 148,
           ),
           itemCount: rutinasDeHoy.length,
           itemBuilder: (context, index) => RutinaLandscapeCard(rutina: rutinasDeHoy[index], tema: temaActual),
+          ),
         );
       },
     );
   }
 
   // --- VISTA DE NOTAS ESTILO TABLERO ---
-  Widget _buildTabNotas(Color colorPrincipal, List<NotaPostIt> notasActuales) {
+  Widget _buildTabNotas(Color colorPrincipal, List<NotaPostIt> notasActuales, {bool esLandscape = false}) {
     if (notasActuales.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            //Icon(Icons.sticky_note_2_outlined, size: 80, color: colorPrincipal.withValues(alpha: 0.2)),
-            const SizedBox(height: 250),
-            Text('Tu tablero está vacío.', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6), fontSize: 16)),
-            Text('Agrega un post-it rápido.', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.4), fontSize: 14)),
+            // Este espacio empuja el texto hacia abajo del loto central (solo vertical).
+            // Notas no tiene la barra de filtros que sí tiene Tareas, así que
+            // necesita un poco más de empuje para quedar a la misma altura.
+            if (!esLandscape) const SizedBox(height: 156),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'Tu tablero está vacío.\nAgrega un post-it rápido.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6), fontSize: 15, height: 1.4),
+              ),
+            ),
           ],
         ),
       );
@@ -429,13 +500,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       }
     }
 
-    // Cada nota suelta pesa 1 celda unitaria y cada grupo pesa 4 (ocupa un
-    // bloque de 2x2). Con eso, _calcularColumnasOptimas elige cuántas
-    // columnas usar para que las notas llenen el ancho y el alto
-    // disponibles (que cambian con el tamaño de pantalla y la orientación,
-    // ya que vienen del LayoutBuilder) dejando el mínimo espacio vacío.
-    final int totalCeldas = items.length + gruposPorNombre.length * 3;
-    final bool hayGrupos = gruposPorNombre.isNotEmpty;
+    // Cada ítem (nota suelta o grupo) pesa 1 celda unitaria: los grupos se
+    // dibujan del mismo tamaño que una nota suelta. Con eso,
+    // _calcularColumnasOptimas elige cuántas columnas usar para que las
+    // notas llenen el ancho y el alto disponibles (que cambian con el
+    // tamaño de pantalla y la orientación, ya que vienen del LayoutBuilder)
+    // dejando el mínimo espacio vacío.
+    final int totalCeldas = items.length;
     const double espaciado = 12;
     const double padHorizontal = 20;
     const double padTop = 8;
@@ -445,7 +516,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
     return Column(
       children: [
-        _buildBarraSeleccionNotas(colorPrincipal, notasActuales.length),
+        _buildBarraSeleccionNotas(colorPrincipal, notasActuales.length, mostrarBotonAgrupar: !esLandscape),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -456,11 +527,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                 totalCeldas: totalCeldas,
                 anchoDisponible: anchoDisponible,
                 altoDisponible: altoDisponible,
-                hayGrupos: hayGrupos,
                 espaciado: espaciado,
               );
+              final double tamanoCelda = columnas > 0 ? (anchoDisponible - espaciado * (columnas - 1)) / columnas : anchoDisponible;
 
-              return SingleChildScrollView(
+              return OverflowScrollbar(
+                controller: _scrollNotas,
+                child: SingleChildScrollView(
+                controller: _scrollNotas,
                 padding: EdgeInsets.fromLTRB(padHorizontal, padTop, padHorizontal, padBottom),
                 child: StaggeredGrid.count(
                   crossAxisCount: columnas,
@@ -471,16 +545,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                       if (item.esGrupo)
                         StaggeredGridTile.count(
                           key: ValueKey('grupo_${item.nombreGrupo}'),
-                          crossAxisCellCount: 2,
-                          mainAxisCellCount: 2,
-                          child: TarjetaGrupoNotas(
-                            nombreGrupo: item.nombreGrupo!,
-                            notas: item.notasGrupo!,
-                            columnasTotales: columnas,
-                            deshabilitada: _modoSeleccionNotas,
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => GrupoNotasDetalleScreen(nombreGrupo: item.nombreGrupo!)),
+                          crossAxisCellCount: 1,
+                          mainAxisCellCount: 1,
+                          child: DragTarget<String>(
+                            onWillAcceptWithDetails: (details) => !_modoSeleccionNotas,
+                            onAcceptWithDetails: (details) =>
+                                ref.read(notaProvider.notifier).agruparNotas([details.data], item.nombreGrupo!),
+                            builder: (context, candidateData, rejectedData) => TarjetaGrupoNotas(
+                              nombreGrupo: item.nombreGrupo!,
+                              notas: item.notasGrupo!,
+                              columnasTotales: columnas,
+                              deshabilitada: _modoSeleccionNotas,
+                              resaltada: candidateData.isNotEmpty,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => GrupoNotasDetalleScreen(nombreGrupo: item.nombreGrupo!)),
+                              ),
                             ),
                           ),
                         )
@@ -489,18 +569,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                           key: ValueKey(item.notaSuelta!.id),
                           crossAxisCellCount: 1,
                           mainAxisCellCount: 1,
-                          child: PostItCard(
-                            nota: item.notaSuelta!,
-                            index: notasActuales.indexOf(item.notaSuelta!),
-                            columnasTotales: columnas,
-                            modoSeleccion: _modoSeleccionNotas,
-                            seleccionada: _notasSeleccionadas.contains(item.notaSuelta!.id),
-                            onToggleSeleccion: () => _alternarSeleccionNota(item.notaSuelta!.id),
-                            onTapEditar: () => mostrarDialogoNota(context, ref, idAEditar: item.notaSuelta!.id),
-                            onDelete: () => _eliminarNota(item.notaSuelta!),
-                          ),
+                          child: _buildNotaArrastrable(item.notaSuelta!, notasActuales, columnas, tamanoCelda),
                         ),
                   ],
+                ),
                 ),
               );
             },
@@ -510,11 +582,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     );
   }
 
+  // Nota suelta arrastrable del tablero: mantener presionada e iniciar el
+  // arrastre permite soltarla sobre otra nota (cambia de posición en la
+  // lista) o sobre una tarjeta de grupo (se suma a ese grupo). Deshabilitado
+  // en modo selección para no pelear con el toggle de checkbox.
+  Widget _buildNotaArrastrable(NotaPostIt nota, List<NotaPostIt> notasActuales, int columnas, double tamanoCelda) {
+    final Widget tarjeta = PostItCard(
+      nota: nota,
+      index: notasActuales.indexOf(nota),
+      columnasTotales: columnas,
+      modoSeleccion: _modoSeleccionNotas,
+      seleccionada: _notasSeleccionadas.contains(nota.id),
+      onToggleSeleccion: () => _alternarSeleccionNota(nota.id),
+      onTapEditar: () => mostrarDialogoNota(context, ref, idAEditar: nota.id),
+      onDelete: () => _eliminarNota(nota),
+    );
+
+    if (_modoSeleccionNotas) return tarjeta;
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != nota.id,
+      onAcceptWithDetails: (details) => ref.read(notaProvider.notifier).moverNota(details.data, nota.id),
+      builder: (context, candidateData, rejectedData) {
+        final bool resaltada = candidateData.isNotEmpty;
+        return LongPressDraggable<String>(
+          data: nota.id,
+          feedback: Material(
+            color: Colors.transparent,
+            child: SizedBox(width: tamanoCelda, height: tamanoCelda, child: Opacity(opacity: 0.85, child: tarjeta)),
+          ),
+          childWhenDragging: Opacity(opacity: 0.25, child: tarjeta),
+          child: AnimatedScale(
+            scale: resaltada ? 1.05 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            child: tarjeta,
+          ),
+        );
+      },
+    );
+  }
+
   // Tamaño mínimo de celda (dp): por debajo de esto una nota deja de ser
-  // usable (texto ilegible, clip de borrado imposible de tocar). Si hay
-  // demasiadas notas para entrar todas sin cruzar este piso, se prioriza
-  // el tamaño mínimo y el resto se alcanza haciendo scroll.
-  static const double _tamanoMinimoCelda = 56.0;
+  // usable (texto ilegible, clip de borrado imposible de tocar, contenido
+  // desbordado). PostItCard escala su fuente con columnasTotales pero la
+  // clampea en 8pt y tiene paddings fijos que no encogen más allá de
+  // cierto punto, así que celdas por debajo de ~140dp ya no alcanzan para
+  // título + 3 renglones de checklist sin desbordar (visto en landscape,
+  // donde el alto disponible es chico y el algoritmo agregaba columnas de
+  // más para evitar el scroll). Si hay demasiadas notas para entrar todas
+  // sin cruzar este piso, se prioriza el tamaño mínimo y el resto se
+  // alcanza haciendo scroll (el grid ya vive en un SingleChildScrollView).
+  static const double _tamanoMinimoCelda = 140.0;
 
   // Prueba cada cantidad de columnas viable y elige la que produce las
   // celdas cuadradas más grandes sin que el total de filas necesite más
@@ -524,11 +642,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     required int totalCeldas,
     required double anchoDisponible,
     required double altoDisponible,
-    required bool hayGrupos,
     required double espaciado,
   }) {
-    if (totalCeldas <= 0 || anchoDisponible <= 0) return hayGrupos ? 2 : 1;
-    final int minColumnas = hayGrupos ? 2 : 1;
+    if (totalCeldas <= 0 || anchoDisponible <= 0) return 1;
+    const int minColumnas = 1;
     final int columnasPorAncho = ((anchoDisponible + espaciado) / (_tamanoMinimoCelda + espaciado)).floor();
     final int maxColumnas = math.max(minColumnas, math.min(totalCeldas, columnasPorAncho));
 
@@ -560,7 +677,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   // pedido para no saturar tableros chicos con una opción que no hace
   // falta todavía). En modo selección, se reemplaza por el contador y las
   // acciones de cancelar/crear grupo.
-  Widget _buildBarraSeleccionNotas(Color colorPrincipal, int totalNotas) {
+  // mostrarBotonAgrupar en false: en landscape el botón vive en el header
+  // (junto a los 3 puntos) para no quitarle alto al tablero, así que este
+  // widget solo debe dibujar la barra de selección activa, no el trigger.
+  Widget _buildBarraSeleccionNotas(Color colorPrincipal, int totalNotas, {bool mostrarBotonAgrupar = true}) {
     if (_modoSeleccionNotas) {
       final puedeCrear = _notasSeleccionadas.length >= 2;
       return Padding(
@@ -584,7 +704,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       );
     }
 
-    if (totalNotas <= 4) return const SizedBox.shrink();
+    if (!mostrarBotonAgrupar || totalNotas <= 4) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -626,9 +746,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     });
   }
 
+  // Punto de entrada del botón "Crear grupo": si ya existen grupos, primero
+  // deja elegir entre sumar las notas seleccionadas a uno existente o armar
+  // uno nuevo. Si todavía no hay ninguno, va directo al diálogo de nombre
+  // (no tiene sentido mostrar una lista vacía).
   Future<void> _confirmarCrearGrupoNotas() async {
+    final gruposExistentes = ref.read(notaProvider).map((n) => n.grupoNombre).where((g) => g.isNotEmpty).toSet().toList()..sort();
+
+    String? nombreElegido;
+    if (gruposExistentes.isEmpty) {
+      nombreElegido = await _pedirNombreGrupoNuevo();
+    } else {
+      final opcion = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Agregar a grupo'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.add_rounded),
+                  title: const Text('Crear grupo nuevo'),
+                  onTap: () => Navigator.pop(dialogContext, '__nuevo__'),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: gruposExistentes.length,
+                    itemBuilder: (context, index) {
+                      final nombre = gruposExistentes[index];
+                      return ListTile(
+                        leading: const Icon(Icons.folder_copy_rounded),
+                        title: Text(nombre, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        onTap: () => Navigator.pop(dialogContext, nombre),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+          ],
+        ),
+      );
+
+      if (opcion == null) return;
+      nombreElegido = opcion == '__nuevo__' ? await _pedirNombreGrupoNuevo() : opcion;
+    }
+
+    final nombreLimpio = nombreElegido?.trim() ?? '';
+    if (nombreLimpio.isEmpty) return;
+
+    ref.read(notaProvider.notifier).agruparNotas(_notasSeleccionadas.toList(), nombreLimpio);
+    _cancelarSeleccionNotas();
+  }
+
+  Future<String?> _pedirNombreGrupoNuevo() {
     final controller = TextEditingController();
-    final nombre = await showDialog<String>(
+    return showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Nombre del grupo'),
@@ -645,12 +825,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         ],
       ),
     );
-
-    final nombreLimpio = nombre?.trim() ?? '';
-    if (nombreLimpio.isEmpty) return;
-
-    ref.read(notaProvider.notifier).agruparNotas(_notasSeleccionadas.toList(), nombreLimpio);
-    _cancelarSeleccionNotas();
   }
 
   // Captura el notifier ANTES de mostrar el SnackBar: el callback de
@@ -757,7 +931,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       floatingActionButton: (_currentIndex == 2 && _modoSeleccionNotas) ? null : FloatingActionButton.extended(
         onPressed: () {
           if (_currentIndex == 0) {
-            showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (_) => const AddTareaModal());
+            abrirFormularioTarea(context);
           } else if (_currentIndex == 1) {
             Navigator.push(context, MaterialPageRoute(builder: (context) => const RutinaFormScreen()));
           } else {
@@ -884,14 +1058,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                 ),
                 Expanded(
                   child: tareas.isEmpty
-                      ? Center(child: Text('Todo al día', style: TextStyle(color: colorPrincipal.withOpacity(0.6))))
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Este espacio empuja el texto hacia abajo del loto central.
+                              const SizedBox(height: 120),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 32),
+                                child: Text(
+                                  'Nada por aquí, disfruta de tu día.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: colorPrincipal.withOpacity(0.6), fontSize: 15, height: 1.4),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
                       : !vistaAgrupada
-                      ? ListView.builder(
+                      ? OverflowScrollbar(
+                          controller: _scrollTareas,
+                          child: ListView.builder(
+                          controller: _scrollTareas,
                           padding: EdgeInsets.fromLTRB(16, 16, 16, 100 + MediaQuery.of(context).padding.bottom),
                           itemCount: tareas.length,
                           itemBuilder: (context, index) => Padding(
                             padding: const EdgeInsets.only(bottom: 8.0),
                             child: TareaCard(tarea: tareas[index], tema: temaActual),
+                          ),
                           ),
                         )
                       : () {
@@ -918,7 +1112,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                           // 3. Dibujar la lista con Animaciones y Colores Dinámicos.
                           // Es reordenable: el usuario puede arrastrar la cabecera de
                           // cada carpeta para cambiar el orden de los grupos.
-                          return ReorderableListView.builder(
+                          return OverflowScrollbar(
+                            controller: _scrollTareas,
+                            child: ReorderableListView.builder(
+                            scrollController: _scrollTareas,
                             padding: EdgeInsets.fromLTRB(16, 16, 16, 100 + MediaQuery.of(context).padding.bottom),
                             buildDefaultDragHandles: false,
                             itemCount: listaGrupos.length,
@@ -1016,12 +1213,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                 },
                               );
                             },
+                            ),
                           );
                         }(),
                 ),
               ],
             ),
-            const _SeccionRutinasHoy(),
+            _SeccionRutinasHoy(scrollController: _scrollRutinas),
             _buildTabNotas(colorPrincipal, notasGuardadas),
           ],
         ),
@@ -1229,7 +1427,8 @@ class _GrupoTareasSectionState extends State<_GrupoTareasSection> with SingleTic
 // de RutinaCard para HOY. Toda la lógica de cancelar/programar notificaciones
 // vive en rutina_provider.dart y rutina_card.dart, NO aquí.
 class _SeccionRutinasHoy extends ConsumerWidget {
-  const _SeccionRutinasHoy();
+  final ScrollController scrollController;
+  const _SeccionRutinasHoy({required this.scrollController});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1305,12 +1504,16 @@ class _SeccionRutinasHoy extends ConsumerWidget {
                           ],
                         ),
                       )
-                    : ListView.builder(
+                    : OverflowScrollbar(
+                        controller: scrollController,
+                        child: ListView.builder(
+                        controller: scrollController,
                         padding: EdgeInsets.only(top: 16, bottom: 100 + MediaQuery.of(context).padding.bottom, left: 16, right: 16),
                         itemCount: rutinasDeHoy.length,
                         itemBuilder: (context, index) => RutinaCard(
-                          rutina: rutinasDeHoy[index], 
+                          rutina: rutinasDeHoy[index],
                           colorTema: colorPrincipal
+                        ),
                         ),
                       ),
               ),
@@ -1582,7 +1785,7 @@ class _TareaCardState extends ConsumerState<TareaCard> {
             ),
           ),
           if (estaAtrasada) Positioned(top: 12, right: 12, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red.shade700, borderRadius: BorderRadius.circular(8), boxShadow: const [BoxShadow(blurRadius: 4, color: Colors.black26, offset: Offset(0, 2))]), child: const Text('ATRASADO', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)))),
-          if (_showOverlayMenu) Positioned.fill(child: GestureDetector(onTap: () => setState(() => _showOverlayMenu = false), child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0), child: Container(color: Colors.white.withValues(alpha: 0.2), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [_buildActionIcon(icon: tarea.esCompletada ? Icons.undo : Icons.check_rounded, color: const Color(0xFF4CAF50), onTap: () { ref.read(tareaProvider.notifier).toggleTarea(tarea.id); setState(() => _showOverlayMenu = false); }), _buildActionIcon(icon: Icons.edit_rounded, color: Colors.blueGrey, onTap: () { setState(() => _showOverlayMenu = false); showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (_) => AddTareaModal(tareaAEditar: tarea)); }), _buildActionIcon(icon: Icons.delete_rounded, color: Colors.redAccent, onTap: () { setState(() => _showOverlayMenu = false); Future.delayed(const Duration(milliseconds: 150), () { if (!mounted) return; ref.read(tareaProvider.notifier).deleteTarea(tarea.id); mostrarSnackBarSimple(mensaje: 'Tarea eliminada', colorFondo: widget.tema.colorPrincipal, colorTexto: widget.tema.colorSobrePrincipal); }); })]))))),
+          if (_showOverlayMenu) Positioned.fill(child: GestureDetector(onTap: () => setState(() => _showOverlayMenu = false), child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0), child: Container(color: Colors.white.withValues(alpha: 0.2), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [_buildActionIcon(icon: tarea.esCompletada ? Icons.undo : Icons.check_rounded, color: const Color(0xFF4CAF50), onTap: () { ref.read(tareaProvider.notifier).toggleTarea(tarea.id); setState(() => _showOverlayMenu = false); }), _buildActionIcon(icon: Icons.edit_rounded, color: Colors.blueGrey, onTap: () { setState(() => _showOverlayMenu = false); abrirFormularioTarea(context, tareaAEditar: tarea); }), _buildActionIcon(icon: Icons.delete_rounded, color: Colors.redAccent, onTap: () { setState(() => _showOverlayMenu = false); Future.delayed(const Duration(milliseconds: 150), () { if (!mounted) return; ref.read(tareaProvider.notifier).deleteTarea(tarea.id); mostrarSnackBarSimple(mensaje: 'Tarea eliminada', colorFondo: widget.tema.colorPrincipal, colorTexto: widget.tema.colorSobrePrincipal); }); })]))))),
         ],
       ),
     );

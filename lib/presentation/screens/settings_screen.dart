@@ -145,7 +145,7 @@ class SettingsScreen extends ConsumerWidget {
               children: [
                 Text(
                   infoPaquete.when(
-                    data: (info) => 'FocusFlow v${info.version} (${info.buildNumber})',
+                    data: (info) => 'FocusFlow v${info.version}',
                     loading: () => 'FocusFlow',
                     error: (_, __) => 'FocusFlow',
                   ),
