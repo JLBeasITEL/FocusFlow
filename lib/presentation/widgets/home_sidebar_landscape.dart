@@ -8,15 +8,29 @@ import '../../providers/monedas_provider.dart';
 import '../../providers/tema_provider.dart';
 import 'progreso_rutinas_bar.dart';
 import 'grupo_notas_card.dart';
+import 'overflow_scrollbar.dart';
 
 // Panel lateral del layout horizontal (HomeScreen en landscape): muestra un
 // resumen distinto según la pestaña activa (Tareas/Rutinas/Notas), leyendo
 // los mismos providers que ya usa el layout de portrait, sin estado propio.
-class HomeSidebarLandscape extends StatelessWidget {
+class HomeSidebarLandscape extends StatefulWidget {
   final int currentIndex;
   final TemaApp tema;
 
   const HomeSidebarLandscape({super.key, required this.currentIndex, required this.tema});
+
+  @override
+  State<HomeSidebarLandscape> createState() => _HomeSidebarLandscapeState();
+}
+
+class _HomeSidebarLandscapeState extends State<HomeSidebarLandscape> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,15 +38,19 @@ class HomeSidebarLandscape extends StatelessWidget {
       width: 260,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: tema.colorSuperficieCard,
+        color: widget.tema.colorSuperficieCard,
         borderRadius: BorderRadius.circular(28),
       ),
-      child: SingleChildScrollView(
-        child: switch (currentIndex) {
-          0 => _SidebarTareas(tema: tema),
-          1 => _SidebarRutinas(tema: tema),
-          _ => _SidebarNotas(tema: tema),
-        },
+      child: OverflowScrollbar(
+        controller: _scrollController,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          child: switch (widget.currentIndex) {
+            0 => _SidebarTareas(tema: widget.tema),
+            1 => _SidebarRutinas(tema: widget.tema),
+            _ => _SidebarNotas(tema: widget.tema),
+          },
+        ),
       ),
     );
   }
@@ -160,9 +178,9 @@ class _SidebarRutinas extends ConsumerWidget {
           rutinasDeHoy.isEmpty ? 'No hay hábitos programados.' : 'Te quedan $pendientesHoy hábito${pendientesHoy == 1 ? '' : 's'} para hoy.',
           style: TextStyle(fontSize: 13, color: colorTexto.withValues(alpha: 0.6)),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 4),
         if (rutinasDeHoy.isNotEmpty) ProgresoRutinasBar(rutinasDeHoy: rutinasDeHoy, colorTema: colorPrincipal),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(child: _StatBox(valor: '$rachaMaxima', etiqueta: 'Racha máx.', tema: tema)),

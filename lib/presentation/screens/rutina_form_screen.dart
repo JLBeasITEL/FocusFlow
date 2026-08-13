@@ -542,8 +542,9 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 28),
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: List.generate(7, (idx) {
                             final bool activo = diasActivos[idx];
                             return Expanded(

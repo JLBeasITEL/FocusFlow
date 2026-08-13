@@ -95,6 +95,28 @@ class NotaNotifier extends Notifier<List<NotaPostIt>> {
     _guardarNotas(nuevoEstado);
   }
 
+  // Reordena el tablero: saca la nota arrastrada de su posición actual y la
+  // reinserta justo donde estaba la nota destino (soltada encima). El orden
+  // en el tablero es simplemente el orden de la lista en memoria/disco, así
+  // que basta con mover el elemento dentro de state.
+  void moverNota(String idArrastrado, String idDestino) {
+    if (idArrastrado == idDestino) return;
+    final nuevoEstado = List<NotaPostIt>.from(state);
+    final indiceOrigen = nuevoEstado.indexWhere((n) => n.id == idArrastrado);
+    if (indiceOrigen == -1) return;
+    final nota = nuevoEstado.removeAt(indiceOrigen);
+    final indiceDestino = nuevoEstado.indexWhere((n) => n.id == idDestino);
+    if (indiceDestino == -1) {
+      // El destino no existe (borrado entre el drag y el drop): la deja
+      // donde estaba en vez de perderla.
+      nuevoEstado.insert(indiceOrigen.clamp(0, nuevoEstado.length), nota);
+    } else {
+      nuevoEstado.insert(indiceDestino, nota);
+    }
+    state = nuevoEstado;
+    _guardarNotas(nuevoEstado);
+  }
+
   // Saca una nota de su grupo; vuelve a mostrarse suelta en el tablero.
   void quitarDeGrupo(String id) {
     final nuevoEstado = [

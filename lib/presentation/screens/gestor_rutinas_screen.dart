@@ -3,15 +3,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/rutina_provider.dart';
 import '../../providers/tema_provider.dart';
 import '../../core/app_messenger.dart';
+import '../widgets/overflow_scrollbar.dart';
 import 'rutina_form_screen.dart';
 
-class GestorRutinasScreen extends ConsumerWidget {
+class GestorRutinasScreen extends ConsumerStatefulWidget {
   final Color colorTema;
 
   const GestorRutinasScreen({super.key, required this.colorTema});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GestorRutinasScreen> createState() => _GestorRutinasScreenState();
+}
+
+class _GestorRutinasScreenState extends ConsumerState<GestorRutinasScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorTema = widget.colorTema;
     final rutinas = ref.watch(rutinaProvider);
     // colorTema llega ya resuelto desde HomeScreen (temaActual.colorPrincipal),
     // pero el color de texto/ícono que va ENCIMA de ese relleno sí depende
@@ -28,7 +43,10 @@ class GestorRutinasScreen extends ConsumerWidget {
         top: false,
         child: rutinas.isEmpty
           ? const Center(child: Text('No hay rutinas configuradas'))
-          : ListView.builder(
+          : OverflowScrollbar(
+              controller: _scrollController,
+              child: ListView.builder(
+              controller: _scrollController,
               padding: const EdgeInsets.all(16),
               itemCount: rutinas.length,
               itemBuilder: (context, index) {
@@ -70,6 +88,7 @@ class GestorRutinasScreen extends ConsumerWidget {
                   ),
                 );
               },
+              ),
             ),
       ),
       // Botón para crear una rutina completamente nueva
