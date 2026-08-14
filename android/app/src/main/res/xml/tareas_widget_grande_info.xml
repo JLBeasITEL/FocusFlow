@@ -6,5 +6,5 @@
     android:updatePeriodMillis="0"
     android:resizeMode="none"
     android:widgetCategory="home_screen"
-    android:previewImage="@drawable/widget_preview_tareas"
+    android:previewImage="@drawable/widget_preview_tareas_grande"
     android:description="@string/tareas_widget_grande_description" />
