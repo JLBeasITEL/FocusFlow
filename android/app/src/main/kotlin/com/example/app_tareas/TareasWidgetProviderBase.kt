@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
 import es.antonborri.home_widget.HomeWidgetBackgroundIntent
+import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 import java.time.LocalDate
 import org.json.JSONArray
@@ -36,6 +37,13 @@ data class FilaIds(
 abstract class TareasWidgetProviderBase(
     private val layoutResId: Int,
     private val filaIds: List<FilaIds>,
+    // Chico no tiene el badge de conteo total (solo el toggle en el
+    // encabezado); Grande sí lo conserva.
+    private val mostrarContador: Boolean = true,
+    // Chico se comporta como acceso directo: tocar cualquier parte de la
+    // tarjeta que no sea el ícono de alternancia abre la app en la pantalla
+    // de tareas. Requiere que el layout declare @id/widget_tareas_root.
+    private val abrirAppAlTocar: Boolean = false,
 ) : HomeWidgetProvider() {
     private data class ItemTarea(
         val titulo: String,
@@ -77,7 +85,9 @@ abstract class TareasWidgetProviderBase(
             R.id.widget_tareas_titulo,
             if (modo == MODO_IMPORTANTES) "Más importantes" else "Próximas",
         )
-        views.setTextViewText(R.id.widget_tareas_contador, totalPendientes.toString())
+        if (mostrarContador) {
+            views.setTextViewText(R.id.widget_tareas_contador, totalPendientes.toString())
+        }
 
         for (i in filaIds.indices) {
             val fila = filaIds[i]
@@ -120,6 +130,18 @@ abstract class TareasWidgetProviderBase(
             Uri.parse("homewidget://toggle_modo_tareas"),
         )
         views.setOnClickPendingIntent(R.id.widget_tareas_toggle, togglePendingIntent)
+
+        // El toggle tiene su propio PendingIntent (arriba) y captura el click
+        // antes de que llegue a la raíz: tocar el ícono sigue alternando el
+        // modo, tocar el resto de la tarjeta abre la app.
+        if (abrirAppAlTocar) {
+            val abrirAppPendingIntent = HomeWidgetLaunchIntent.getActivity(
+                context,
+                MainActivity::class.java,
+                Uri.parse("homewidget://abrir_tareas"),
+            )
+            views.setOnClickPendingIntent(R.id.widget_tareas_root, abrirAppPendingIntent)
+        }
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
     }

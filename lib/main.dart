@@ -38,6 +38,18 @@ void main() {
     // de los widgets de pantalla de inicio (ej. alternar modo en el widget de Tareas).
     await HomeWidget.registerInteractivityCallback(tareasWidgetBackgroundCallback);
 
+    // Con la app ya corriendo en segundo plano, tocar el widget Chico de
+    // Tareas (fuera del ícono de alternancia, que tiene su propio manejo vía
+    // el callback de arriba) trae la app al frente por launchMode="singleTop"
+    // y home_widget emite este evento — solo falta volver a la pantalla de
+    // tareas si el usuario estaba en alguna pantalla apilada encima. En cold
+    // start no hace falta nada: `home:` ya arranca directo en HomeScreen.
+    HomeWidget.widgetClicked.listen((uri) {
+      if (uri?.host == 'abrir_tareas') {
+        navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      }
+    });
+
     runApp(
       ProviderScope(
         child: MyApp(),

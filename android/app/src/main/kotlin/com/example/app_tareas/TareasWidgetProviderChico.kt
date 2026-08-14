@@ -16,4 +16,6 @@ class TareasWidgetProviderChico : TareasWidgetProviderBase(
             R.id.widget_tareas_prioridad2,
         ),
     ),
+    mostrarContador = false,
+    abrirAppAlTocar = true,
 )
