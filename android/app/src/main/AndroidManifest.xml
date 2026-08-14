@@ -67,14 +67,15 @@
         </receiver>
 
         <receiver
-            android:name=".TareasWidgetProvider"
+            android:name=".TareasWidgetProviderChico"
+            android:label="@string/tareas_widget_chico_label"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/tareas_widget_info"/>
+                android:resource="@xml/tareas_widget_chico_info"/>
         </receiver>
 
         <receiver

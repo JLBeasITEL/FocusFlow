@@ -25,14 +25,21 @@ class WidgetTareasService {
   static const String _widgetModoKey = 'tareas_widget_modo';
   static const String _widgetDataProximasKey = 'tareas_widget_data_proximas';
   static const String _widgetDataImportantesKey = 'tareas_widget_data_importantes';
+  static const String _widgetTotalPendientesKey = 'tareas_widget_total_pendientes';
   static const String modoProximas = 'proximas';
   static const String modoImportantes = 'importantes';
-  static const String _androidWidgetName = 'TareasWidgetProvider';
+  // Dos widgets de tamaño fijo (ver TareasWidgetProviderBase.kt) en vez del
+  // provider único redimensionable anterior: ambos se actualizan siempre
+  // juntos, cada uno solo pinta las tarjetas que le caben (2 o 4).
+  static const List<String> _androidWidgetNames = [
+    'TareasWidgetProviderChico',
+    'TareasWidgetProviderGrande',
+  ];
 
-  // Tope superior de tareas que se envían al widget. Cuántas de estas se
-  // terminan mostrando depende del tamaño real del widget en pantalla — eso
-  // lo decide TareasWidgetProvider.kt en base a los slots de fila que quepan,
-  // no este servicio.
+  // Tope superior de tareas que se envían al widget. Cuál de las dos
+  // variantes (Chico=2, Grande=4) está realmente colocada en la pantalla de
+  // inicio no lo sabe este servicio, así que se manda un tope superior
+  // razonable y cada TareasWidgetProviderChico/Grande recorta a lo suyo.
   static const int _maxItems = 6;
 
   // Recalcula AMBOS modos (ver nota de la clase) y deja el modo indicado (o,
@@ -54,7 +61,7 @@ class WidgetTareasService {
       final tareas = await _leerTareas();
       await _recalcularYGuardarAmbosModos(tareas);
       await HomeWidget.saveWidgetData<String>(_widgetModoKey, modo);
-      await HomeWidget.updateWidget(androidName: _androidWidgetName);
+      await _actualizarWidgetsAndroid();
 
       // ignore: avoid_print
       print('WidgetTareasService.actualizar: modo activo=$modo (${tareas.length} tareas totales)');
@@ -77,28 +84,40 @@ class WidgetTareasService {
     try {
       final tareas = await _leerTareas();
       await _recalcularYGuardarAmbosModos(tareas);
-      await HomeWidget.updateWidget(androidName: _androidWidgetName);
+      await _actualizarWidgetsAndroid();
     } catch (e) {
       // ignore: avoid_print
       print('WidgetTareasService.actualizarAmbosModos: error al sincronizar -> $e');
     }
   }
 
+  static Future<void> _actualizarWidgetsAndroid() async {
+    for (final nombre in _androidWidgetNames) {
+      await HomeWidget.updateWidget(androidName: nombre);
+    }
+  }
+
   static Future<void> _recalcularYGuardarAmbosModos(List<Tarea> tareas) async {
     final itemsProximas = _calcularItems(tareas, modoProximas);
     final itemsImportantes = _calcularItems(tareas, modoImportantes);
+    final totalPendientes = tareas.where((t) => !t.esCompletada).length;
 
     await HomeWidget.saveWidgetData<String>(_widgetDataProximasKey, jsonEncode(itemsProximas));
     await HomeWidget.saveWidgetData<String>(
       _widgetDataImportantesKey,
       jsonEncode(itemsImportantes),
     );
+    await HomeWidget.saveWidgetData<String>(
+      _widgetTotalPendientesKey,
+      totalPendientes.toString(),
+    );
 
     // ignore: avoid_print
     print(
       'WidgetTareasService: recalculado -> '
       'proximas=${itemsProximas.map((t) => t['titulo']).toList()}, '
-      'importantes=${itemsImportantes.map((t) => t['titulo']).toList()}',
+      'importantes=${itemsImportantes.map((t) => t['titulo']).toList()}, '
+      'totalPendientes=$totalPendientes',
     );
   }
 
@@ -131,9 +150,10 @@ class WidgetTareasService {
       '${pendientes.map((t) => '${t.titulo}(fecha=${t.fechaLimite}, urgencia=${t.urgencia})').toList()}',
     );
 
-    // El límite real de cuántos de estos se terminan mostrando lo decide
-    // TareasWidgetProvider.kt según el alto disponible del widget; acá solo
-    // se manda un tope superior razonable (_maxItems).
+    // El límite real de cuántas de estas se terminan mostrando lo decide
+    // TareasWidgetProviderChico/Grande (2 o 4); acá solo se manda un tope
+    // superior razonable (_maxItems). El diseño actual de las tarjetas no
+    // muestra grupo/categoría, así que ya no se envía ese campo.
     return pendientes
         .take(_maxItems)
         .map(
@@ -141,7 +161,6 @@ class WidgetTareasService {
             'titulo': t.titulo,
             'fechaLimite': t.fechaLimite?.toIso8601String(),
             'urgencia': t.urgencia,
-            'grupo': t.grupo,
           },
         )
         .toList();
