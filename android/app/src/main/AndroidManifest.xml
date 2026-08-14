@@ -103,6 +103,18 @@
         </receiver>
 
         <receiver
+            android:name=".RutinasWidgetProviderGrande"
+            android:label="@string/rutinas_widget_grande_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/rutinas_widget_grande_info"/>
+        </receiver>
+
+        <receiver
             android:name=".NotaRapidaWidgetProvider"
             android:exported="false">
             <intent-filter>
