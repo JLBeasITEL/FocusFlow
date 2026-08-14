@@ -120,6 +120,7 @@ class WidgetRutinasService {
           final completadaHoy = r.completada && r.fechaCompletada == hoyStr;
           final omitidaHoy = r.omitida && r.fechaOmitida == hoyStr;
           items.add({
+            'id': r.id,
             'titulo': r.titulo,
             'horaHoy': _formatearHora(hora),
             'completada': completadaHoy,

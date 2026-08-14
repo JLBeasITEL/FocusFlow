@@ -34,6 +34,24 @@ import '../widgets/rutina_card_landscape.dart';
 import '../widgets/home_sidebar_landscape.dart';
 import '../widgets/overflow_scrollbar.dart';
 
+// Puente para pedirle a HomeScreen que cambie de pestaña desde fuera del
+// árbol de widgets (el handler de clicks del widget de Rutinas en
+// main.dart, que no tiene un BuildContext propio). _HomeScreenState lo
+// escucha en initState y lo vuelve a null en cuanto lo consume, así que es
+// un "comando" de un solo uso, no un estado persistente de la pestaña
+// actual (eso lo sigue siendo _currentIndex).
+class TabSolicitadaWidgetNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void solicitar(int indice) => state = indice;
+  void limpiar() => state = null;
+}
+
+final tabSolicitadaWidgetProvider = NotifierProvider<TabSolicitadaWidgetNotifier, int?>(
+  TabSolicitadaWidgetNotifier.new,
+);
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -93,11 +111,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   final ScrollController _scrollRutinas = ScrollController();
   final ScrollController _scrollNotas = ScrollController();
 
+  // Suscripción manual (fuera de build()) a tabSolicitadaWidgetProvider: el
+  // handler de clicks del widget de Rutinas en main.dart la usa para pedir
+  // "andá a la pestaña de Rutinas" sin tener un BuildContext propio.
+  late final ProviderSubscription<int?> _tabSolicitadaWidgetSub;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    
+
+    _tabSolicitadaWidgetSub = ref.listenManual<int?>(tabSolicitadaWidgetProvider, (previo, indice) {
+      if (indice != null) {
+        _tabController.animateTo(indice);
+        ref.read(tabSolicitadaWidgetProvider.notifier).limpiar();
+      }
+    });
+
     _tabController.animation?.addListener(() {
       final int proximoIndex = _tabController.animation!.value.round();
       if (_currentIndex != proximoIndex) {
@@ -203,6 +233,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
   @override
   void dispose() {
+    _tabSolicitadaWidgetSub.close();
     _tabController.dispose();
     _scrollTareas.dispose();
     _scrollRutinas.dispose();

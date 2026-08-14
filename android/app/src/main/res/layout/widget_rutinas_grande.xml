@@ -57,15 +57,6 @@
 
         </LinearLayout>
 
-        <ImageView
-            android:id="@+id/widget_rutinas_refresh"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginStart="10dp"
-            android:padding="1dp"
-            android:src="@drawable/ic_widget_refresh"
-            android:contentDescription="Actualizar rutinas" />
-
     </LinearLayout>
 
     <!-- Tarjeta 1 -->
@@ -78,10 +69,17 @@
         android:gravity="center_vertical"
         android:background="@drawable/widget_row_background"
         android:padding="10dp">
+        <ImageView
+            android:id="@+id/widget_rutinas_check1"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_widget_check_empty"
+            android:contentDescription="Marcar rutina como hecha" />
         <TextView
             android:id="@+id/widget_rutinas_hora1"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:paddingLeft="6dp"
             android:paddingRight="6dp"
             android:paddingTop="2dp"
@@ -126,10 +124,17 @@
         android:gravity="center_vertical"
         android:background="@drawable/widget_row_background"
         android:padding="10dp">
+        <ImageView
+            android:id="@+id/widget_rutinas_check2"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_widget_check_empty"
+            android:contentDescription="Marcar rutina como hecha" />
         <TextView
             android:id="@+id/widget_rutinas_hora2"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:paddingLeft="6dp"
             android:paddingRight="6dp"
             android:paddingTop="2dp"
@@ -174,10 +179,17 @@
         android:gravity="center_vertical"
         android:background="@drawable/widget_row_background"
         android:padding="10dp">
+        <ImageView
+            android:id="@+id/widget_rutinas_check3"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_widget_check_empty"
+            android:contentDescription="Marcar rutina como hecha" />
         <TextView
             android:id="@+id/widget_rutinas_hora3"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:paddingLeft="6dp"
             android:paddingRight="6dp"
             android:paddingTop="2dp"
@@ -222,10 +234,17 @@
         android:gravity="center_vertical"
         android:background="@drawable/widget_row_background"
         android:padding="10dp">
+        <ImageView
+            android:id="@+id/widget_rutinas_check4"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_widget_check_empty"
+            android:contentDescription="Marcar rutina como hecha" />
         <TextView
             android:id="@+id/widget_rutinas_hora4"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:paddingLeft="6dp"
             android:paddingRight="6dp"
             android:paddingTop="2dp"

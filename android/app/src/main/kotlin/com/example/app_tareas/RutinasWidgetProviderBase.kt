@@ -9,7 +9,6 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
-import es.antonborri.home_widget.HomeWidgetBackgroundIntent
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 import org.json.JSONArray
@@ -24,6 +23,7 @@ data class FilaRutinaIds(
     val titulo: Int,
     val hora: Int,
     val badge: Int,
+    val check: Int,
 )
 
 // Base compartida por RutinasWidgetProviderChico y RutinasWidgetProviderGrande.
@@ -41,6 +41,7 @@ abstract class RutinasWidgetProviderBase(
     private val progresoBarId: Int?,
 ) : HomeWidgetProvider() {
     private data class ItemRutina(
+        val id: String,
         val titulo: String,
         val horaHoy: String,
         val completada: Boolean,
@@ -133,6 +134,21 @@ abstract class RutinasWidgetProviderBase(
                         }
                         else -> views.setViewVisibility(fila.badge, View.GONE)
                     }
+
+                    views.setImageViewResource(
+                        fila.check,
+                        if (item.completada) R.drawable.ic_widget_check_filled else R.drawable.ic_widget_check_empty,
+                    )
+                    // Un PendingIntent propio por fila (con el id de ESA rutina en
+                    // la Uri) captura el click antes de que llegue a la raíz: tocar
+                    // el check completa/descompleta esa rutina puntual, tocar el
+                    // resto de la tarjeta abre la app (ver el click de la raíz).
+                    val completarPendingIntent = HomeWidgetLaunchIntent.getActivity(
+                        context,
+                        MainActivity::class.java,
+                        Uri.parse("homewidget://completar_rutina?id=${Uri.encode(item.id)}"),
+                    )
+                    views.setOnClickPendingIntent(fila.check, completarPendingIntent)
                 } catch (e: Throwable) {
                     views.setViewVisibility(fila.contenedor, View.GONE)
                 }
@@ -146,11 +162,16 @@ abstract class RutinasWidgetProviderBase(
 
             views.setViewVisibility(R.id.widget_rutinas_vacio, if (hayRutinasHoy) View.GONE else View.VISIBLE)
 
-            val refreshPendingIntent = HomeWidgetBackgroundIntent.getBroadcast(
+            // El check de cada fila y el botón "Programar rutina" tienen su
+            // propio PendingIntent (arriba y abajo) y lo capturan antes de que
+            // llegue acá: tocar el resto de la tarjeta abre la app en la
+            // pantalla de Rutinas.
+            val abrirRutinasPendingIntent = HomeWidgetLaunchIntent.getActivity(
                 context,
-                Uri.parse("homewidget://refrescar_rutinas"),
+                MainActivity::class.java,
+                Uri.parse("homewidget://abrir_rutinas"),
             )
-            views.setOnClickPendingIntent(R.id.widget_rutinas_refresh, refreshPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_rutinas_root, abrirRutinasPendingIntent)
 
             val programarRutinaPendingIntent = HomeWidgetLaunchIntent.getActivity(
                 context,
@@ -196,6 +217,7 @@ abstract class RutinasWidgetProviderBase(
             (0 until array.length()).map { index ->
                 val item = array.getJSONObject(index)
                 ItemRutina(
+                    id = item.optString("id", ""),
                     titulo = item.optString("titulo", ""),
                     horaHoy = item.optString("horaHoy", ""),
                     completada = item.optBoolean("completada", false),
