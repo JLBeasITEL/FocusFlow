@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
+import es.antonborri.home_widget.HomeWidgetBackgroundIntent
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 import org.json.JSONArray
@@ -39,6 +40,16 @@ abstract class RutinasWidgetProviderBase(
     // porque, igual que con fila3/fila4 en FilaRutinaIds, Chico no puede
     // referenciar un id que solo declara el layout de Grande.
     private val progresoBarId: Int?,
+    // Grande muestra la agenda completa de hoy (rutinas_widget_data); Chico
+    // muestra solo pendientes ordenadas por cercanía a la hora actual
+    // (rutinas_widget_data_chico) — cada uno lee su propia clave, calculada
+    // por WidgetRutinasService.actualizar().
+    private val dataKey: String,
+    // El footer "+N rutinas más" de Grande cuenta contra el total programado
+    // hoy; el de Chico cuenta contra el total PENDIENTE (Chico no muestra
+    // las ya hechas, así que no tendría sentido restar itemsAMostrar de un
+    // total que las incluye).
+    private val totalParaFooterKey: String,
 ) : HomeWidgetProvider() {
     private data class ItemRutina(
         val id: String,
@@ -66,14 +77,15 @@ abstract class RutinasWidgetProviderBase(
         widgetData: SharedPreferences,
     ) {
         try {
-            val items = parseRutinas(widgetData.getString(WIDGET_DATA_KEY, null))
+            val items = parseRutinas(widgetData.getString(dataKey, null))
             val totalProgramadas = widgetData.getString(WIDGET_TOTAL_PROGRAMADAS_KEY, null)?.toIntOrNull()
                 ?: items.size
             val totalHechas = widgetData.getString(WIDGET_TOTAL_HECHAS_KEY, null)?.toIntOrNull() ?: 0
+            val totalParaFooter = widgetData.getString(totalParaFooterKey, null)?.toIntOrNull() ?: items.size
             val hayRutinasHoy = totalProgramadas > 0
 
             val itemsAMostrar = items.take(filaIds.size)
-            val restantes = (totalProgramadas - itemsAMostrar.size).coerceAtLeast(0)
+            val restantes = (totalParaFooter - itemsAMostrar.size).coerceAtLeast(0)
 
             val views = RemoteViews(context.packageName, layoutResId)
 
@@ -141,11 +153,11 @@ abstract class RutinasWidgetProviderBase(
                     )
                     // Un PendingIntent propio por fila (con el id de ESA rutina en
                     // la Uri) captura el click antes de que llegue a la raíz: tocar
-                    // el check completa/descompleta esa rutina puntual, tocar el
-                    // resto de la tarjeta abre la app (ver el click de la raíz).
-                    val completarPendingIntent = HomeWidgetLaunchIntent.getActivity(
+                    // el check completa/descompleta esa rutina puntual SIN abrir la
+                    // app (HomeWidgetBackgroundIntent, isolate headless), tocar el
+                    // resto de la tarjeta sí abre la app (ver el click de la raíz).
+                    val completarPendingIntent = HomeWidgetBackgroundIntent.getBroadcast(
                         context,
-                        MainActivity::class.java,
                         Uri.parse("homewidget://completar_rutina?id=${Uri.encode(item.id)}"),
                     )
                     views.setOnClickPendingIntent(fila.check, completarPendingIntent)
@@ -230,7 +242,6 @@ abstract class RutinasWidgetProviderBase(
     }
 
     companion object {
-        private const val WIDGET_DATA_KEY = "rutinas_widget_data"
         private const val WIDGET_TOTAL_PROGRAMADAS_KEY = "rutinas_widget_total_programadas"
         private const val WIDGET_TOTAL_HECHAS_KEY = "rutinas_widget_total_hechas"
 

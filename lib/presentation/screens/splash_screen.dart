@@ -62,10 +62,20 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Una vez terminado el fade-out ya no hace falta seguir apilando el
-    // overlay (ni pagar su costo de layout) encima de la pantalla real.
-    if (_overlayRemovido) return widget.child;
-
+    // widget.child SIEMPRE ocupa la misma posición (primer hijo de un Stack,
+    // envuelto en el mismo RepaintBoundary) tanto antes como después de
+    // retirar el overlay: antes esto hacía "if (_overlayRemovido) return
+    // widget.child;", devolviendo widget.child SUELTO en vez de envuelto en
+    // Stack->RepaintBoundary. Ese cambio de forma del árbol (de
+    // Stack->RepaintBoundary->HomeScreen a HomeScreen directo) hace que
+    // Flutter no pueda reconciliar el widget como "el mismo" — lo desmonta y
+    // vuelve a montar de cero, perdiendo TODO el estado de HomeScreen
+    // (pestaña seleccionada, scroll, etc.). Se notó porque un widget de
+    // pantalla de inicio que pedía cambiar a la pestaña de Rutinas mientras
+    // el splash seguía visible se veía revertido a Tareas apenas terminaba
+    // el fundido: HomeScreen ya había vuelto a su estado inicial. Mantener
+    // SIEMPRE la misma envoltura (solo el overlay entra/sale como hijo
+    // opcional) evita el remontaje.
     final temaActual = ref.watch(temaProvider);
     // El logo gris solo contrasta bien sobre el fondo blanco de Clásico;
     // los otros 4 temas usan fondos con color/gradiente, así que llevan la
@@ -78,47 +88,48 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         // para que sus propios rebuilds/animaciones no obliguen a
         // recomponer el overlay que se está desvaneciendo encima.
         RepaintBoundary(child: widget.child),
-        IgnorePointer(
-          child: AnimatedOpacity(
-            opacity: _overlayVisible ? 1 : 0,
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOut,
-            onEnd: () {
-              if (!_overlayVisible && mounted) setState(() => _overlayRemovido = true);
-            },
-            // Con esto, el fundido lo resuelve el compositor variando la
-            // opacidad de una capa ya rasterizada, en vez de repintar todo
-            // el overlay en cada tick de la animación.
-            child: RepaintBoundary(
-              child: Container(
-                decoration: BoxDecoration(gradient: temaActual.degradadoFondo),
-                alignment: Alignment.center,
-                child: Opacity(
-                  // Nombre y logo aparecen juntos recién cuando el precache
-                  // de ambas imágenes termina (ver _precargarYMostrar).
-                  opacity: _listo ? 1 : 0,
-                  // Es puro decorativo: sin esto, TalkBack/Accessibility
-                  // Scanner puede enfocar el texto "FocusFlow" por ser el
-                  // primer elemento en aparecer, dibujando su indicador de
-                  // foco (línea/recuadro) encima.
-                  child: ExcludeSemantics(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Image.asset(logo, width: 140, cacheWidth: _anchoCache(context), fit: BoxFit.contain),
-                        const SizedBox(height: 18),
-                        Text(
-                          'FocusFlow',
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: temaActual.colorPrincipal, letterSpacing: 0.5),
-                        ),
-                      ],
+        if (!_overlayRemovido)
+          IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: _overlayVisible ? 1 : 0,
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOut,
+              onEnd: () {
+                if (!_overlayVisible && mounted) setState(() => _overlayRemovido = true);
+              },
+              // Con esto, el fundido lo resuelve el compositor variando la
+              // opacidad de una capa ya rasterizada, en vez de repintar todo
+              // el overlay en cada tick de la animación.
+              child: RepaintBoundary(
+                child: Container(
+                  decoration: BoxDecoration(gradient: temaActual.degradadoFondo),
+                  alignment: Alignment.center,
+                  child: Opacity(
+                    // Nombre y logo aparecen juntos recién cuando el precache
+                    // de ambas imágenes termina (ver _precargarYMostrar).
+                    opacity: _listo ? 1 : 0,
+                    // Es puro decorativo: sin esto, TalkBack/Accessibility
+                    // Scanner puede enfocar el texto "FocusFlow" por ser el
+                    // primer elemento en aparecer, dibujando su indicador de
+                    // foco (línea/recuadro) encima.
+                    child: ExcludeSemantics(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(logo, width: 140, cacheWidth: _anchoCache(context), fit: BoxFit.contain),
+                          const SizedBox(height: 18),
+                          Text(
+                            'FocusFlow',
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: temaActual.colorPrincipal, letterSpacing: 0.5),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
       ],
     );
   }

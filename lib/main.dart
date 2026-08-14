@@ -6,8 +6,8 @@ import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/rutina_form_screen.dart';
 import 'presentation/screens/splash_screen.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'providers/rutina_provider.dart';
 import 'services/notificaciones_service.dart';
+import 'services/widget_background_dispatcher.dart';
 import 'services/widget_tareas_service.dart';
 import 'services/widget_rutinas_service.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
@@ -18,10 +18,10 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // Contenedor de Riverpod creado a mano (en vez de dejar que ProviderScope lo
 // arme internamente) para que el handler de clicks del widget de Rutinas
-// pueda leer/mutar providers (completar una rutina) desde fuera del árbol de
-// widgets, igual que navigatorKey permite navegar desde fuera. Se lo pasa a
-// MyApp vía UncontrolledProviderScope para que sea EL MISMO contenedor que
-// usa toda la app, no uno separado con estado propio.
+// pueda pedir un cambio de pestaña (tabSolicitadaWidgetProvider) desde fuera
+// del árbol de widgets, igual que navigatorKey permite navegar desde fuera.
+// Se lo pasa a MyApp vía UncontrolledProviderScope para que sea EL MISMO
+// contenedor que usa toda la app, no uno separado con estado propio.
 final container = ProviderContainer();
 
 void main() {
@@ -44,21 +44,21 @@ void main() {
     // Es vital pasar la llave aquí
     await NotificacionesService().init(navigatorKey);
 
-    // Registra el callback que atiende los clicks en los íconos interactivos
-    // de los widgets de pantalla de inicio (alternar modo en Tareas). Único
-    // punto de entrada headless posible: home_widget reemplaza el handle
-    // anterior en vez de apilarlos, así que si algún otro widget necesita un
-    // click headless en el futuro, este es el lugar para despachar por
-    // uri.host en vez de registrar uno nuevo.
-    await HomeWidget.registerInteractivityCallback(tareasWidgetBackgroundCallback);
+    // Registra el callback que atiende los clicks que NO abren la app
+    // (alternar modo en Tareas, completar una rutina desde su checkbox).
+    // Único punto de entrada headless posible: home_widget reemplaza el
+    // handle anterior en vez de apilarlos, así que widget_background_dispatcher.dart
+    // despacha por uri.host en vez de registrar uno nuevo por acción.
+    await HomeWidget.registerInteractivityCallback(widgetsBackgroundCallback);
 
     // Tocar la tarjeta de un widget (fuera de sus íconos/checkboxes propios,
-    // que tienen su propio manejo vía el callback de arriba) trae la app al
-    // frente por launchMode="singleTop" y home_widget emite este evento acá.
-    // Cubre el caso "la app ya estaba corriendo"; el cold start (proceso
-    // muerto) se maneja aparte más abajo con initiallyLaunchedFromHomeWidget,
-    // porque a diferencia de HomeScreen (ya es `home:`), RutinaFormScreen y
-    // el cambio de pestaña a Rutinas necesitan un paso extra tras montar.
+    // que tienen su propio manejo headless vía el callback de arriba) trae
+    // la app al frente por launchMode="singleTop" y home_widget emite este
+    // evento acá. Cubre el caso "la app ya estaba corriendo"; el cold start
+    // (proceso muerto) se maneja aparte más abajo con
+    // initiallyLaunchedFromHomeWidget, porque a diferencia de HomeScreen (ya
+    // es `home:`), RutinaFormScreen y el cambio de pestaña a Rutinas
+    // necesitan un paso extra tras montar.
     HomeWidget.widgetClicked.listen(_manejarClickWidget);
 
     final uriDeLanzamiento = await HomeWidget.initiallyLaunchedFromHomeWidget();
@@ -84,8 +84,10 @@ void main() {
 // como el cold start (initiallyLaunchedFromHomeWidget) — mismo Uri, mismo
 // destino en ambos casos. 'abrir_tareas' no necesita push porque HomeScreen
 // ya es la pantalla inicial (`home:`); 'programar_rutina' sí, porque
-// RutinaFormScreen no lo es. 'completar_rutina' y 'abrir_rutinas' además
-// piden el cambio a la pestaña de Rutinas vía tabSolicitadaWidgetProvider.
+// RutinaFormScreen no lo es. 'abrir_rutinas' además pide el cambio a la
+// pestaña de Rutinas vía tabSolicitadaWidgetProvider. Completar una rutina
+// desde su checkbox NO pasa por acá: es headless, vía
+// widget_background_dispatcher.dart, así que nunca abre la app.
 void _manejarClickWidget(Uri? uri) {
   switch (uri?.host) {
     case 'abrir_tareas':
@@ -101,37 +103,7 @@ void _manejarClickWidget(Uri? uri) {
       navigatorKey.currentState?.popUntil((route) => route.isFirst);
       container.read(tabSolicitadaWidgetProvider.notifier).solicitar(1);
       break;
-    case 'completar_rutina':
-      navigatorKey.currentState?.popUntil((route) => route.isFirst);
-      container.read(tabSolicitadaWidgetProvider.notifier).solicitar(1);
-      final id = uri?.queryParameters['id'];
-      if (id != null && id.isNotEmpty) {
-        _completarRutinaConEspera(id);
-      }
-      break;
   }
-}
-
-// toggleCompletada vive en RutinaNotifier (rutina_provider.dart) porque
-// tiene efectos colaterales delicados (cancela/reprograma notificaciones,
-// racha, monedas — ver los comentarios de ese método) que NO se replican
-// acá a propósito: se llama al método real, tal cual lo usa rutina_card.dart,
-// para no arriesgarse a desincronizar notificaciones (ver el historial de
-// bugs de notificaciones de rutinas).
-//
-// El problema es de timing, no de lógica: RutinaNotifier.build() dispara
-// _cargarRutinas() sin esperarlo, así que el state arranca en [] y se llena
-// de forma asíncrona. Si este click llega en cold start (proceso recién
-// arrancado), la rutina buscada puede no estar en el state todavía —
-// se espera (con tope de 5s) a que aparezca antes de completarla.
-Future<void> _completarRutinaConEspera(String id) async {
-  final notifier = container.read(rutinaProvider.notifier);
-  final limite = DateTime.now().add(const Duration(seconds: 5));
-  while (!container.read(rutinaProvider).any((r) => r.id == id)) {
-    if (DateTime.now().isAfter(limite)) return;
-    await Future.delayed(const Duration(milliseconds: 50));
-  }
-  await notifier.toggleCompletada(id);
 }
 
 class MyApp extends StatefulWidget {

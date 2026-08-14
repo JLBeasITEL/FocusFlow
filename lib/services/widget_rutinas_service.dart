@@ -5,19 +5,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/rutina.dart';
 
 // Recalcula y publica los datos del widget de Rutinas. A diferencia de
-// WidgetTareasService no hay modo alternable: una sola lista, ordenada por
-// hora programada de hoy. Se llama desde rutina_provider.dart (al cargar y
-// al guardar) y desde el WidgetsBindingObserver de main.dart al pasar la app
-// a segundo plano.
+// WidgetTareasService no hay un modo alternable por el usuario: en cambio,
+// cada variante fija tiene su propia vista siempre calculada — Grande
+// (agenda completa de hoy, ordenada por hora) y Chico (solo pendientes,
+// ordenadas por cercanía a la hora actual, ver más abajo). Se llama desde
+// rutina_provider.dart (al cargar y al guardar) y desde el
+// WidgetsBindingObserver de main.dart al pasar la app a segundo plano.
 //
 // Escrito a propósito en pasos separados (no chains de .where().map().take())
 // con un log por etapa, para poder ver en Logcat exactamente en qué paso se
 // pierde una rutina si el widget no muestra lo esperado.
 class WidgetRutinasService {
   static const String _rutinasStorageKey = 'lista_rutinas_v2';
+  // Grande muestra TODAS las rutinas de hoy (completadas incluidas, con
+  // tachado + badge "HECHA") ordenadas por hora programada — sigue
+  // publicándose bajo esta clave, sin cambios. Chico en cambio es una vista
+  // de "qué hacer ahora": solo pendientes, ordenadas por cercanía a la hora
+  // actual, bajo su propia clave.
   static const String _widgetDataKey = 'rutinas_widget_data';
+  static const String _widgetDataChicoKey = 'rutinas_widget_data_chico';
   static const String _widgetTotalProgramadasKey = 'rutinas_widget_total_programadas';
   static const String _widgetTotalHechasKey = 'rutinas_widget_total_hechas';
+  // Chico calcula su footer "+N rutinas más" contra este total (pendientes),
+  // no contra totalProgramadas (que incluye las ya hechas, que Chico no
+  // muestra).
+  static const String _widgetTotalPendientesKey = 'rutinas_widget_total_pendientes';
   // Dos widgets de tamaño fijo (ver RutinasWidgetProviderBase.kt) en vez del
   // provider único redimensionable anterior, mismo patrón que ya tiene Tareas.
   static const List<String> _androidWidgetNames = [
@@ -89,8 +101,8 @@ class WidgetRutinasService {
       });
 
       // Sobre rutinasDeHoy COMPLETA (antes de recortar a _maxItems): el badge
-      // "X/Y hechas" y el footer "+N rutinas más" necesitan el total real,
-      // no el subconjunto que termina viajando al widget.
+      // "X/Y hechas" y los footers "+N rutinas más" necesitan el total real,
+      // no el subconjunto que termina viajando a cada variante del widget.
       final totalProgramadas = rutinasDeHoy.length;
       final totalHechas = rutinasDeHoy.where((r) => r.completada && r.fechaCompletada == hoyStr).length;
 
@@ -99,51 +111,54 @@ class WidgetRutinasService {
           : rutinasDeHoy;
       // ignore: avoid_print
       print(
-        'WidgetRutinasService [3/4] tras ordenar por hora y limitar a $_maxItems: '
+        'WidgetRutinasService [3/4] (Grande) tras ordenar por hora y limitar a $_maxItems: '
         '${rutinasLimitadas.length} -> ${rutinasLimitadas.map((r) => r.titulo).toList()}',
       );
+      final items = _construirItems(rutinasLimitadas, diaActual, hoyStr);
 
-      final List<Map<String, Object?>> items = [];
-      for (final r in rutinasLimitadas) {
-        try {
-          final hora = r.horarios[diaActual];
-          if (hora == null) {
-            // No debería pasar (ya filtramos por containsKey arriba), pero
-            // si pasara no queremos que un ! tumbe todo el ciclo.
-            // ignore: avoid_print
-            print(
-              'WidgetRutinasService: "${r.titulo}" no tiene hora para diaActual=$diaActual '
-              'pese a haber pasado el filtro -> se omite esta rutina puntual',
-            );
-            continue;
-          }
-          final completadaHoy = r.completada && r.fechaCompletada == hoyStr;
-          final omitidaHoy = r.omitida && r.fechaOmitida == hoyStr;
-          items.add({
-            'id': r.id,
-            'titulo': r.titulo,
-            'horaHoy': _formatearHora(hora),
-            'completada': completadaHoy,
-            'omitida': omitidaHoy,
-          });
-        } catch (e) {
-          // Una rutina con datos corruptos no debe tumbar a las demás.
-          // ignore: avoid_print
-          print('WidgetRutinasService: excepción armando el item de "${r.titulo}" -> $e');
-        }
+      // Chico: solo pendientes (ni completadas ni... omitidas SÍ se
+      // conservan, "no estén marcadas como completas" no incluye omitidas),
+      // ordenadas por cercanía al reloj actual en vez de por hora ascendente
+      // — es una vista de "qué hacer ahora", no la agenda completa del día.
+      final minutosAhora = DateTime.now().hour * 60 + DateTime.now().minute;
+      int minutosProgramados(Rutina r) {
+        final hora = r.horarios[diaActual]!;
+        return hora.hour * 60 + hora.minute;
       }
+
+      final List<Rutina> rutinasPendientesHoy = rutinasDeHoy
+          .where((r) => !(r.completada && r.fechaCompletada == hoyStr))
+          .toList()
+        ..sort((a, b) {
+          final diffA = (minutosProgramados(a) - minutosAhora).abs();
+          final diffB = (minutosProgramados(b) - minutosAhora).abs();
+          return diffA.compareTo(diffB);
+        });
+      final totalPendientes = rutinasPendientesHoy.length;
+      final List<Rutina> rutinasPendientesLimitadas = rutinasPendientesHoy.length > _maxItems
+          ? rutinasPendientesHoy.sublist(0, _maxItems)
+          : rutinasPendientesHoy;
       // ignore: avoid_print
       print(
-        'WidgetRutinasService [4/4] items finales enviados al widget: '
-        '${items.length} -> ${items.map((i) => i['titulo']).toList()}, '
-        'totalProgramadas=$totalProgramadas, totalHechas=$totalHechas '
+        'WidgetRutinasService [3/4] (Chico) pendientes ordenadas por cercanía a la hora, '
+        'limitadas a $_maxItems: '
+        '${rutinasPendientesLimitadas.length} -> ${rutinasPendientesLimitadas.map((r) => r.titulo).toList()}',
+      );
+      final itemsChico = _construirItems(rutinasPendientesLimitadas, diaActual, hoyStr);
+
+      // ignore: avoid_print
+      print(
+        'WidgetRutinasService [4/4] items finales -> Grande: ${items.length}, Chico: ${itemsChico.length}. '
+        'totalProgramadas=$totalProgramadas, totalHechas=$totalHechas, totalPendientes=$totalPendientes '
         '(cuántas de estas se terminan MOSTRANDO lo decide '
         'RutinasWidgetProviderChico/Grande según la variante, no este servicio)',
       );
 
       await HomeWidget.saveWidgetData<String>(_widgetDataKey, jsonEncode(items));
+      await HomeWidget.saveWidgetData<String>(_widgetDataChicoKey, jsonEncode(itemsChico));
       await HomeWidget.saveWidgetData<String>(_widgetTotalProgramadasKey, totalProgramadas.toString());
       await HomeWidget.saveWidgetData<String>(_widgetTotalHechasKey, totalHechas.toString());
+      await HomeWidget.saveWidgetData<String>(_widgetTotalPendientesKey, totalPendientes.toString());
       for (final nombre in _androidWidgetNames) {
         await HomeWidget.updateWidget(androidName: nombre);
       }
@@ -153,6 +168,43 @@ class WidgetRutinasService {
       // ignore: avoid_print
       print('WidgetRutinasService.actualizar: error al sincronizar -> $e');
     }
+  }
+
+  static List<Map<String, Object?>> _construirItems(
+    List<Rutina> rutinas,
+    int diaActual,
+    String hoyStr,
+  ) {
+    final List<Map<String, Object?>> items = [];
+    for (final r in rutinas) {
+      try {
+        final hora = r.horarios[diaActual];
+        if (hora == null) {
+          // No debería pasar (ya se filtró por containsKey antes), pero si
+          // pasara no queremos que un ! tumbe todo el ciclo.
+          // ignore: avoid_print
+          print(
+            'WidgetRutinasService: "${r.titulo}" no tiene hora para diaActual=$diaActual '
+            'pese a haber pasado el filtro -> se omite esta rutina puntual',
+          );
+          continue;
+        }
+        final completadaHoy = r.completada && r.fechaCompletada == hoyStr;
+        final omitidaHoy = r.omitida && r.fechaOmitida == hoyStr;
+        items.add({
+          'id': r.id,
+          'titulo': r.titulo,
+          'horaHoy': _formatearHora(hora),
+          'completada': completadaHoy,
+          'omitida': omitidaHoy,
+        });
+      } catch (e) {
+        // Una rutina con datos corruptos no debe tumbar a las demás.
+        // ignore: avoid_print
+        print('WidgetRutinasService: excepción armando el item de "${r.titulo}" -> $e');
+      }
+    }
+    return items;
   }
 
   static String _formatearHora(TimeOfDay hora) {

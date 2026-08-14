@@ -33,4 +33,6 @@ class RutinasWidgetProviderGrande : RutinasWidgetProviderBase(
         ),
     ),
     progresoBarId = R.id.widget_rutinas_progreso_bar,
+    dataKey = "rutinas_widget_data",
+    totalParaFooterKey = "rutinas_widget_total_programadas",
 )
