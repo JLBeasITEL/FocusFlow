@@ -28,4 +28,5 @@ class TareasWidgetProviderGrande : TareasWidgetProviderBase(
             R.id.widget_tareas_prioridad4,
         ),
     ),
+    abrirAppAlTocar = true,
 )
