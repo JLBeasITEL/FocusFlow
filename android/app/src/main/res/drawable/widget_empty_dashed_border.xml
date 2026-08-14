@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nota: el guionado (dashWidth/dashGap) de un stroke en un shape drawable
+     solo se ve punteado si la View que lo usa termina renderizada por
+     software; en algunos hosts de widgets con aceleración por hardware puede
+     verse como un borde sólido. Sin API de RemoteViews para forzar layer
+     type, no hay forma de garantizar el punteado desde acá — a verificar en
+     la prueba física en el POCO. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="14dp" />
+    <stroke
+        android:width="1.5dp"
+        android:color="@color/widget_border"
+        android:dashWidth="6dp"
+        android:dashGap="4dp" />
+</shape>

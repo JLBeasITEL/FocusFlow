@@ -16,7 +16,14 @@ import '../models/rutina.dart';
 class WidgetRutinasService {
   static const String _rutinasStorageKey = 'lista_rutinas_v2';
   static const String _widgetDataKey = 'rutinas_widget_data';
-  static const String _androidWidgetName = 'RutinasWidgetProvider';
+  static const String _widgetTotalProgramadasKey = 'rutinas_widget_total_programadas';
+  static const String _widgetTotalHechasKey = 'rutinas_widget_total_hechas';
+  // Dos widgets de tamaño fijo (ver RutinasWidgetProviderBase.kt) en vez del
+  // provider único redimensionable anterior, mismo patrón que ya tiene Tareas.
+  static const List<String> _androidWidgetNames = [
+    'RutinasWidgetProviderChico',
+    'RutinasWidgetProviderGrande',
+  ];
   static const int _maxItems = 6;
 
   static Future<void> actualizar() async {
@@ -81,6 +88,12 @@ class WidgetRutinasService {
         return minutosA.compareTo(minutosB);
       });
 
+      // Sobre rutinasDeHoy COMPLETA (antes de recortar a _maxItems): el badge
+      // "X/Y hechas" y el footer "+N rutinas más" necesitan el total real,
+      // no el subconjunto que termina viajando al widget.
+      final totalProgramadas = rutinasDeHoy.length;
+      final totalHechas = rutinasDeHoy.where((r) => r.completada && r.fechaCompletada == hoyStr).length;
+
       final List<Rutina> rutinasLimitadas = rutinasDeHoy.length > _maxItems
           ? rutinasDeHoy.sublist(0, _maxItems)
           : rutinasDeHoy;
@@ -121,13 +134,18 @@ class WidgetRutinasService {
       // ignore: avoid_print
       print(
         'WidgetRutinasService [4/4] items finales enviados al widget: '
-        '${items.length} -> ${items.map((i) => i['titulo']).toList()} '
-        '(cuántos de estos se terminan MOSTRANDO lo decide RutinasWidgetProvider.kt '
-        'según el tamaño real del widget, no este servicio)',
+        '${items.length} -> ${items.map((i) => i['titulo']).toList()}, '
+        'totalProgramadas=$totalProgramadas, totalHechas=$totalHechas '
+        '(cuántas de estas se terminan MOSTRANDO lo decide '
+        'RutinasWidgetProviderChico/Grande según la variante, no este servicio)',
       );
 
       await HomeWidget.saveWidgetData<String>(_widgetDataKey, jsonEncode(items));
-      await HomeWidget.updateWidget(androidName: _androidWidgetName);
+      await HomeWidget.saveWidgetData<String>(_widgetTotalProgramadasKey, totalProgramadas.toString());
+      await HomeWidget.saveWidgetData<String>(_widgetTotalHechasKey, totalHechas.toString());
+      for (final nombre in _androidWidgetNames) {
+        await HomeWidget.updateWidget(androidName: nombre);
+      }
     } catch (e) {
       // No queremos que un fallo al sincronizar el widget rompa el flujo
       // normal de la app (crear/editar/completar una rutina).

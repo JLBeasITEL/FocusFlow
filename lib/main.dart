@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/rutina_form_screen.dart';
 import 'presentation/screens/splash_screen.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'services/notificaciones_service.dart';
+import 'services/widget_background_dispatcher.dart';
 import 'services/widget_tareas_service.dart';
 import 'services/widget_rutinas_service.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
@@ -35,29 +37,56 @@ void main() {
     await NotificacionesService().init(navigatorKey);
 
     // Registra el callback que atiende los clicks en los íconos interactivos
-    // de los widgets de pantalla de inicio (ej. alternar modo en el widget de Tareas).
-    await HomeWidget.registerInteractivityCallback(tareasWidgetBackgroundCallback);
+    // de los widgets de pantalla de inicio (alternar modo en Tareas, refresh
+    // en Rutinas). Único punto de entrada headless posible: home_widget
+    // reemplaza el handle anterior en vez de apilarlos (ver
+    // widget_background_dispatcher.dart).
+    await HomeWidget.registerInteractivityCallback(widgetsBackgroundCallback);
 
-    // Con la app ya corriendo en segundo plano, tocar el widget Chico de
-    // Tareas (fuera del ícono de alternancia, que tiene su propio manejo vía
-    // el callback de arriba) trae la app al frente por launchMode="singleTop"
-    // y home_widget emite este evento — solo falta volver a la pantalla de
-    // tareas si el usuario estaba en alguna pantalla apilada encima. En cold
-    // start no hace falta nada: `home:` ya arranca directo en HomeScreen.
-    HomeWidget.widgetClicked.listen((uri) {
-      if (uri?.host == 'abrir_tareas') {
-        navigatorKey.currentState?.popUntil((route) => route.isFirst);
-      }
-    });
+    // Tocar la tarjeta de un widget (fuera de sus íconos interactivos, que
+    // tienen su propio manejo vía el callback de arriba) trae la app al
+    // frente por launchMode="singleTop" y home_widget emite este evento acá.
+    // Cubre el caso "la app ya estaba corriendo"; el cold start (proceso
+    // muerto) se maneja aparte más abajo con initiallyLaunchedFromHomeWidget,
+    // porque a diferencia de HomeScreen (ya es `home:`), RutinaFormScreen
+    // necesita un push explícito para aparecer.
+    HomeWidget.widgetClicked.listen(_manejarClickWidget);
+
+    final uriDeLanzamiento = await HomeWidget.initiallyLaunchedFromHomeWidget();
 
     runApp(
       ProviderScope(
         child: MyApp(),
       ),
     );
+
+    if (uriDeLanzamiento != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _manejarClickWidget(uriDeLanzamiento);
+      });
+    }
   }, (error, stackTrace) {
     debugPrint('Error no capturado fuera del árbol de widgets: $error\n$stackTrace');
   });
+}
+
+// Atiende tanto el click con la app ya corriendo (HomeWidget.widgetClicked)
+// como el cold start (initiallyLaunchedFromHomeWidget) — mismo Uri, mismo
+// destino en ambos casos. 'abrir_tareas' no necesita push porque HomeScreen
+// ya es la pantalla inicial (`home:`); 'programar_rutina' sí, porque
+// RutinaFormScreen no lo es.
+void _manejarClickWidget(Uri? uri) {
+  switch (uri?.host) {
+    case 'abrir_tareas':
+      navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      break;
+    case 'programar_rutina':
+      navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (context) => const RutinaFormScreen()),
+      );
+      break;
+  }
 }
 
 class MyApp extends StatefulWidget {
