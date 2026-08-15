@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Ancho fijo (no wrap_content): con match_parent en TODOS los
+     descendientes directos, un wrap_content acá es ambiguo — Android lo
+     resuelve según el contenido más largo (texto del encabezado según el
+     modo, título de tarea más largo, etc.), así que el ancho terminaba
+     variando de un render a otro. Un ancho fijo, igual al minWidth
+     declarado en tareas_widget_chico_info.xml, lo deja constante sin
+     importar el contenido. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_tareas_root"
-    android:layout_width="wrap_content"
+    android:layout_width="180dp"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/widget_background"

@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Ancho fijo, igual al minWidth declarado en tareas_widget_grande_info.xml
+     (ver el mismo comentario en widget_tareas_chico.xml: wrap_content acá es
+     ambiguo con descendientes match_parent y termina variando con el
+     contenido). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_tareas_root"
-    android:layout_width="wrap_content"
+    android:layout_width="250dp"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
