@@ -73,6 +73,13 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   TimeOfDay? _horaSeleccionada;
   bool _mostrarAvanzadas = false;
 
+  // --- RECURRENCIA POR INTERVALO ---
+  // diaAncla no tiene control propio: se deriva del día de _fechaFinalActual
+  // al guardar (ver _guardarTarea), así que acá solo hace falta rastrear
+  // tipo + intervalo.
+  TipoRecurrencia _tipoRecurrencia = TipoRecurrencia.ninguna;
+  final TextEditingController _intervaloController = TextEditingController();
+
   // --- ESTADO LOCAL DE SUBTAREAS ---
   // Se editan en memoria (igual que título/descripción) y solo se
   // persisten al presionar "Guardar", junto con el resto del formulario.
@@ -104,6 +111,10 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     }
     _urgenciaBase = datosIniciales?.urgenciaBase ?? 1;
     _fechaSeleccionada = datosIniciales?.fechaLimite;
+    _tipoRecurrencia = datosIniciales?.tipoRecurrencia ?? TipoRecurrencia.ninguna;
+    if (datosIniciales?.intervalo != null) {
+      _intervaloController.text = datosIniciales!.intervalo.toString();
+    }
     _subtareasTemp = datosIniciales?.subtareas
             .map((s) => ItemSubtarea(id: s.id, texto: s.texto, completado: s.completado))
             .toList() ??
@@ -206,6 +217,8 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
         urgenciaBase: _urgenciaBase,
         grupo: _grupoSeleccionado,
         subtareas: _subtareasTemp,
+        tipoRecurrencia: _tipoRecurrencia,
+        intervalo: _tipoRecurrencia == TipoRecurrencia.ninguna ? null : int.tryParse(_intervaloController.text.trim()),
       );
     }
     return Tarea(
@@ -216,6 +229,8 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
       urgenciaBase: _urgenciaBase,
       grupo: _grupoSeleccionado,
       subtareas: _subtareasTemp,
+      tipoRecurrencia: _tipoRecurrencia,
+      intervalo: _tipoRecurrencia == TipoRecurrencia.ninguna ? null : int.tryParse(_intervaloController.text.trim()),
     );
   }
 
@@ -225,6 +240,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     _descripcionController.dispose();
     _horasController.dispose();
     _nuevaSubtareaController.dispose();
+    _intervaloController.dispose();
     super.dispose();
   }
 
@@ -609,6 +625,9 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     setState(() {
       _fechaSeleccionada = null;
       _horaSeleccionada = null;
+      // Recurrencia solo tiene sentido con fecha límite (ver _guardarTarea).
+      _tipoRecurrencia = TipoRecurrencia.ninguna;
+      _intervaloController.clear();
     });
   }
 
@@ -616,6 +635,61 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   // las 23:59 como hora límite implícita sin mostrarla en este botón.
   void _limpiarHora() {
     setState(() => _horaSeleccionada = null);
+  }
+
+  // Selector de recurrencia (ninguna/días/meses + intervalo numérico),
+  // compartido entre portrait y landscape. Solo tiene sentido con fecha
+  // límite elegida (ver _guardarTarea y _limpiarFecha); el llamador es
+  // responsable de no mostrarlo sin _fechaSeleccionada.
+  Widget _buildSelectorRecurrencia() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 3,
+          child: DropdownButtonFormField<TipoRecurrencia>(
+            initialValue: _tipoRecurrencia,
+            isExpanded: true,
+            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black54),
+            style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
+            decoration: InputDecoration(
+              labelText: 'Repetir',
+              prefixIcon: const Icon(Icons.repeat, size: 20),
+              filled: true, fillColor: Colors.grey.shade50,
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+            ),
+            items: const [
+              DropdownMenuItem(value: TipoRecurrencia.ninguna, child: Text('No se repite')),
+              DropdownMenuItem(value: TipoRecurrencia.dias, child: Text('Cada N días')),
+              DropdownMenuItem(value: TipoRecurrencia.meses, child: Text('Cada N meses')),
+            ],
+            onChanged: (valor) {
+              if (valor != null) setState(() => _tipoRecurrencia = valor);
+            },
+          ),
+        ),
+        if (_tipoRecurrencia != TipoRecurrencia.ninguna) ...[
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 2,
+            child: TextField(
+              controller: _intervaloController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: _tipoRecurrencia == TipoRecurrencia.dias ? 'Días' : 'Meses',
+                errorText: _recurrenciaSinIntervalo ? 'Mínimo 1' : null,
+                filled: true, fillColor: Colors.grey.shade50,
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 
   DateTime? get _fechaFinalActual {
@@ -640,6 +714,14 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   // permite guardar hasta elegir una fecha o borrar las horas.
   bool get _horasSinFecha => _urgenciaEsAutomatica && _fechaSeleccionada == null;
 
+  // Con recurrencia elegida (días o meses) hace falta un intervalo válido
+  // (entero >= 1) para poder guardar.
+  bool get _recurrenciaSinIntervalo {
+    if (_tipoRecurrencia == TipoRecurrencia.ninguna) return false;
+    final valor = int.tryParse(_intervaloController.text.trim());
+    return valor == null || valor < 1;
+  }
+
   int get _urgenciaMostrada {
     final horas = double.tryParse(_horasController.text.trim());
     if (horas == null) return _urgenciaBase;
@@ -656,7 +738,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   void _guardarTarea() {
     final titulo = _tituloController.text.trim();
 
-    if (titulo.isEmpty || _horasSinFecha) return;
+    if (titulo.isEmpty || _horasSinFecha || _recurrenciaSinIntervalo) return;
 
     final fechaFinal = _fechaFinalActual;
 
@@ -670,6 +752,14 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     final String grupoLimpio = _grupoSeleccionado;
     ref.read(tareaProvider.notifier).registrarGrupoPersistente(grupoLimpio);
 
+    // Recurrencia solo tiene sentido con fecha límite: sin fecha, siempre
+    // se guarda como "ninguna" sin importar lo que se haya elegido antes de
+    // borrar la fecha. diaAncla se deriva del día de fechaFinal (no es un
+    // control visible propio).
+    final TipoRecurrencia tipoRecurrenciaFinal = fechaFinal == null ? TipoRecurrencia.ninguna : _tipoRecurrencia;
+    final int? intervaloFinal = tipoRecurrenciaFinal == TipoRecurrencia.ninguna ? null : int.tryParse(_intervaloController.text.trim());
+    final int? diaAnclaFinal = tipoRecurrenciaFinal == TipoRecurrencia.meses ? fechaFinal!.day : null;
+
     if (widget.tareaAEditar != null) {
       final tareaModificada = widget.tareaAEditar!.copyWith(
         titulo: titulo,
@@ -679,6 +769,9 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
         urgenciaBase: urgenciaFinal,
         grupo: grupoLimpio, // Usamos la variable ya limpia y sanitizada
         subtareas: _subtareasTemp,
+        tipoRecurrencia: tipoRecurrenciaFinal,
+        intervalo: intervaloFinal,
+        diaAncla: diaAnclaFinal,
       );
       ref.read(tareaProvider.notifier).updateTarea(tareaModificada);
     } else {
@@ -690,6 +783,9 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
         urgenciaBase: urgenciaFinal,
         grupo: grupoLimpio, // Se agrega para que la nueva tarea también tenga el grupo asignado
         subtareas: _subtareasTemp,
+        tipoRecurrencia: tipoRecurrenciaFinal,
+        intervalo: intervaloFinal,
+        diaAncla: diaAnclaFinal,
       );
       ref.read(tareaProvider.notifier).addTarea(nuevaTarea);
     }
@@ -887,6 +983,10 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                     ),
                 ],
               ),
+              if (_fechaSeleccionada != null) ...[
+                const SizedBox(height: 16),
+                _buildSelectorRecurrencia(),
+              ],
             ],
 
             const SizedBox(height: 24),
@@ -1142,7 +1242,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
 
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: _horasSinFecha ? null : _guardarTarea,
+              onPressed: (_horasSinFecha || _recurrenciaSinIntervalo) ? null : _guardarTarea,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.black87, foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1427,6 +1527,10 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
               focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
             ),
           ),
+          if (_fechaSeleccionada != null) ...[
+            const SizedBox(height: 16),
+            _buildSelectorRecurrencia(),
+          ],
         ],
       ),
     );
@@ -1610,7 +1714,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
             ),
             const SizedBox(width: 12),
             ElevatedButton(
-              onPressed: _horasSinFecha ? null : _guardarTarea,
+              onPressed: (_horasSinFecha || _recurrenciaSinIntervalo) ? null : _guardarTarea,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.black87, foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 28),
