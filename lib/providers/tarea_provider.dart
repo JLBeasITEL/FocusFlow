@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/tarea.dart';
 import '../services/notificaciones_service.dart';
 import '../services/widget_tareas_service.dart';
+import '../services/widget_progreso_service.dart';
 
 // 1. Usamos la sintaxis moderna 'Notifier' de Riverpod 2.0
 class TareaNotifier extends Notifier<List<Tarea>> {
@@ -83,6 +84,9 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     // Mantiene el widget de pantalla de inicio de Tareas en sync con cada
     // creación/edición/completado, ya que todos pasan por este método.
     WidgetTareasService.actualizar();
+    // El anillo de Tareas del widget de Progreso también depende de este
+    // storage (total y completadas), así que se recalcula junto con Tareas.
+    WidgetProgresoService.actualizar();
   }
 
   // Fuerza una relectura completa desde SharedPreferences, descartando el
@@ -119,19 +123,64 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     NotificacionesService().programarAlertaDefinitiva(tarea);
   }
 
+  // Tareas recurrentes: al completarlas (false -> true) NUNCA se persiste
+  // esCompletada = true. En su lugar, en el MISMO copyWith se recalcula
+  // fechaLimite con siguienteFecha() y esCompletada vuelve a false —
+  // atómicamente, para que una tarea recurrente jamás quede guardada en
+  // estado "completada" y termine borrada por la limpieza diaria de
+  // _cargarTareasInterno (ver comentario ahí). fechaLimiteAnterior guarda
+  // la fecha vieja para poder deshacer (ver deshacerRecurrente) y para que
+  // WidgetProgresoService cuente el día como completado.
+  //
+  // Si la tarea NO es recurrente (o está recurrente pero se está
+  // "des-completando", lo cual no debería ocurrir en el flujo normal ya
+  // que una recurrente nunca llega a esCompletada = true), el toggle
+  // simétrico de siempre queda intacto.
   void toggleTarea(String id) {
+    final tareaActual = state.firstWhere((t) => t.id == id);
+    final DateTime? nuevaFecha = !tareaActual.esCompletada ? tareaActual.siguienteFecha() : null;
+    final bool completandoRecurrente = nuevaFecha != null;
+
     state = [
       for (final tarea in state)
-        if (tarea.id == id) tarea.copyWith(esCompletada: !tarea.esCompletada) else tarea,
+        if (tarea.id == id)
+          completandoRecurrente
+              ? tarea.copyWith(fechaLimite: nuevaFecha, fechaLimiteAnterior: tarea.fechaLimite, esCompletada: false)
+              : tarea.copyWith(esCompletada: !tarea.esCompletada)
+        else
+          tarea,
     ];
-    _guardarTareas(); 
-    
+    _guardarTareas();
+
     final tareaModificada = state.firstWhere((t) => t.id == id);
-    if (tareaModificada.esCompletada) {
+    if (completandoRecurrente) {
+      // Reprograma desde cero con la nueva fechaLimite: la auditoría previa
+      // confirmó que programarAlertaDefinitiva ya cancela lo anterior y
+      // recalcula todo, así que basta con llamarla de nuevo.
+      NotificacionesService().programarAlertaDefinitiva(tareaModificada);
+    } else if (tareaModificada.esCompletada) {
       NotificacionesService().cancelarAlerta(id);
     } else {
       NotificacionesService().programarAlertaDefinitiva(tareaModificada);
     }
+  }
+
+  // Deshace la última completación de una tarea recurrente: restaura
+  // fechaLimite = fechaLimiteAnterior y limpia fechaLimiteAnterior (con el
+  // patrón sentinel de copyWith, para poder llevarlo a null explícito). No
+  // aplica a tareas no recurrentes (usa toggleTarea para esas).
+  void deshacerRecurrente(String id) {
+    final tarea = state.firstWhere((t) => t.id == id);
+    if (tarea.fechaLimiteAnterior == null) return;
+
+    state = [
+      for (final t in state)
+        if (t.id == id) t.copyWith(fechaLimite: t.fechaLimiteAnterior, fechaLimiteAnterior: null) else t,
+    ];
+    _guardarTareas();
+
+    final tareaRestaurada = state.firstWhere((t) => t.id == id);
+    NotificacionesService().programarAlertaDefinitiva(tareaRestaurada);
   }
 
   void updateTarea(Tarea tareaActualizada) {
