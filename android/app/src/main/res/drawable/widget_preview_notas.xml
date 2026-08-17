@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Miniatura estática para el selector de widgets del launcher (usada por
+     ambas variantes, mismo criterio que widget_preview_rutinas.xml).
+     Representación abstracta: tarjeta redondeada, título en acento teal y
+     dos "notas" (rectángulo de título + línea de cuerpo) una debajo de la
+     otra, igual que el widget Chico real. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item>
+        <shape android:shape="rectangle">
+            <size android:width="220dp" android:height="240dp" />
+            <solid android:color="@color/widget_background" />
+            <stroke android:width="1dp" android:color="@color/widget_border" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+
+    <!-- Título ("Notas") -->
+    <item android:left="16dp" android:top="16dp" android:right="150dp" android:bottom="210dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_accent" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+
+    <!-- Nota 1 -->
+    <item android:left="16dp" android:top="52dp" android:right="16dp" android:bottom="130dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_row_background" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item android:left="26dp" android:top="64dp" android:right="70dp" android:bottom="106dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_text_primary" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+    <item android:left="26dp" android:top="86dp" android:right="40dp" android:bottom="118dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_text_tertiary" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+
+    <!-- Nota 2 -->
+    <item android:left="16dp" android:top="138dp" android:right="16dp" android:bottom="216dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_row_background" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item android:left="26dp" android:top="150dp" android:right="70dp" android:bottom="192dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_text_primary" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+    <item android:left="26dp" android:top="172dp" android:right="40dp" android:bottom="204dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_text_tertiary" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+
+</layer-list>

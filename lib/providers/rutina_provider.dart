@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/rutina.dart';
 import '../services/notificaciones_service.dart';
 import '../services/widget_rutinas_service.dart';
+import '../services/widget_progreso_service.dart';
 import 'monedas_provider.dart';
 
 // ============================================================
@@ -184,6 +185,9 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     // esperar aquí, cada mutación deja el widget al día antes de que la
     // siguiente pueda empezar la suya.
     await WidgetRutinasService.actualizar();
+    // El anillo de Rutinas del widget de Progreso lee los totales que la
+    // línea de arriba acaba de publicar: se recalcula después, no antes.
+    await WidgetProgresoService.actualizar();
   }
 
   Future<void> _guardarRutinas() async {
@@ -195,6 +199,9 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     // Con await (ver nota de _cargarRutinas): evita que sincronizaciones
     // concurrentes se resuelvan fuera de orden.
     await WidgetRutinasService.actualizar();
+    // Mismo motivo que arriba: el widget de Progreso depende de los totales
+    // que WidgetRutinasService.actualizar() acaba de publicar.
+    await WidgetProgresoService.actualizar();
   }
 
   // --- LÓGICA DE NOTIFICACIONES PARA RUTINAS ---

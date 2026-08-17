@@ -9,7 +9,6 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
-import es.antonborri.home_widget.HomeWidgetBackgroundIntent
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 import org.json.JSONArray
@@ -40,16 +39,22 @@ abstract class RutinasWidgetProviderBase(
     // porque, igual que con fila3/fila4 en FilaRutinaIds, Chico no puede
     // referenciar un id que solo declara el layout de Grande.
     private val progresoBarId: Int?,
-    // Grande muestra la agenda completa de hoy (rutinas_widget_data); Chico
-    // muestra solo pendientes ordenadas por cercanía a la hora actual
-    // (rutinas_widget_data_chico) — cada uno lee su propia clave, calculada
-    // por WidgetRutinasService.actualizar().
+    // Grande muestra la agenda completa de hoy ordenada por hora
+    // (rutinas_widget_data); Chico muestra la misma agenda completa (nada
+    // desaparece al completarse) pero ordenada por cercanía a la hora
+    // actual (rutinas_widget_data_chico) — cada uno lee su propia clave,
+    // calculada por WidgetRutinasService.actualizar().
     private val dataKey: String,
-    // El footer "+N rutinas más" de Grande cuenta contra el total programado
-    // hoy; el de Chico cuenta contra el total PENDIENTE (Chico no muestra
-    // las ya hechas, así que no tendría sentido restar itemsAMostrar de un
-    // total que las incluye).
+    // El footer "+N rutinas más" de ambas variantes cuenta contra el mismo
+    // total programado hoy (Grande y Chico muestran la misma agenda, solo
+    // cambia el orden y cuántas filas entran).
     private val totalParaFooterKey: String,
+    // Grande muestra el badge "HECHA" además del tachado + check relleno;
+    // Chico (más apretado de espacio) omite ese badge porque el tachado y
+    // el check ya alcanzan para comunicar "completada" sin el texto extra.
+    // El badge "OMITIDA" no tiene otro indicador visual (no hay tachado ni
+    // check para ese estado), así que se muestra en ambas variantes.
+    private val mostrarBadgeHecha: Boolean = true,
 ) : HomeWidgetProvider() {
     private data class ItemRutina(
         val id: String,
@@ -132,11 +137,13 @@ abstract class RutinasWidgetProviderBase(
                     )
 
                     when {
-                        item.completada -> {
+                        item.completada -> if (mostrarBadgeHecha) {
                             views.setViewVisibility(fila.badge, View.VISIBLE)
                             views.setTextViewText(fila.badge, "HECHA")
                             views.setInt(fila.badge, "setBackgroundResource", R.drawable.widget_pill_hecha)
                             views.setTextColor(fila.badge, COLOR_COMPLETADA)
+                        } else {
+                            views.setViewVisibility(fila.badge, View.GONE)
                         }
                         item.omitida -> {
                             views.setViewVisibility(fila.badge, View.VISIBLE)
@@ -151,16 +158,13 @@ abstract class RutinasWidgetProviderBase(
                         fila.check,
                         if (item.completada) R.drawable.ic_widget_check_filled else R.drawable.ic_widget_check_empty,
                     )
-                    // Un PendingIntent propio por fila (con el id de ESA rutina en
-                    // la Uri) captura el click antes de que llegue a la raíz: tocar
-                    // el check completa/descompleta esa rutina puntual SIN abrir la
-                    // app (HomeWidgetBackgroundIntent, isolate headless), tocar el
-                    // resto de la tarjeta sí abre la app (ver el click de la raíz).
-                    val completarPendingIntent = HomeWidgetBackgroundIntent.getBroadcast(
-                        context,
-                        Uri.parse("homewidget://completar_rutina?id=${Uri.encode(item.id)}"),
-                    )
-                    views.setOnClickPendingIntent(fila.check, completarPendingIntent)
+                    // El check es puramente informativo (solo refleja completada/no
+                    // completada): sin PendingIntent propio, un toque ahí cae al
+                    // click de la raíz igual que el resto de la tarjeta (abre la
+                    // app). Antes completaba/descompletaba la rutina sin abrir la
+                    // app, pero eso hacía que la rutina desapareciera de Chico
+                    // (que solo mostraba pendientes) sin ninguna señal visual de
+                    // qué pasó — ver WidgetRutinasService.actualizar().
                 } catch (e: Throwable) {
                     views.setViewVisibility(fila.contenedor, View.GONE)
                 }
@@ -174,10 +178,10 @@ abstract class RutinasWidgetProviderBase(
 
             views.setViewVisibility(R.id.widget_rutinas_vacio, if (hayRutinasHoy) View.GONE else View.VISIBLE)
 
-            // El check de cada fila y el botón "Programar rutina" tienen su
-            // propio PendingIntent (arriba y abajo) y lo capturan antes de que
-            // llegue acá: tocar el resto de la tarjeta abre la app en la
-            // pantalla de Rutinas.
+            // El botón "Programar rutina" tiene su propio PendingIntent (abajo)
+            // y lo captura antes de que llegue acá: tocar cualquier otro punto
+            // del widget (incluido el check, que ya no tiene intent propio)
+            // abre la app en la pantalla de Rutinas.
             val abrirRutinasPendingIntent = HomeWidgetLaunchIntent.getActivity(
                 context,
                 MainActivity::class.java,

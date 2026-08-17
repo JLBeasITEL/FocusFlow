@@ -1,8 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- match_parent en ambas dimensiones (no wrap_content): en launchers
+     modernos con grid "responsive", un widget resizeMode="none" igual puede
+     terminar con un host bastante más grande que el minWidth/minHeight
+     declarados en rutinas_widget_grande_info.xml (el sistema reserva celdas
+     completas, no el tamaño exacto pedido). Con wrap_content el fondo del
+     widget solo envolvía el contenido real, dejando un margen enorme de
+     wallpaper alrededor de una tarjeta chica. match_parent hace que el
+     fondo llene lo que el host le haya dado, y el bloque de filas se centra
+     verticalmente en ese espacio (ver content_wrapper más abajo) en vez de
+     quedar pegado arriba con todo el resto vacío debajo. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_rutinas_root"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
     android:padding="14dp">
@@ -58,6 +68,17 @@
         </LinearLayout>
 
     </LinearLayout>
+
+    <!-- Envuelve las 4 tarjetas + footer/vacío: 0dp+weight=1 hace que este
+         bloque ocupe todo el alto que sobra debajo del header, y
+         gravity="center_vertical" centra las filas dentro de ese espacio en
+         vez de dejarlas pegadas arriba. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_vertical">
 
     <!-- Tarjeta 1 -->
     <LinearLayout
@@ -328,6 +349,8 @@
             android:textColor="@color/widget_accent"
             android:textStyle="bold"
             android:textSize="14sp" />
+    </LinearLayout>
+
     </LinearLayout>
 
 </LinearLayout>

@@ -10,6 +10,8 @@ import 'services/notificaciones_service.dart';
 import 'services/widget_background_dispatcher.dart';
 import 'services/widget_tareas_service.dart';
 import 'services/widget_rutinas_service.dart';
+import 'services/widget_notas_service.dart';
+import 'services/widget_progreso_service.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'core/app_messenger.dart';
 
@@ -85,9 +87,20 @@ void main() {
 // destino en ambos casos. 'abrir_tareas' no necesita push porque HomeScreen
 // ya es la pantalla inicial (`home:`); 'programar_rutina' sí, porque
 // RutinaFormScreen no lo es. 'abrir_rutinas' además pide el cambio a la
-// pestaña de Rutinas vía tabSolicitadaWidgetProvider. Completar una rutina
-// desde su checkbox NO pasa por acá: es headless, vía
-// widget_background_dispatcher.dart, así que nunca abre la app.
+// pestaña de Rutinas: se escribe TANTO en currentTabIndexProvider (estado
+// persistente, fuente de verdad para el initialIndex del TabController de
+// la PRÓXIMA vez que HomeScreen se monte) COMO en tabSolicitadaWidgetProvider
+// (comando de un solo uso que anima la pestaña si HomeScreen YA está
+// montado). Se observó que, al traer la app al frente desde este widget con
+// la app ya corriendo en segundo plano, HomeScreen a veces se remonta de
+// cero (motivo no confirmado, posiblemente ligado al ciclo de vida de la
+// Activity al volver de background) DESPUÉS de que este handler ya corrió:
+// con solo tabSolicitadaWidgetProvider (comando efímero, ya consumido y
+// limpiado por la instancia vieja), la instancia nueva no tenía forma de
+// enterarse y volvía siempre a la pestaña 0 (Tareas). currentTabIndexProvider
+// sobrevive ese remont porque vive en el ProviderContainer, no en el State
+// de HomeScreen. Completar una rutina desde su checkbox NO pasa por acá: es
+// headless, vía widget_background_dispatcher.dart, así que nunca abre la app.
 void _manejarClickWidget(Uri? uri) {
   switch (uri?.host) {
     case 'abrir_tareas':
@@ -101,7 +114,13 @@ void _manejarClickWidget(Uri? uri) {
       break;
     case 'abrir_rutinas':
       navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      container.read(currentTabIndexProvider.notifier).actualizar(1);
       container.read(tabSolicitadaWidgetProvider.notifier).solicitar(1);
+      break;
+    case 'abrir_notas':
+      navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      container.read(currentTabIndexProvider.notifier).actualizar(2);
+      container.read(tabSolicitadaWidgetProvider.notifier).solicitar(2);
       break;
   }
 }
@@ -141,12 +160,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void _sincronizarWidgetsAlPasarASegundoPlano() {
     WidgetTareasService.actualizarAmbosModos();
     WidgetRutinasService.actualizar();
-    // Resumen todavía no tiene un servicio de datos propio (llega en la
-    // Fase 5); por ahora solo se le pide refrescar su vista actual. Nota
-    // rápida no depende de datos, pero se refresca igual por consistencia
-    // con los otros 3 widgets.
-    HomeWidget.updateWidget(androidName: 'ResumenWidgetProvider');
-    HomeWidget.updateWidget(androidName: 'NotaRapidaWidgetProvider');
+    WidgetNotasService.actualizar();
+    // Progreso combina totales de Tareas (recalculados acá) y de Rutinas
+    // (ya recalculados arriba, publicados bajo sus propias claves): por eso
+    // va al final, después de que ambos estén al día.
+    WidgetProgresoService.actualizar();
   }
 
   @override

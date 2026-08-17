@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- match_parent en ambas dimensiones (no wrap_content): en launchers
+     modernos con grid "responsive", un widget resizeMode="none" igual puede
+     terminar con un host bastante más grande que el minWidth/minHeight
+     declarados en notas_widget_chico_info.xml (el sistema reserva celdas
+     completas, no el tamaño exacto pedido). Con wrap_content el fondo del
+     widget solo envolvía el contenido real, dejando un margen de wallpaper
+     alrededor de una tarjeta chica. match_parent hace que el fondo llene lo
+     que el host le haya dado; widget_notas_contenido/widget_notas_vacio se
+     centran con weight=1 en el espacio entre el header y el botón "+ Nueva
+     nota" (que se queda fijo abajo) en vez de quedar pegados arriba. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_notas_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Notas"
+            android:textColor="@color/widget_accent"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⟳"
+            android:textColor="@color/widget_accent"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <!-- 0dp+weight=1: ocupa el alto que sobra entre el header y el botón
+         "+ Nueva nota" fijo abajo. gravity="center_vertical" centra el
+         contenido (o el estado vacío) dentro de ese espacio en vez de
+         dejarlo pegado arriba. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_vertical">
+
+    <LinearLayout
+        android:id="@+id/widget_notas_contenido"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Nota 1 -->
+        <LinearLayout
+            android:id="@+id/widget_notas_fila1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="vertical"
+            android:background="@drawable/widget_row_background"
+            android:padding="10dp">
+            <TextView
+                android:id="@+id/widget_notas_titulo1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_text_primary"
+                android:textStyle="bold"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/widget_notas_cuerpo1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="12sp" />
+            <TextView
+                android:id="@+id/widget_notas_tiempo1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/widget_text_tertiary"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <!-- Nota 2 -->
+        <LinearLayout
+            android:id="@+id/widget_notas_fila2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical"
+            android:background="@drawable/widget_row_background"
+            android:padding="10dp">
+            <TextView
+                android:id="@+id/widget_notas_titulo2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_text_primary"
+                android:textStyle="bold"
+                android:textSize="13sp" />
+            <TextView
+                android:id="@+id/widget_notas_cuerpo2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="12sp" />
+            <TextView
+                android:id="@+id/widget_notas_tiempo2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/widget_text_tertiary"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_notas_vacio"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:visibility="gone">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sin notas todavía"
+            android:textColor="@color/widget_text_primary"
+            android:textStyle="bold"
+            android:textSize="15sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center_horizontal"
+            android:text="Captura una idea en dos toques."
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_notas_nueva"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/widget_button_pill"
+        android:gravity="center"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:text="+ Nueva nota"
+        android:textColor="@color/widget_accent"
+        android:textStyle="bold"
+        android:textSize="13sp" />
+
+</LinearLayout>

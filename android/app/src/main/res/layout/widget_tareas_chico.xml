@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Ancho fijo (no wrap_content): con match_parent en TODOS los
-     descendientes directos, un wrap_content acá es ambiguo — Android lo
-     resuelve según el contenido más largo (texto del encabezado según el
-     modo, título de tarea más largo, etc.), así que el ancho terminaba
-     variando de un render a otro. Un ancho fijo, igual al minWidth
-     declarado en tareas_widget_chico_info.xml, lo deja constante sin
-     importar el contenido. -->
+<!-- match_parent en ambas dimensiones (no un dp fijo ni wrap_content): en
+     launchers modernos con grid "responsive", un widget resizeMode="none"
+     igual puede terminar con un host bastante más grande que el minWidth/
+     minHeight declarados en tareas_widget_chico_info.xml (el sistema
+     reserva celdas completas, no el tamaño exacto pedido). Con un ancho fijo
+     y alto wrap_content el fondo del widget solo envolvía el contenido
+     real, dejando un margen de wallpaper alrededor de una tarjeta chica.
+     match_parent hace que el fondo llene lo que el host le haya dado, y el
+     bloque de filas se centra verticalmente en ese espacio (ver
+     content_wrapper más abajo) en vez de quedar pegado arriba. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_tareas_root"
-    android:layout_width="180dp"
-    android:layout_height="wrap_content"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
     android:padding="14dp">
@@ -39,6 +42,17 @@
             android:contentDescription="Alternar entre próximas y más importantes" />
 
     </LinearLayout>
+
+    <!-- Envuelve las 2 tarjetas + footer/vacío: 0dp+weight=1 hace que este
+         bloque ocupe todo el alto que sobra debajo del header, y
+         gravity="center_vertical" centra las filas dentro de ese espacio en
+         vez de dejarlas pegadas arriba. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_vertical">
 
     <!-- Tarjeta 1 -->
     <LinearLayout
@@ -159,5 +173,7 @@
         android:textStyle="italic"
         android:textSize="13sp"
         android:visibility="gone" />
+
+    </LinearLayout>
 
 </LinearLayout>

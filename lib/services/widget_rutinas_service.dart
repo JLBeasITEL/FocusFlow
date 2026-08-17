@@ -19,17 +19,13 @@ class WidgetRutinasService {
   static const String _rutinasStorageKey = 'lista_rutinas_v2';
   // Grande muestra TODAS las rutinas de hoy (completadas incluidas, con
   // tachado + badge "HECHA") ordenadas por hora programada — sigue
-  // publicándose bajo esta clave, sin cambios. Chico en cambio es una vista
-  // de "qué hacer ahora": solo pendientes, ordenadas por cercanía a la hora
-  // actual, bajo su propia clave.
+  // publicándose bajo esta clave, sin cambios. Chico muestra la misma
+  // agenda completa (nada desaparece al completarse), pero ordenada por
+  // cercanía a la hora actual en vez de ascendente, bajo su propia clave.
   static const String _widgetDataKey = 'rutinas_widget_data';
   static const String _widgetDataChicoKey = 'rutinas_widget_data_chico';
   static const String _widgetTotalProgramadasKey = 'rutinas_widget_total_programadas';
   static const String _widgetTotalHechasKey = 'rutinas_widget_total_hechas';
-  // Chico calcula su footer "+N rutinas más" contra este total (pendientes),
-  // no contra totalProgramadas (que incluye las ya hechas, que Chico no
-  // muestra).
-  static const String _widgetTotalPendientesKey = 'rutinas_widget_total_pendientes';
   // Dos widgets de tamaño fijo (ver RutinasWidgetProviderBase.kt) en vez del
   // provider único redimensionable anterior, mismo patrón que ya tiene Tareas.
   static const List<String> _androidWidgetNames = [
@@ -116,40 +112,38 @@ class WidgetRutinasService {
       );
       final items = _construirItems(rutinasLimitadas, diaActual, hoyStr);
 
-      // Chico: solo pendientes (ni completadas ni... omitidas SÍ se
-      // conservan, "no estén marcadas como completas" no incluye omitidas),
-      // ordenadas por cercanía al reloj actual en vez de por hora ascendente
-      // — es una vista de "qué hacer ahora", no la agenda completa del día.
+      // Chico: TODA la agenda de hoy (completadas incluidas, con tachado +
+      // badge "HECHA" igual que Grande — ver RutinasWidgetProviderBase.kt),
+      // ordenada por cercanía al reloj actual en vez de por hora ascendente
+      // — sigue siendo una vista de "qué hacer ahora", pero ya no oculta una
+      // rutina apenas se completa (antes eso hacía que, al tocar el check,
+      // la rutina desapareciera del widget sin ninguna señal visual).
       final minutosAhora = DateTime.now().hour * 60 + DateTime.now().minute;
       int minutosProgramados(Rutina r) {
         final hora = r.horarios[diaActual]!;
         return hora.hour * 60 + hora.minute;
       }
 
-      final List<Rutina> rutinasPendientesHoy = rutinasDeHoy
-          .where((r) => !(r.completada && r.fechaCompletada == hoyStr))
-          .toList()
-        ..sort((a, b) {
+      final List<Rutina> rutinasHoyPorCercania = [...rutinasDeHoy]..sort((a, b) {
           final diffA = (minutosProgramados(a) - minutosAhora).abs();
           final diffB = (minutosProgramados(b) - minutosAhora).abs();
           return diffA.compareTo(diffB);
         });
-      final totalPendientes = rutinasPendientesHoy.length;
-      final List<Rutina> rutinasPendientesLimitadas = rutinasPendientesHoy.length > _maxItems
-          ? rutinasPendientesHoy.sublist(0, _maxItems)
-          : rutinasPendientesHoy;
+      final List<Rutina> rutinasChicoLimitadas = rutinasHoyPorCercania.length > _maxItems
+          ? rutinasHoyPorCercania.sublist(0, _maxItems)
+          : rutinasHoyPorCercania;
       // ignore: avoid_print
       print(
-        'WidgetRutinasService [3/4] (Chico) pendientes ordenadas por cercanía a la hora, '
+        'WidgetRutinasService [3/4] (Chico) agenda de hoy ordenada por cercanía a la hora, '
         'limitadas a $_maxItems: '
-        '${rutinasPendientesLimitadas.length} -> ${rutinasPendientesLimitadas.map((r) => r.titulo).toList()}',
+        '${rutinasChicoLimitadas.length} -> ${rutinasChicoLimitadas.map((r) => r.titulo).toList()}',
       );
-      final itemsChico = _construirItems(rutinasPendientesLimitadas, diaActual, hoyStr);
+      final itemsChico = _construirItems(rutinasChicoLimitadas, diaActual, hoyStr);
 
       // ignore: avoid_print
       print(
         'WidgetRutinasService [4/4] items finales -> Grande: ${items.length}, Chico: ${itemsChico.length}. '
-        'totalProgramadas=$totalProgramadas, totalHechas=$totalHechas, totalPendientes=$totalPendientes '
+        'totalProgramadas=$totalProgramadas, totalHechas=$totalHechas '
         '(cuántas de estas se terminan MOSTRANDO lo decide '
         'RutinasWidgetProviderChico/Grande según la variante, no este servicio)',
       );
@@ -158,7 +152,6 @@ class WidgetRutinasService {
       await HomeWidget.saveWidgetData<String>(_widgetDataChicoKey, jsonEncode(itemsChico));
       await HomeWidget.saveWidgetData<String>(_widgetTotalProgramadasKey, totalProgramadas.toString());
       await HomeWidget.saveWidgetData<String>(_widgetTotalHechasKey, totalHechas.toString());
-      await HomeWidget.saveWidgetData<String>(_widgetTotalPendientesKey, totalPendientes.toString());
       for (final nombre in _androidWidgetNames) {
         await HomeWidget.updateWidget(androidName: nombre);
       }

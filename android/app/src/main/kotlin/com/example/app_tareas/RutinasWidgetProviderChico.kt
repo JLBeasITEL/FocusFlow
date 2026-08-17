@@ -20,5 +20,6 @@ class RutinasWidgetProviderChico : RutinasWidgetProviderBase(
     ),
     progresoBarId = null,
     dataKey = "rutinas_widget_data_chico",
-    totalParaFooterKey = "rutinas_widget_total_pendientes",
+    totalParaFooterKey = "rutinas_widget_total_programadas",
+    mostrarBadgeHecha = false,
 )

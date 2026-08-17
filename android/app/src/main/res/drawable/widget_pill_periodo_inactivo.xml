@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pestaña inactiva (Semana / Mes) del selector de período del widget de
+     Progreso. La activa (Día) reusa @drawable/widget_button_pill (mismo
+     teal translúcido que ya usan otros botones pill del widget). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/widget_row_background" />
+    <corners android:radius="14dp" />
+</shape>

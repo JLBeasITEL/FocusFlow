@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/nota.dart';
+import '../services/widget_notas_service.dart';
 
 class NotaNotifier extends Notifier<List<NotaPostIt>> {
   static const String _storageKey = 'lista_notas_postit_v2';
@@ -40,12 +41,14 @@ class NotaNotifier extends Notifier<List<NotaPostIt>> {
   // estado en memoria. Se usa tras restaurar un respaldo.
   Future<void> recargarDesdeDisco() async {
     await _cargarNotas();
+    WidgetNotasService.actualizar();
   }
 
   void agregarNota(NotaPostIt nuevaNota) {
     final nuevoEstado = [nuevaNota, ...state];
     state = nuevoEstado;
     _guardarNotas(nuevoEstado);
+    WidgetNotasService.actualizar();
   }
 
   // Elimina y devuelve los datos necesarios para deshacer (el elemento tal
@@ -58,6 +61,7 @@ class NotaNotifier extends Notifier<List<NotaPostIt>> {
     final nuevoEstado = List<NotaPostIt>.from(state)..removeAt(indice);
     state = nuevoEstado;
     _guardarNotas(nuevoEstado);
+    WidgetNotasService.actualizar();
     return (elemento: elemento, indice: indice);
   }
 
@@ -68,6 +72,7 @@ class NotaNotifier extends Notifier<List<NotaPostIt>> {
     nuevoEstado.insert(indice.clamp(0, nuevoEstado.length), elemento);
     state = nuevoEstado;
     _guardarNotas(nuevoEstado);
+    WidgetNotasService.actualizar();
   }
 
   void editarNota(String id, String nuevoTexto, {TipoNota? tipo, List<ItemLista>? elementosLista, int? colorValue, String? titulo}) {
@@ -80,6 +85,29 @@ class NotaNotifier extends Notifier<List<NotaPostIt>> {
     ];
     state = nuevoEstado;
     _guardarNotas(nuevoEstado);
+    WidgetNotasService.actualizar();
+  }
+
+  // Alterna si una nota está destacada (aparece en los widgets de Notas).
+  // Máximo 2 destacadas a la vez: si ya hay 2 y se intenta destacar una
+  // tercera, no hace nada y devuelve false para que la UI avise al usuario
+  // en vez de fallar en silencio (ver alternarDestacadaConFeedback en
+  // nota_dialog.dart).
+  bool alternarDestacada(String id) {
+    final indice = state.indexWhere((n) => n.id == id);
+    if (indice == -1) return false;
+    final actual = state[indice];
+    if (!actual.destacada && state.where((n) => n.destacada).length >= 2) {
+      return false;
+    }
+    final nuevoEstado = [
+      for (final nota in state)
+        if (nota.id == id) nota.copyWith(destacada: !nota.destacada) else nota,
+    ];
+    state = nuevoEstado;
+    _guardarNotas(nuevoEstado);
+    WidgetNotasService.actualizar();
+    return true;
   }
 
   // Junta las notas indicadas bajo un mismo nombre de grupo. Si el nombre

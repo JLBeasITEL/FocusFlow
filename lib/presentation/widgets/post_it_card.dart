@@ -19,6 +19,9 @@ class PostItCard extends StatefulWidget {
   // Solo se pasa desde dentro de un grupo: saca la nota de su grupo sin
   // borrarla. Si es null, no se muestra el botón (tablero principal).
   final VoidCallback? onQuitarDeGrupo;
+  // Alterna si esta nota es una de las (máximo 2) destacadas que aparecen
+  // en los widgets de Notas. Null oculta el botón por completo.
+  final VoidCallback? onToggleDestacada;
 
   const PostItCard({
     super.key,
@@ -31,6 +34,7 @@ class PostItCard extends StatefulWidget {
     this.seleccionada = false,
     this.onToggleSeleccion,
     this.onQuitarDeGrupo,
+    this.onToggleDestacada,
   });
 
   @override
@@ -242,6 +246,27 @@ class _PostItCardState extends State<PostItCard> {
                     padding: const EdgeInsets.all(4),
                     decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white70),
                     child: const Icon(Icons.link_off_rounded, size: 16, color: Colors.black54),
+                  ),
+                ),
+              ),
+            // Botón "destacar" (máximo 2 notas a la vez, ver
+            // alternarDestacada en nota_provider.dart): siempre abajo a la
+            // derecha, esquina libre en ambas variantes del clip.
+            if (!widget.modoSeleccion && widget.onToggleDestacada != null)
+              Positioned(
+                bottom: 4,
+                right: 4,
+                child: GestureDetector(
+                  onTap: widget.onToggleDestacada,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white70),
+                    child: Icon(
+                      widget.nota.destacada ? Icons.star_rounded : Icons.star_border_rounded,
+                      size: 18,
+                      color: widget.nota.destacada ? const Color(0xFFF5A623) : Colors.black45,
+                    ),
                   ),
                 ),
               ),

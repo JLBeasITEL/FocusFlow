@@ -147,7 +147,7 @@ class SettingsScreen extends ConsumerWidget {
                   infoPaquete.when(
                     data: (info) => 'FocusFlow v${info.version}',
                     loading: () => 'FocusFlow',
-                    error: (_, __) => 'FocusFlow',
+                    error: (_, _) => 'FocusFlow',
                   ),
                   style: TextStyle(
                     fontSize: 14,
