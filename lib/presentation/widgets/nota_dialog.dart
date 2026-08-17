@@ -17,6 +17,18 @@ const List<Color> coloresPostIt = [
   Color(0xFFFED7AA), Color(0xFFCCFBF1),
 ];
 
+// Alterna destacar/no-destacar una nota (máximo 2 a la vez, ver
+// alternarDestacada en nota_provider.dart) y avisa con un SnackBar cuando ya
+// se alcanzó el límite, en vez de dejar que el toque no haga nada visible.
+void alternarDestacadaConFeedback(BuildContext context, WidgetRef ref, String id) {
+  final exito = ref.read(notaProvider.notifier).alternarDestacada(id);
+  if (!exito) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Ya tienes 2 notas destacadas. Quita una para destacar otra.')),
+    );
+  }
+}
+
 // Abre el diálogo de crear/editar nota. Sin idAEditar crea una nota nueva;
 // con idAEditar busca la nota por id (en vez de por índice posicional) para
 // poder invocarse tanto desde el tablero principal como desde dentro de un
@@ -380,14 +392,16 @@ void mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? idAEditar}
                                       // Si el usuario no eligió color, se mantiene el comportamiento aleatorio original
                                       int colorFinal = colorElegido ?? coloresPostIt[math.Random().nextInt(coloresPostIt.length)].value;
 
+                                      final ahora = DateTime.now().millisecondsSinceEpoch;
                                       final nueva = NotaPostIt(
-                                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                        id: ahora.toString(),
                                         texto: controller.text,
                                         colorValue: colorFinal,
                                         rotacion: (math.Random().nextDouble() - 0.5) * 0.1,
                                         tipo: tipoActual,
                                         titulo: tituloController.text.trim(),
-                                        elementosLista: itemsTemp
+                                        elementosLista: itemsTemp,
+                                        creadaEn: ahora,
                                       );
                                       ref.read(notaProvider.notifier).agregarNota(nueva);
                                     }

@@ -29,6 +29,16 @@ class NotaPostIt {
   // "grupo" separada, así que cuando la última nota con ese nombre se
   // desagrupa o se elimina, el grupo simplemente deja de existir.
   String grupoNombre;
+  // true si el usuario la destacó para que aparezca en los widgets de
+  // Notas (máximo 2 a la vez, ver alternarDestacada en nota_provider.dart).
+  bool destacada;
+  // Momento de creación (millisecondsSinceEpoch), independiente del orden
+  // en el tablero (que el usuario puede reordenar arrastrando, ver
+  // moverNota). Los widgets lo usan para elegir "las últimas 2 creadas"
+  // cuando no hay ninguna destacada. Notas guardadas antes de este campo
+  // existir quedan en 0 (la fecha real se perdió), lo que las trata como
+  // las más antiguas posibles — comportamiento razonable por defecto.
+  int creadaEn;
 
   NotaPostIt({
     required this.id,
@@ -39,6 +49,8 @@ class NotaPostIt {
     List<ItemLista>? elementosLista,
     this.titulo = '',
     this.grupoNombre = '',
+    this.destacada = false,
+    this.creadaEn = 0,
   }) : elementosLista = elementosLista ?? [];
 
   Color get color => Color(colorValue);
@@ -50,6 +62,7 @@ class NotaPostIt {
     List<ItemLista>? elementosLista,
     String? titulo,
     String? grupoNombre,
+    bool? destacada,
   }) {
     return NotaPostIt(
       id: id,
@@ -60,6 +73,8 @@ class NotaPostIt {
       elementosLista: elementosLista ?? this.elementosLista.map((e) => ItemLista(texto: e.texto, completado: e.completado)).toList(),
       titulo: titulo ?? this.titulo,
       grupoNombre: grupoNombre ?? this.grupoNombre,
+      destacada: destacada ?? this.destacada,
+      creadaEn: creadaEn,
     );
   }
 
@@ -72,6 +87,8 @@ class NotaPostIt {
     'elementosLista': elementosLista.map((e) => e.toMap()).toList(),
     'titulo': titulo,
     'grupoNombre': grupoNombre,
+    'destacada': destacada,
+    'creadaEn': creadaEn,
   };
 
   factory NotaPostIt.fromMap(Map<String, dynamic> map) => NotaPostIt(
@@ -83,5 +100,7 @@ class NotaPostIt {
     elementosLista: (map['elementosLista'] as List?)?.map((e) => ItemLista.fromMap(e as Map<String, dynamic>)).toList() ?? [],
     titulo: map['titulo'] ?? '',
     grupoNombre: map['grupoNombre'] ?? '',
+    destacada: map['destacada'] ?? false,
+    creadaEn: (map['creadaEn'] as num?)?.toInt() ?? 0,
   );
 }

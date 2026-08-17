@@ -17,7 +17,6 @@ import '../../providers/monedas_provider.dart';
 import '../widgets/rutina_card.dart';
 import 'rutina_form_screen.dart';
 import '../../providers/tema_provider.dart';
-import 'package:permission_handler/permission_handler.dart'; 
 import 'dart:async';
 import '../widgets/onboarding_permisos.dart';
 import '../../services/notificaciones_service.dart';
@@ -33,6 +32,44 @@ import '../widgets/tarea_card_landscape.dart';
 import '../widgets/rutina_card_landscape.dart';
 import '../widgets/home_sidebar_landscape.dart';
 import '../widgets/overflow_scrollbar.dart';
+
+// Puente para pedirle a HomeScreen que cambie de pestaña desde fuera del
+// árbol de widgets (el handler de clicks del widget de Rutinas en
+// main.dart, que no tiene un BuildContext propio). _HomeScreenState lo
+// escucha en initState y lo vuelve a null en cuanto lo consume, así que es
+// un "comando" de un solo uso, no un estado persistente de la pestaña
+// actual (eso lo sigue siendo _currentIndex).
+class TabSolicitadaWidgetNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void solicitar(int indice) => state = indice;
+  void limpiar() => state = null;
+}
+
+final tabSolicitadaWidgetProvider = NotifierProvider<TabSolicitadaWidgetNotifier, int?>(
+  TabSolicitadaWidgetNotifier.new,
+);
+
+// Pestaña activa, persistida en el ProviderContainer (que sobrevive aunque
+// HomeScreen se destruya y se vuelva a montar — cosa que puede pasar, por
+// ejemplo, cuando el widget de Rutinas trae la app al frente mientras ya
+// estaba corriendo: se observó que en ese momento HomeScreen a veces se
+// remonta de cero, perdiendo _currentIndex y el TabController local, y
+// volviendo siempre a la pestaña 0 aunque tabSolicitadaWidgetProvider ya
+// hubiera pedido correctamente la pestaña de Rutinas un instante antes).
+// _HomeScreenState arranca su TabController leyendo este valor en vez de
+// hardcodear 0, así que un remont sigue mostrando la pestaña correcta.
+class CurrentTabIndexNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void actualizar(int indice) => state = indice;
+}
+
+final currentTabIndexProvider = NotifierProvider<CurrentTabIndexNotifier, int>(
+  CurrentTabIndexNotifier.new,
+);
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -93,28 +130,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   final ScrollController _scrollRutinas = ScrollController();
   final ScrollController _scrollNotas = ScrollController();
 
+  // Suscripción manual (fuera de build()) a tabSolicitadaWidgetProvider: el
+  // handler de clicks del widget de Rutinas en main.dart la usa para pedir
+  // "andá a la pestaña de Rutinas" sin tener un BuildContext propio.
+  late final ProviderSubscription<int?> _tabSolicitadaWidgetSub;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    
+    // initialIndex viene de currentTabIndexProvider (no un 0 fijo) para que
+    // esta pestaña sobreviva a un remount de HomeScreen — ver el comentario
+    // de currentTabIndexProvider más arriba.
+    _currentIndex = ref.read(currentTabIndexProvider);
+    _tabController = TabController(length: 3, vsync: this, initialIndex: _currentIndex);
+
+    _tabSolicitadaWidgetSub = ref.listenManual<int?>(tabSolicitadaWidgetProvider, (previo, indice) {
+      if (indice != null) {
+        _tabController.animateTo(indice);
+        ref.read(tabSolicitadaWidgetProvider.notifier).limpiar();
+      }
+    });
+
     _tabController.animation?.addListener(() {
       final int proximoIndex = _tabController.animation!.value.round();
       if (_currentIndex != proximoIndex) {
         setState(() => _currentIndex = proximoIndex);
+        ref.read(currentTabIndexProvider.notifier).actualizar(proximoIndex);
       }
     });
 
     _tabController.addListener(() {
       if (_tabController.indexIsChanging && _currentIndex != _tabController.index) {
         setState(() => _currentIndex = _tabController.index);
+        ref.read(currentTabIndexProvider.notifier).actualizar(_tabController.index);
       }
     });
-
-    // Nota: Si este método solo pedía lo de la batería, eventualmente podrías 
-    // borrarlo, ya que el nuevo Onboarding lo pide en el "Paso 2". 
-    // Por ahora lo puedes dejar sin problemas.
-    _solicitarPermisosDeBateria();
 
     // --- SINCRONIZACIÓN AUTOMÁTICA AL ABRIR LA APP ---
     // addPostFrameCallback espera a que se dibuje el primer frame antes de ejecutar
@@ -192,17 +242,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     }
   } */
 
-  // Solicita al sistema operativo los 3 permisos críticos para que las alarmas
-  // de rutinas suenen de forma confiable: notificaciones, ignorar optimización
-  // de batería (para que Android no "duerma" la app) y alarmas exactas.
-  Future<void> _solicitarPermisosDeBateria() async {
-    if (await Permission.notification.isDenied) await Permission.notification.request();
-    if (await Permission.ignoreBatteryOptimizations.isDenied) await Permission.ignoreBatteryOptimizations.request();
-    if (await Permission.scheduleExactAlarm.isDenied) await Permission.scheduleExactAlarm.request();
-  }
-
   @override
   void dispose() {
+    _tabSolicitadaWidgetSub.close();
     _tabController.dispose();
     _scrollTareas.dispose();
     _scrollRutinas.dispose();
@@ -596,6 +638,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       onToggleSeleccion: () => _alternarSeleccionNota(nota.id),
       onTapEditar: () => mostrarDialogoNota(context, ref, idAEditar: nota.id),
       onDelete: () => _eliminarNota(nota),
+      onToggleDestacada: () => alternarDestacadaConFeedback(context, ref, nota.id),
     );
 
     if (_modoSeleccionNotas) return tarjeta;
@@ -1673,6 +1716,11 @@ class _TareaCardState extends ConsumerState<TareaCard> {
     final bool estaAtrasada = !tarea.esCompletada && tarea.fechaLimite != null && tarea.fechaLimite!.isBefore(DateTime.now());
     final bool tieneSubtareas = tarea.subtareas.isNotEmpty;
     final bool tieneDescripcionVisible = tarea.descripcion != null && tarea.descripcion!.isNotEmpty;
+    final bool esRecurrente = tarea.tipoRecurrencia != TipoRecurrencia.ninguna;
+    // Una tarea recurrente nunca queda con esCompletada = true (ver
+    // toggleTarea): su "undo" se detecta por tener una completación
+    // reciente para deshacer, no por esCompletada.
+    final bool puedeDeshacerRecurrente = esRecurrente && tarea.fechaLimiteAnterior != null;
     const Color colorTextoClaro = Color(0xFFF1F5F9);
 
     return Container(
@@ -1749,6 +1797,10 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                                       ).format(tarea.fechaLimite!),
                                       style: TextStyle(color: colorBase.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w600),
                                     ),
+                                    if (esRecurrente) ...[
+                                      const SizedBox(width: 4),
+                                      Icon(Icons.repeat, size: 14, color: colorBase.withValues(alpha: 0.9)),
+                                    ],
                                   ]),
                                 if (tieneSubtareas) ...[
                                   if (!tarea.esCompletada && tarea.fechaLimite != null) const SizedBox(height: 6),
@@ -1785,7 +1837,7 @@ class _TareaCardState extends ConsumerState<TareaCard> {
             ),
           ),
           if (estaAtrasada) Positioned(top: 12, right: 12, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red.shade700, borderRadius: BorderRadius.circular(8), boxShadow: const [BoxShadow(blurRadius: 4, color: Colors.black26, offset: Offset(0, 2))]), child: const Text('ATRASADO', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)))),
-          if (_showOverlayMenu) Positioned.fill(child: GestureDetector(onTap: () => setState(() => _showOverlayMenu = false), child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0), child: Container(color: Colors.white.withValues(alpha: 0.2), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [_buildActionIcon(icon: tarea.esCompletada ? Icons.undo : Icons.check_rounded, color: const Color(0xFF4CAF50), onTap: () { ref.read(tareaProvider.notifier).toggleTarea(tarea.id); setState(() => _showOverlayMenu = false); }), _buildActionIcon(icon: Icons.edit_rounded, color: Colors.blueGrey, onTap: () { setState(() => _showOverlayMenu = false); abrirFormularioTarea(context, tareaAEditar: tarea); }), _buildActionIcon(icon: Icons.delete_rounded, color: Colors.redAccent, onTap: () { setState(() => _showOverlayMenu = false); Future.delayed(const Duration(milliseconds: 150), () { if (!mounted) return; ref.read(tareaProvider.notifier).deleteTarea(tarea.id); mostrarSnackBarSimple(mensaje: 'Tarea eliminada', colorFondo: widget.tema.colorPrincipal, colorTexto: widget.tema.colorSobrePrincipal); }); })]))))),
+          if (_showOverlayMenu) Positioned.fill(child: GestureDetector(onTap: () => setState(() => _showOverlayMenu = false), child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0), child: Container(color: Colors.white.withValues(alpha: 0.2), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [_buildActionIcon(icon: (tarea.esCompletada || puedeDeshacerRecurrente) ? Icons.undo : Icons.check_rounded, color: const Color(0xFF4CAF50), onTap: () { if (puedeDeshacerRecurrente) { ref.read(tareaProvider.notifier).deshacerRecurrente(tarea.id); } else { ref.read(tareaProvider.notifier).toggleTarea(tarea.id); } setState(() => _showOverlayMenu = false); }), _buildActionIcon(icon: Icons.edit_rounded, color: Colors.blueGrey, onTap: () { setState(() => _showOverlayMenu = false); abrirFormularioTarea(context, tareaAEditar: tarea); }), _buildActionIcon(icon: Icons.delete_rounded, color: Colors.redAccent, onTap: () { setState(() => _showOverlayMenu = false); Future.delayed(const Duration(milliseconds: 150), () { if (!mounted) return; ref.read(tareaProvider.notifier).deleteTarea(tarea.id); mostrarSnackBarSimple(mensaje: 'Tarea eliminada', colorFondo: widget.tema.colorPrincipal, colorTexto: widget.tema.colorSobrePrincipal); }); })]))))),
         ],
       ),
     );

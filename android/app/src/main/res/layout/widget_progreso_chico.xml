@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- match_parent en ambas dimensiones (no wrap_content): mismo motivo que
+     el resto de los widgets de tamaño fijo (ver widget_rutinas_chico.xml) —
+     en launchers con grid "responsive" el host puede terminar más grande que
+     el minWidth/minHeight de progreso_widget_chico_info.xml. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_progreso_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Hoy"
+            android:textColor="@color/widget_accent"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_progreso_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="4dp"
+            android:text="⟳"
+            android:textColor="@color/widget_accent"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <!-- Selector Día/Semana/Mes desactivado por ahora: sin historial de
+         completado por fecha (ver WidgetProgresoService) no hay datos reales
+         para Semana/Mes. Queda comentado (no borrado) para retomarlo cuando
+         exista ese historial, en vez de tener que rehacer el layout desde
+         cero.
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_button_pill"
+            android:paddingLeft="10dp"
+            android:paddingRight="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="Día"
+            android:textColor="@color/widget_accent"
+            android:textStyle="bold"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_pill_periodo_inactivo"
+            android:paddingLeft="10dp"
+            android:paddingRight="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="Semana"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_pill_periodo_inactivo"
+            android:paddingLeft="10dp"
+            android:paddingRight="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="Mes"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="11sp" />
+
+    </LinearLayout>
+    -->
+
+    <TextView
+        android:id="@+id/widget_progreso_fecha_hoy"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="12sp" />
+
+    <!-- 0dp+weight=1: ocupa el alto que sobra debajo del header, con el
+         anillo y la columna derecha centrados verticalmente en ese espacio
+         (mismo criterio que widget_rutinas_chico.xml). -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <FrameLayout
+            android:layout_width="84dp"
+            android:layout_height="84dp">
+
+            <ImageView
+                android:id="@+id/widget_progreso_anillo_tareas"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="Progreso de tareas de hoy" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:orientation="vertical"
+                android:gravity="center_horizontal">
+
+                <TextView
+                    android:id="@+id/widget_progreso_tareas_fraccion"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="TAREAS"
+                    android:textColor="@color/widget_text_tertiary"
+                    android:textSize="9sp" />
+
+            </LinearLayout>
+
+        </FrameLayout>
+
+        <!-- Columna derecha: resumen de Rutinas, siempre visible (ya no
+             alterna con un mensaje de "nada completado" — ver
+             ProgresoWidgetProviderChico). Con 0 rutinas programadas o 0
+             hechas simplemente muestra "0/0" o "0/N", sin caso especial. -->
+        <LinearLayout
+            android:id="@+id/widget_progreso_columna_rutinas"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="14dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Rutinas"
+                android:textColor="@color/widget_accent"
+                android:textStyle="bold"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/widget_progreso_rutinas_fraccion"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="@color/widget_text_primary"
+                android:textStyle="bold"
+                android:textSize="15sp" />
+
+            <ProgressBar
+                android:id="@+id/widget_progreso_rutinas_bar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:layout_marginTop="6dp"
+                android:max="100"
+                android:progressDrawable="@drawable/widget_progress_rutinas" />
+
+            <TextView
+                android:id="@+id/widget_progreso_rutinas_pendientes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="11sp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

@@ -12,4 +12,13 @@
     <color name="widget_text_tertiary">#FF9E9E9E</color>
     <!-- Mismo teal que ColorScheme.fromSeed(seedColor: Colors.teal) en main.dart -->
     <color name="widget_accent">#FF00796B</color>
+    <!-- Fecha cuando la tarea vence hoy o ya venció -->
+    <color name="widget_date_urgent">#FFD32F2F</color>
+    <!-- Azul del anillo/cifras de Tareas en el widget de Progreso, para
+         distinguirlo del teal de Rutinas (@color/widget_accent). Mismo azul
+         que TareasWidgetProviderBase usa para urgencia=2. -->
+    <color name="widget_progress_tareas">#FF2196F3</color>
+    <!-- Fondo del anillo (la parte "sin completar") y de las pestañas
+         Semana/Mes inactivas del widget de Progreso. -->
+    <color name="widget_progress_vacio">#FFE3E3E3</color>
 </resources>

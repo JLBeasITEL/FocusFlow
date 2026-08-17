@@ -67,47 +67,99 @@
         </receiver>
 
         <receiver
-            android:name=".TareasWidgetProvider"
+            android:name=".TareasWidgetProviderChico"
+            android:label="@string/tareas_widget_chico_label"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/tareas_widget_info"/>
+                android:resource="@xml/tareas_widget_chico_info"/>
         </receiver>
 
         <receiver
-            android:name=".RutinasWidgetProvider"
+            android:name=".TareasWidgetProviderGrande"
+            android:label="@string/tareas_widget_grande_label"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/rutinas_widget_info"/>
+                android:resource="@xml/tareas_widget_grande_info"/>
         </receiver>
 
         <receiver
-            android:name=".NotaRapidaWidgetProvider"
+            android:name=".RutinasWidgetProviderChico"
+            android:label="@string/rutinas_widget_chico_label"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/nota_rapida_widget_info"/>
+                android:resource="@xml/rutinas_widget_chico_info"/>
         </receiver>
 
         <receiver
-            android:name=".ResumenWidgetProvider"
+            android:name=".RutinasWidgetProviderGrande"
+            android:label="@string/rutinas_widget_grande_label"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/resumen_widget_info"/>
+                android:resource="@xml/rutinas_widget_grande_info"/>
+        </receiver>
+
+        <receiver
+            android:name=".NotasWidgetProviderChico"
+            android:label="@string/notas_widget_chico_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/notas_widget_chico_info"/>
+        </receiver>
+
+        <receiver
+            android:name=".NotasWidgetProviderGrande"
+            android:label="@string/notas_widget_grande_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/notas_widget_grande_info"/>
+        </receiver>
+
+        <receiver
+            android:name=".ProgresoWidgetProviderChico"
+            android:label="@string/progreso_widget_chico_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/progreso_widget_chico_info"/>
+        </receiver>
+
+        <receiver
+            android:name=".ProgresoWidgetProviderGrande"
+            android:label="@string/progreso_widget_grande_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/progreso_widget_grande_info"/>
         </receiver>
 
         <!-- Usado por home_widget para ejecutar el callback de interactividad en

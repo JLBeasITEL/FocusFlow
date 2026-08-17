@@ -7,4 +7,5 @@
     <color name="widget_text_secondary">#FFB5B5B5</color>
     <color name="widget_text_tertiary">#FF8A8A8A</color>
     <color name="widget_accent">#FF4DB6AC</color>
+    <color name="widget_date_urgent">#FFEF5350</color>
 </resources>

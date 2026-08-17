@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- match_parent en ambas dimensiones: mismo motivo que
+     widget_rutinas_grande.xml (grid "responsive" del launcher). El resto del
+     árbol (header y tarjetas) usa wrap_content de acá para abajo a propósito
+     — ver nota en widget_progreso_contenido más abajo. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_progreso_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Progreso"
+            android:textColor="@color/widget_accent"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_progreso_dia_hoy"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="13sp" />
+
+        <!-- Selector Día/Semana/Mes desactivado por ahora: sin historial de
+             completado por fecha (ver WidgetProgresoService) no hay datos
+             reales para Semana/Mes. Queda comentado (no borrado) para
+             retomarlo cuando exista ese historial, mismo criterio que
+             widget_progreso_chico.xml.
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_button_pill"
+            android:paddingLeft="10dp"
+            android:paddingRight="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="Día"
+            android:textColor="@color/widget_accent"
+            android:textStyle="bold"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_pill_periodo_inactivo"
+            android:paddingLeft="10dp"
+            android:paddingRight="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="Semana"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_pill_periodo_inactivo"
+            android:paddingLeft="10dp"
+            android:paddingRight="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="Mes"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="11sp" />
+        -->
+
+        <TextView
+            android:id="@+id/widget_progreso_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:padding="4dp"
+            android:text="⟳"
+            android:textColor="@color/widget_accent"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <!-- Dos tarjetas lado a lado, una por métrica, siempre visibles (Rutinas
+         no debe desaparecer solo porque todavía no se completó nada hoy —
+         con 0% el anillo simplemente se ve gris, sin caso especial).
+         wrap_content (no 0dp+weight=1 como antes): con weight=1, esta fila
+         quedaba con la altura exacta que le sobraba al widget debajo del
+         header, y si esa altura terminaba siendo menor que lo que las
+         tarjetas necesitaban (anillo + 3 líneas de texto), el contenido se
+         recortaba en el borde de la tarjeta en vez de simplemente ocupar lo
+         que hiciera falta. Con wrap_content la fila (y las tarjetas adentro,
+         también wrap_content) se dimensionan por su propio contenido; si el
+         host da más alto del que se usa, sobra espacio abajo, pero nunca se
+         corta texto. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:orientation="horizontal">
+
+        <!-- Tarjeta Tareas -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/widget_row_background"
+            android:padding="12dp">
+
+            <FrameLayout
+                android:layout_width="58dp"
+                android:layout_height="58dp">
+
+                <ImageView
+                    android:id="@+id/widget_progreso_tareas_anillo"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="Porcentaje de tareas completadas hoy" />
+
+                <TextView
+                    android:id="@+id/widget_progreso_tareas_porcentaje"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:textColor="@color/widget_progress_tareas"
+                    android:textStyle="bold"
+                    android:textSize="13sp" />
+
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="Tareas"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/widget_progreso_tareas_fraccion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/widget_progress_tareas"
+                    android:textStyle="bold"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/widget_progreso_tareas_pendientes"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/widget_text_secondary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Tarjeta Rutinas -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/widget_row_background"
+            android:padding="12dp">
+
+            <FrameLayout
+                android:layout_width="58dp"
+                android:layout_height="58dp">
+
+                <ImageView
+                    android:id="@+id/widget_progreso_rutinas_anillo"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="Porcentaje de rutinas completadas hoy" />
+
+                <TextView
+                    android:id="@+id/widget_progreso_rutinas_porcentaje"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:textColor="@color/widget_accent"
+                    android:textStyle="bold"
+                    android:textSize="13sp" />
+
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="Rutinas"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/widget_progreso_rutinas_fraccion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/widget_accent"
+                    android:textStyle="bold"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/widget_progreso_rutinas_pendientes"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/widget_text_secondary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

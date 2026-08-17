@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- match_parent en ambas dimensiones (no wrap_content): en launchers
+     modernos con grid "responsive", un widget resizeMode="none" igual puede
+     terminar con un host bastante más grande que el minWidth/minHeight
+     declarados en notas_widget_grande_info.xml (el sistema reserva celdas
+     completas, no el tamaño exacto pedido). Con wrap_content el fondo del
+     widget solo envolvía el contenido real, dejando un margen enorme de
+     wallpaper alrededor de una tarjeta chica. match_parent hace que el
+     fondo llene lo que el host le haya dado; widget_notas_contenido y
+     widget_notas_vacio (ver más abajo) se estiran con weight=1 para ocupar
+     ese espacio en vez de quedar chicos y pegados arriba. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_notas_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Notas rápidas"
+            android:textColor="@color/widget_accent"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_notas_nueva_header"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/widget_button_pill"
+            android:paddingLeft="14dp"
+            android:paddingRight="14dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="+ Nueva nota"
+            android:textColor="@color/widget_accent"
+            android:textStyle="bold"
+            android:textSize="12sp" />
+
+        <ImageView
+            android:id="@+id/widget_notas_toggle_cantidad"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_marginEnd="4dp"
+            android:padding="2dp"
+            android:src="@drawable/ic_widget_swap"
+            android:contentDescription="Alternar entre 2 y 4 notas" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⟳"
+            android:textColor="@color/widget_accent"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <!-- 0dp+weight=1: ocupa todo el alto que sobra debajo del header.
+         Vertical porque adentro puede haber una o dos filas de tarjetas
+         (widget_notas_fila_superior siempre, widget_notas_fila_inferior
+         solo en modo "4 notas" — ver NotasWidgetProviderBase.kt, que
+         también decide ahí el tamaño de letra y maxLines de cada cuerpo
+         según haya 2 o 4 notas visibles). El título de cada tarjeta se
+         oculta por completo cuando la nota no tiene uno propio, así que el
+         cuerpo es lo único que ocupa la tarjeta en ese caso. -->
+    <LinearLayout
+        android:id="@+id/widget_notas_contenido"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="12dp"
+        android:orientation="vertical">
+
+        <!-- Fila superior: notas 1 y 2, siempre visible cuando hay notas.
+             match_parent de alto para que el fondo gris de cada tarjeta se
+             estire con su mitad de fila, y gravity="center_vertical" para
+             centrar título+cuerpo+hora como bloque en vez de pegarlos
+             arriba. -->
+        <LinearLayout
+            android:id="@+id/widget_notas_fila_superior"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+
+            <!-- Nota 1 -->
+            <LinearLayout
+                android:id="@+id/widget_notas_fila1"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginEnd="10dp"
+                android:orientation="vertical"
+                android:gravity="center_vertical"
+                android:background="@drawable/widget_row_background"
+                android:padding="14dp">
+                <TextView
+                    android:id="@+id/widget_notas_titulo1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="14sp" />
+                <TextView
+                    android:id="@+id/widget_notas_cuerpo1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:maxLines="12"
+                    android:textColor="@color/widget_text_secondary"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/widget_notas_tiempo1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="@color/widget_text_tertiary"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <!-- Nota 2 -->
+            <LinearLayout
+                android:id="@+id/widget_notas_fila2"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center_vertical"
+                android:background="@drawable/widget_row_background"
+                android:padding="14dp">
+                <TextView
+                    android:id="@+id/widget_notas_titulo2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="14sp" />
+                <TextView
+                    android:id="@+id/widget_notas_cuerpo2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:maxLines="12"
+                    android:textColor="@color/widget_text_secondary"
+                    android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/widget_notas_tiempo2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="@color/widget_text_tertiary"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Fila inferior: notas 3 y 4, solo en modo "4 notas". Arranca
+             GONE — NotasWidgetProviderBase.kt la muestra cuando llegan más
+             de 2 notas en el JSON (modo activo guardado en
+             notas_widget_modo_cantidad). Misma estructura que la fila
+             superior, con tamaño de letra ya más chico por defecto porque
+             esta fila solo aparece cuando hay 4 tarjetas compitiendo por el
+             mismo alto. -->
+        <LinearLayout
+            android:id="@+id/widget_notas_fila_inferior"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <!-- Nota 3 -->
+            <LinearLayout
+                android:id="@+id/widget_notas_fila3"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginEnd="10dp"
+                android:orientation="vertical"
+                android:gravity="center_vertical"
+                android:background="@drawable/widget_row_background"
+                android:padding="12dp">
+                <TextView
+                    android:id="@+id/widget_notas_titulo3"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="13sp" />
+                <TextView
+                    android:id="@+id/widget_notas_cuerpo3"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:maxLines="4"
+                    android:textColor="@color/widget_text_secondary"
+                    android:textSize="11sp" />
+                <TextView
+                    android:id="@+id/widget_notas_tiempo3"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:textColor="@color/widget_text_tertiary"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <!-- Nota 4 -->
+            <LinearLayout
+                android:id="@+id/widget_notas_fila4"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center_vertical"
+                android:background="@drawable/widget_row_background"
+                android:padding="12dp">
+                <TextView
+                    android:id="@+id/widget_notas_titulo4"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="13sp" />
+                <TextView
+                    android:id="@+id/widget_notas_cuerpo4"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:maxLines="4"
+                    android:textColor="@color/widget_text_secondary"
+                    android:textSize="11sp" />
+                <TextView
+                    android:id="@+id/widget_notas_tiempo4"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:textColor="@color/widget_text_tertiary"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Mismo slot 0dp+weight=1 que widget_notas_contenido (mutuamente
+         excluyentes por visibility): el recuadro punteado se estira para
+         ocupar el espacio sobrante y su contenido queda centrado tanto
+         vertical como horizontalmente en vez de pegado arriba. -->
+    <LinearLayout
+        android:id="@+id/widget_notas_vacio"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="12dp"
+        android:orientation="vertical"
+        android:background="@drawable/widget_empty_dashed_border"
+        android:padding="24dp"
+        android:gravity="center"
+        android:visibility="gone">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Aún no hay notas"
+            android:textColor="@color/widget_text_primary"
+            android:textStyle="bold"
+            android:textSize="16sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center_horizontal"
+            android:text="Lo que escribas aparecerá aquí, sin abrir la app."
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="13sp" />
+        <TextView
+            android:id="@+id/widget_notas_nueva_vacio"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/widget_button_pill"
+            android:paddingLeft="20dp"
+            android:paddingRight="20dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:text="+ Nueva nota"
+            android:textColor="@color/widget_accent"
+            android:textStyle="bold"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+</LinearLayout>

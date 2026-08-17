@@ -1,7 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="tareas_widget_description">Muestra tus tareas próximas o más importantes</string>
-    <string name="rutinas_widget_description">Muestra tus rutinas de hoy y tu progreso</string>
-    <string name="nota_rapida_widget_description">Acceso directo para crear una nota nueva</string>
-    <string name="resumen_widget_description">Resumen del día: tareas y rutinas por categoría</string>
+    <string name="tareas_widget_chico_label">Tareas · Compacto</string>
+    <string name="tareas_widget_chico_description">Tus 2 tareas próximas o más importantes</string>
+    <string name="tareas_widget_grande_label">Tareas · Grande</string>
+    <string name="tareas_widget_grande_description">Tus 4 tareas próximas o más importantes</string>
+    <string name="rutinas_widget_chico_label">Rutinas · Compacto</string>
+    <string name="rutinas_widget_chico_description">Tus 2 rutinas de hoy y tu progreso</string>
+    <string name="rutinas_widget_grande_label">Rutinas · Grande</string>
+    <string name="rutinas_widget_grande_description">Tus 4 rutinas de hoy y tu progreso</string>
+    <string name="notas_widget_chico_label">Notas · Compacto</string>
+    <string name="notas_widget_chico_description">Tus 2 notas destacadas (o las últimas creadas)</string>
+    <string name="notas_widget_grande_label">Notas · Grande</string>
+    <string name="notas_widget_grande_description">Tus 2 notas destacadas (o las últimas creadas)</string>
+    <string name="progreso_widget_chico_label">Progreso · Compacto</string>
+    <string name="progreso_widget_chico_description">Tu progreso de hoy en tareas y rutinas</string>
+    <string name="progreso_widget_grande_label">Progreso · Grande</string>
+    <string name="progreso_widget_grande_description">Tu progreso de hoy en tareas y rutinas, con anillos</string>
 </resources>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- minWidth/minHeight siguen la fórmula clásica de Android para el
+     ancho/alto mínimo de un widget según cantidad de celdas: 70×N − 30dp
+     (180dp=3 columnas, 110dp=2 filas) — quedan como respaldo para launchers
+     viejos (pre Android 12) que no leen targetCellWidth/targetCellHeight.
+     Esa fórmula asume una celda ~70dp cuadrada, pero en la práctica cada
+     launcher usa su propia grilla real (columnas y filas casi nunca miden
+     lo mismo en dp, sobre todo en filas: la pantalla es más alta que ancha
+     pero con más filas que columnas), así que 110dp podía seguir
+     redondeando a 3 filas reales en vez de 2 en algunos launchers.
+     targetCellWidth/Height (API 31+, "widgets responsivos") le pide al
+     launcher moderno el tamaño exacto en celdas de SU propia grilla en vez
+     de que Android lo adivine a partir de un dp fijo — ahí es donde de
+     verdad se define "2 filas × 3 columnas" en la mayoría de los devices
+     actuales. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/widget_progreso_chico"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:previewImage="@drawable/widget_preview_progreso"
+    android:description="@string/progreso_widget_chico_description" />

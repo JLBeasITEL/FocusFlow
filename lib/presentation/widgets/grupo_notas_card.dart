@@ -312,6 +312,7 @@ class _GrupoNotasDetalleScreenState extends ConsumerState<GrupoNotasDetalleScree
                       onTapEditar: () => mostrarDialogoNota(context, ref, idAEditar: nota.id),
                       onDelete: () => _eliminarNota(ref, colorTema, colorSobreTema, nota),
                       onQuitarDeGrupo: () => ref.read(notaProvider.notifier).quitarDeGrupo(nota.id),
+                      onToggleDestacada: () => alternarDestacadaConFeedback(context, ref, nota.id),
                     );
                   },
                   ),
