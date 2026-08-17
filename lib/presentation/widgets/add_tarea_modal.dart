@@ -128,8 +128,12 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
       if (huboHoraExplicita) {
         _horaSeleccionada = TimeOfDay(hour: _fechaSeleccionada!.hour, minute: _fechaSeleccionada!.minute);
       }
-      _mostrarAvanzadas = true;
-    } else if (_descripcionController.text.isNotEmpty ||
+    }
+    // Fecha/Hora ya no vive dentro de "Más opciones" (siempre visible, ver
+    // _buildPortrait), así que tener fechaLimite ya no es motivo por sí solo
+    // para auto-expandir: solo Descripción/Horas estimadas/Subtareas siguen
+    // ahí, y son las que deciden si hace falta abrirlo de entrada.
+    if (_descripcionController.text.isNotEmpty ||
         _horasController.text.isNotEmpty ||
         _subtareasTemp.isNotEmpty) {
       // Subtareas ahora vive dentro de "Más opciones": si la tarea que se
@@ -929,6 +933,62 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
             ),
             // --- FIN DEL CAMPO DE GRUPO ---
 
+            // Fecha/Hora (y, con fecha elegida, Recurrencia) viven fuera del
+            // toggle "Más opciones": a diferencia de Descripción/Subtareas/
+            // Plantillas (secundarias, colapsadas por defecto), la fecha
+            // límite es un dato de primer nivel que antes solo aparecía tras
+            // expandir "Más opciones" — invisible por defecto en creación
+            // (sin datos previos que la auto-expandan, a diferencia de
+            // editar una tarea que ya trae fechaLimite). Mostrarla siempre
+            // deja creación y edición con el mismo número de pasos para
+            // llegar a Recurrencia.
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _elegirFecha,
+                    icon: const Icon(Icons.calendar_today, size: 18),
+                    label: Text(_fechaSeleccionada == null ? 'Fecha' : DateFormat('dd MMM').format(_fechaSeleccionada!)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+                if (_fechaSeleccionada != null)
+                  IconButton(
+                    onPressed: _limpiarFecha,
+                    icon: const Icon(Icons.close, size: 18),
+                    tooltip: 'Quitar fecha',
+                    visualDensity: VisualDensity.compact,
+                  ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _elegirHora,
+                    icon: const Icon(Icons.access_time, size: 18),
+                    label: Text(_horaSeleccionada == null ? 'Hora' : _horaSeleccionada!.format(context)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+                if (_horaSeleccionada != null)
+                  IconButton(
+                    onPressed: _limpiarHora,
+                    icon: const Icon(Icons.close, size: 18),
+                    tooltip: 'Quitar hora',
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
+            if (_fechaSeleccionada != null) ...[
+              const SizedBox(height: 16),
+              _buildSelectorRecurrencia(),
+            ],
+
             if (_mostrarAvanzadas) ...[
               const SizedBox(height: 16),
               TextField(
@@ -941,52 +1001,6 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                   focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
                 ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _elegirFecha,
-                      icon: const Icon(Icons.calendar_today, size: 18),
-                      label: Text(_fechaSeleccionada == null ? 'Fecha' : DateFormat('dd MMM').format(_fechaSeleccionada!)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                  ),
-                  if (_fechaSeleccionada != null)
-                    IconButton(
-                      onPressed: _limpiarFecha,
-                      icon: const Icon(Icons.close, size: 18),
-                      tooltip: 'Quitar fecha',
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _elegirHora,
-                      icon: const Icon(Icons.access_time, size: 18),
-                      label: Text(_horaSeleccionada == null ? 'Hora' : _horaSeleccionada!.format(context)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                  ),
-                  if (_horaSeleccionada != null)
-                    IconButton(
-                      onPressed: _limpiarHora,
-                      icon: const Icon(Icons.close, size: 18),
-                      tooltip: 'Quitar hora',
-                      visualDensity: VisualDensity.compact,
-                    ),
-                ],
-              ),
-              if (_fechaSeleccionada != null) ...[
-                const SizedBox(height: 16),
-                _buildSelectorRecurrencia(),
-              ],
             ],
 
             const SizedBox(height: 24),
@@ -1255,7 +1269,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
               TextButton.icon(
                 onPressed: () => setState(() => _mostrarAvanzadas = true),
                 icon: const Icon(Icons.tune),
-                label: const Text('Más opciones (Esfuerzo y Fecha)'),
+                label: const Text('Más opciones (Descripción y Esfuerzo)'),
               ),
           ],
         ),
