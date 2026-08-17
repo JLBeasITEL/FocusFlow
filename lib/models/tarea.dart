@@ -7,6 +7,11 @@ const _uuid = Uuid();
 // explícitos y no hay forma de borrar fechaLimite/descripcion al editar.
 const _sinCambio = Object();
 
+// Persistido como string (name/byName en toJson/fromJson), NO como índice:
+// un índice se corrompe silenciosamente si el orden de los valores cambia
+// alguna vez, un string no.
+enum TipoRecurrencia { ninguna, dias, meses }
+
 // Mismo patrón que ItemLista en models/nota.dart (texto + completado marcable),
 // pero con id propio y estable: las operaciones de subtareas (toggle, eliminar,
 // reordenar) necesitan identificar un ítem sin depender de su posición en la lista.
@@ -44,6 +49,23 @@ class Tarea {
   final String grupo;
   final List<ItemSubtarea> subtareas;
 
+  // --- RECURRENCIA POR INTERVALO ---
+  // Una sola instancia viva por tarea: al completarla (ver
+  // TareaNotifier.toggleTarea), en vez de archivarla se recalcula
+  // fechaLimite con siguienteFecha() y esCompletada vuelve a false en el
+  // mismo copyWith, atómicamente. Nunca debe persistirse esCompletada=true
+  // en una tarea recurrente, porque la limpieza diaria de
+  // TareaNotifier._cargarTareasInterno la borraría para siempre.
+  final TipoRecurrencia tipoRecurrencia;
+  final int? intervalo; // N días o N meses, según tipoRecurrencia
+  final int? diaAncla; // 1-31, solo para meses; se fija al crear/editar y no cambia entre ocurrencias
+  // Guarda el fechaLimite que tenía la tarea justo antes de la última vez
+  // que se completó, para poder deshacer (ver
+  // TareaNotifier.deshacerRecurrente) y para que WidgetProgresoService
+  // pueda seguir contándola como "completada hoy" aunque su fechaLimite ya
+  // haya avanzado a la próxima ocurrencia.
+  final DateTime? fechaLimiteAnterior;
+
   Tarea({
     String? id,
     required this.titulo,
@@ -54,6 +76,10 @@ class Tarea {
     this.esCompletada = false,
     this.grupo = 'General',
     List<ItemSubtarea>? subtareas,
+    this.tipoRecurrencia = TipoRecurrencia.ninguna,
+    this.intervalo,
+    this.diaAncla,
+    this.fechaLimiteAnterior,
   }) : id = id ?? _uuid.v4(),
        subtareas = subtareas ?? [];
 
@@ -102,6 +128,36 @@ class Tarea {
     }
   }
 
+  // Calcula la próxima fecha límite de una tarea recurrente a partir de la
+  // fechaLimite ACTUAL (no de "ahora"): si la tarea se completa tarde, la
+  // siguiente ocurrencia sigue siendo relativa a cuándo debía vencer, no a
+  // cuándo se completó de verdad. Devuelve null si no aplica (sin
+  // recurrencia, sin fecha, o sin intervalo configurado).
+  DateTime? siguienteFecha() {
+    if (tipoRecurrencia == TipoRecurrencia.ninguna || fechaLimite == null || intervalo == null) {
+      return null;
+    }
+    final base = fechaLimite!;
+
+    if (tipoRecurrencia == TipoRecurrencia.dias) {
+      return base.add(Duration(days: intervalo!));
+    }
+
+    // meses: se avanza `intervalo` meses conservando diaAncla (el día del
+    // mes original) como referencia, en vez del día de `base` — así
+    // "31 ene" recortado a "28 feb" no se queda pegado en 28 para siempre:
+    // la siguiente ocurrencia vuelve a intentar el día 31 (-> 31 mar).
+    final ancla = diaAncla ?? base.day;
+    final mesesTotales = base.month - 1 + intervalo!;
+    final anioDestino = base.year + mesesTotales ~/ 12;
+    final mesDestino = mesesTotales % 12 + 1;
+    // día 0 del mes siguiente al destino == último día del mes destino.
+    final ultimoDiaMesDestino = DateTime(anioDestino, mesDestino + 1, 0).day;
+    final diaFinal = ancla > ultimoDiaMesDestino ? ultimoDiaMesDestino : ancla;
+
+    return DateTime(anioDestino, mesDestino, diaFinal, base.hour, base.minute);
+  }
+
   Tarea copyWith({
     String? id,
     String? titulo,
@@ -112,6 +168,10 @@ class Tarea {
     bool? esCompletada,
     String? grupo,
     List<ItemSubtarea>? subtareas,
+    TipoRecurrencia? tipoRecurrencia,
+    Object? intervalo = _sinCambio,
+    Object? diaAncla = _sinCambio,
+    Object? fechaLimiteAnterior = _sinCambio,
   }) {
     return Tarea(
       id: id ?? this.id,
@@ -123,6 +183,10 @@ class Tarea {
       esCompletada: esCompletada ?? this.esCompletada,
       grupo: grupo ?? this.grupo,
       subtareas: subtareas ?? this.subtareas.map((s) => ItemSubtarea(id: s.id, texto: s.texto, completado: s.completado)).toList(),
+      tipoRecurrencia: tipoRecurrencia ?? this.tipoRecurrencia,
+      intervalo: identical(intervalo, _sinCambio) ? this.intervalo : intervalo as int?,
+      diaAncla: identical(diaAncla, _sinCambio) ? this.diaAncla : diaAncla as int?,
+      fechaLimiteAnterior: identical(fechaLimiteAnterior, _sinCambio) ? this.fechaLimiteAnterior : fechaLimiteAnterior as DateTime?,
     );
   }
 
@@ -137,6 +201,10 @@ class Tarea {
       'esCompletada': esCompletada,
       'grupo': grupo,
       'subtareas': subtareas.map((s) => s.toJson()).toList(),
+      'tipoRecurrencia': tipoRecurrencia.name,
+      'intervalo': intervalo,
+      'diaAncla': diaAncla,
+      'fechaLimiteAnterior': fechaLimiteAnterior?.toIso8601String(),
     };
   }
 
@@ -151,11 +219,18 @@ class Tarea {
       // (json['horasEstimadas'] as num?) porque datos antiguos lo guardaron como int
       horasEstimadas: (json['horasEstimadas'] as num?)?.toDouble(),
       urgenciaBase: json['urgencia'] ?? json['urgenciaBase'] ?? 1, // Retrocompatibilidad
-      esCompletada: json['esCompletada'],
+      esCompletada: json['esCompletada'] as bool? ?? false,
       grupo: json['grupo'] ?? 'General',
       // Retrocompatibilidad: tareas guardadas antes de esta feature no tienen
       // este campo en su JSON, así que caen en la lista vacía por defecto.
       subtareas: (json['subtareas'] as List?)?.map((s) => ItemSubtarea.fromJson(s as Map<String, dynamic>)).toList() ?? [],
+      // Tareas guardadas antes de esta feature (o con un string desconocido/
+      // corrupto) no rompen: caen en TipoRecurrencia.ninguna, el mismo
+      // comportamiento que ya tenían.
+      tipoRecurrencia: TipoRecurrencia.values.asNameMap()[json['tipoRecurrencia'] as String?] ?? TipoRecurrencia.ninguna,
+      intervalo: json['intervalo'] as int?,
+      diaAncla: json['diaAncla'] as int?,
+      fechaLimiteAnterior: json['fechaLimiteAnterior'] != null ? DateTime.tryParse(json['fechaLimiteAnterior'] as String) : null,
     );
   }
 }
