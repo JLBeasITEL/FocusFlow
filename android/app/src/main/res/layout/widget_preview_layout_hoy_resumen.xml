@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Miniatura previewLayout (API 31+) para progreso_widget_chico_info.xml.
+     Copia estática de widget_progreso_chico.xml con contenido de ejemplo
+     fijo (estado 0/0 tareas, 0/2 rutinas, igual que un dispositivo recién
+     instalado), igual que la miniatura "Hoy · resumen" del PDF de diseño.
+     El anillo real se dibuja en Canvas desde Kotlin; en 0% coincide con un
+     aro liso (@drawable/widget_preview_ring_vacio).
+     layout_height="wrap_content" (no match_parent): el selector de widgets
+     reserva la tarjeta según targetCellHeight="2", que en varios launchers
+     es más alto que el contenido real, dejando espacio vacío debajo. Con
+     wrap_content la tarjeta se ajusta a su contenido igual que en el diseño
+     original en vez de estirarse a rellenar esa celda. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Hoy"
+            android:textColor="@color/widget_accent"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="4dp"
+            android:text="⟳"
+            android:textColor="@color/widget_accent"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Miércoles, 19 de agosto"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <FrameLayout
+            android:layout_width="84dp"
+            android:layout_height="84dp">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/widget_preview_ring_vacio" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:orientation="vertical"
+                android:gravity="center_horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0/0"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="TAREAS"
+                    android:textColor="@color/widget_text_tertiary"
+                    android:textSize="9sp" />
+
+            </LinearLayout>
+
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="14dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Rutinas"
+                android:textColor="@color/widget_accent"
+                android:textStyle="bold"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="0/2"
+                android:textColor="@color/widget_text_primary"
+                android:textStyle="bold"
+                android:textSize="15sp" />
+
+            <ProgressBar
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:layout_marginTop="6dp"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/widget_progress_rutinas" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="2 rutinas pendientes"
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="11sp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

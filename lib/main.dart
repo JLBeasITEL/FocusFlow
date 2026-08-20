@@ -5,6 +5,7 @@ import 'package:home_widget/home_widget.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/rutina_form_screen.dart';
 import 'presentation/screens/splash_screen.dart';
+import 'presentation/widgets/nota_dialog.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'services/notificaciones_service.dart';
 import 'services/widget_background_dispatcher.dart';
@@ -121,6 +122,49 @@ void _manejarClickWidget(Uri? uri) {
       navigatorKey.currentState?.popUntil((route) => route.isFirst);
       container.read(currentTabIndexProvider.notifier).actualizar(2);
       container.read(tabSolicitadaWidgetProvider.notifier).solicitar(2);
+      break;
+    // Tocar una tarjeta puntual del widget de Notas: además de llevar a la
+    // pestaña Notas, empuja AbrirNotaTrigger con el id que venga en la
+    // query string (ver NotasWidgetProviderBase.kt), que abre esa nota en
+    // el mismo diálogo de vista previa/edición que el tablero. Si el id no
+    // existe más (nota borrada mientras tanto) mostrarDialogoNota no abre
+    // nada y el trigger se cierra solo — mismo blindaje que usa el tablero.
+    case 'abrir_nota':
+      navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      container.read(currentTabIndexProvider.notifier).actualizar(2);
+      container.read(tabSolicitadaWidgetProvider.notifier).solicitar(2);
+      final idNota = uri?.queryParameters['id'];
+      if (idNota != null && idNota.isNotEmpty) {
+        navigatorKey.currentState?.push(
+          PageRouteBuilder(
+            opaque: false,
+            barrierColor: Colors.transparent,
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+            pageBuilder: (context, animation, secondaryAnimation) => AbrirNotaTrigger(idNota: idNota),
+          ),
+        );
+      }
+      break;
+    // Botones "+ Nueva nota" del widget de Notas: además de llevar a la
+    // pestaña Notas (igual que 'abrir_notas'), empuja NuevaNotaTrigger, que
+    // abre el mismo diálogo de creación que el botón "+" de la app (ver
+    // nota_dialog.dart). Sin transición ni barrera propias porque el
+    // diálogo ya trae las suyas — evita un parpadeo de pantalla en blanco
+    // entre el push y el momento en que showGeneralDialog pinta encima.
+    case 'nueva_nota':
+      navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      container.read(currentTabIndexProvider.notifier).actualizar(2);
+      container.read(tabSolicitadaWidgetProvider.notifier).solicitar(2);
+      navigatorKey.currentState?.push(
+        PageRouteBuilder(
+          opaque: false,
+          barrierColor: Colors.transparent,
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (context, animation, secondaryAnimation) => const NuevaNotaTrigger(),
+        ),
+      );
       break;
   }
 }

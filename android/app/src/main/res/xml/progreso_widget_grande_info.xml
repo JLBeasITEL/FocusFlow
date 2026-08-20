@@ -1,10 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- minWidth/minHeight: fórmula clásica 70×N−30dp (250dp=4 columnas,
+     110dp=2 filas), respaldo para launchers pre-Android 12 que no leen
+     targetCellWidth/targetCellHeight — mismo criterio que
+     progreso_widget_chico_info.xml. targetCellWidth/Height (API 31+) es lo
+     que realmente fija "2 filas × 4 columnas" en la mayoría de los
+     launchers actuales; antes minHeight=150dp no encajaba limpio en 2 filas
+     en varios launchers y el widget terminaba redondeando a 3, mucho más
+     alto de lo que el contenido (dos tarjetas) necesita. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/widget_progreso_grande"
     android:minWidth="250dp"
-    android:minHeight="150dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
     android:updatePeriodMillis="0"
     android:resizeMode="none"
     android:widgetCategory="home_screen"
     android:previewImage="@drawable/widget_preview_progreso"
+    android:previewLayout="@layout/widget_preview_layout_progreso_anillos"
     android:description="@string/progreso_widget_grande_description" />

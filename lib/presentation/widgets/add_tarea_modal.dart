@@ -711,12 +711,23 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
 
   // Con horas estimadas cargadas, la urgencia deja de elegirse a mano:
   // se calcula sola (igual que Tarea.urgencia) y el selector manual se bloquea.
-  bool get _urgenciaEsAutomatica => double.tryParse(_horasController.text.trim()) != null;
+  bool get _urgenciaAutomaticaPorHoras => double.tryParse(_horasController.text.trim()) != null;
+
+  // Sin horas, pero con recurrencia + intervalo válido: la urgencia también
+  // se calcula sola, en base a qué tan cerca está la fecha del próximo ciclo
+  // (ver Tarea.urgencia). No hace falta chequear la fecha acá: el selector de
+  // recurrencia solo aparece con _fechaSeleccionada ya elegida.
+  bool get _urgenciaAutomaticaPorRecurrencia =>
+      !_urgenciaAutomaticaPorHoras &&
+      _tipoRecurrencia != TipoRecurrencia.ninguna &&
+      int.tryParse(_intervaloController.text.trim()) != null;
+
+  bool get _urgenciaEsAutomatica => _urgenciaAutomaticaPorHoras || _urgenciaAutomaticaPorRecurrencia;
 
   // Sin fecha límite, "horas estimadas" no tiene con qué calcular la urgencia
   // automática (Tarea.urgencia cae directo a urgenciaBase), así que no se
   // permite guardar hasta elegir una fecha o borrar las horas.
-  bool get _horasSinFecha => _urgenciaEsAutomatica && _fechaSeleccionada == null;
+  bool get _horasSinFecha => _urgenciaAutomaticaPorHoras && _fechaSeleccionada == null;
 
   // Con recurrencia elegida (días o meses) hace falta un intervalo válido
   // (entero >= 1) para poder guardar.
@@ -727,14 +738,16 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   }
 
   int get _urgenciaMostrada {
-    final horas = double.tryParse(_horasController.text.trim());
-    if (horas == null) return _urgenciaBase;
+    if (!_urgenciaEsAutomatica) return _urgenciaBase;
 
+    final horas = double.tryParse(_horasController.text.trim());
     final tareaTemporal = Tarea(
       titulo: '',
       urgenciaBase: _urgenciaBase,
       fechaLimite: _fechaFinalActual,
       horasEstimadas: horas,
+      tipoRecurrencia: _urgenciaAutomaticaPorRecurrencia ? _tipoRecurrencia : TipoRecurrencia.ninguna,
+      intervalo: _urgenciaAutomaticaPorRecurrencia ? int.tryParse(_intervaloController.text.trim()) : null,
     );
     return tareaTemporal.urgencia;
   }
@@ -1005,7 +1018,11 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
 
             const SizedBox(height: 24),
             Text(
-              _urgenciaEsAutomatica ? 'Urgencia (automática por horas estimadas)' : 'Urgencia Manual / Base',
+              _urgenciaAutomaticaPorHoras
+                  ? 'Urgencia (automática por horas estimadas)'
+                  : _urgenciaAutomaticaPorRecurrencia
+                      ? 'Urgencia (automática por repetición)'
+                      : 'Urgencia Manual / Base',
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
             const SizedBox(height: 12),
@@ -1497,7 +1514,11 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
           ),
           const SizedBox(height: 24),
           Text(
-            _urgenciaEsAutomatica ? 'Urgencia (automática por horas estimadas)' : 'Urgencia Manual / Base',
+            _urgenciaAutomaticaPorHoras
+                ? 'Urgencia (automática por horas estimadas)'
+                : _urgenciaAutomaticaPorRecurrencia
+                    ? 'Urgencia (automática por repetición)'
+                    : 'Urgencia Manual / Base',
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
           ),
           const SizedBox(height: 12),

@@ -196,6 +196,42 @@ class NotificacionesService {
           esInsistente: usarLoopInsistente
         );
       }
+    } else if (tarea.tipoRecurrencia != TipoRecurrencia.ninguna && tarea.intervalo != null) {
+      // --- NOTIFICACIONES DE CAMBIO DE NIVEL DE URGENCIA POR RECURRENCIA ---
+      // Sin horas estimadas, Tarea.urgencia usa el intervalo de repetición
+      // como referencia (50%, 25% y 10% del intervalo antes del límite); acá
+      // se programan las mismas notificaciones en esos mismos momentos.
+      final horasIntervalo = (tarea.tipoRecurrencia == TipoRecurrencia.dias ? tarea.intervalo! : tarea.intervalo! * 30) * 24;
+
+      final momentoMedio = tarea.fechaLimite!.subtract(Duration(minutes: (horasIntervalo * 0.50 * 60).round()));
+      if (momentoMedio.isAfter(ahoraReal)) {
+        final tzMedio = ahoraTz.add(momentoMedio.difference(ahoraReal));
+        await _programarNotificacion(idBase + 3, '📊 Urgencia subió a Media',
+          'La urgencia de "${tarea.titulo}" cambió a Media.', tzMedio,
+          esAlarmaFullScreen: false,
+          esInsistente: false
+        );
+      }
+
+      final momentoAlto = tarea.fechaLimite!.subtract(Duration(minutes: (horasIntervalo * 0.25 * 60).round()));
+      if (momentoAlto.isAfter(ahoraReal)) {
+        final tzAlto = ahoraTz.add(momentoAlto.difference(ahoraReal));
+        await _programarNotificacion(idBase + 4, '📈 Urgencia subió a Alta',
+          'La urgencia de "${tarea.titulo}" cambió a Alta.', tzAlto,
+          esAlarmaFullScreen: false,
+          esInsistente: false
+        );
+      }
+
+      final fechaUrgencia = tarea.fechaLimite!.subtract(Duration(minutes: (horasIntervalo * 0.10 * 60).round()));
+      if (fechaUrgencia.isAfter(ahoraReal)) {
+        final tzUrgencia = ahoraTz.add(fechaUrgencia.difference(ahoraReal));
+        await _programarNotificacion(idBase, '🚀 Urgencia subió a Muy alta',
+          'Deberías atender "${tarea.titulo}" ahora.', tzUrgencia,
+          esAlarmaFullScreen: usarPantallaCompleta,
+          esInsistente: usarLoopInsistente
+        );
+      }
     }
   }
 

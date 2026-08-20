@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Miniatura previewLayout (API 31+) para progreso_widget_grande_info.xml.
+     Copia estática de widget_progreso_grande.xml con contenido de ejemplo
+     fijo (estado 0/0 tareas, 0/2 rutinas), igual que la miniatura
+     "Progreso · anillos" del PDF de diseño. Los anillos reales se dibujan en
+     Canvas desde Kotlin; en 0% coinciden con un aro liso
+     (@drawable/widget_preview_ring_vacio).
+     layout_height="wrap_content" (no match_parent): el selector de widgets
+     reserva la tarjeta según targetCellHeight="2", que en varios launchers
+     es más alto que el contenido real, dejando espacio vacío debajo. Con
+     wrap_content la tarjeta se ajusta a su contenido igual que en el diseño
+     original en vez de estirarse a rellenar esa celda. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Progreso"
+            android:textColor="@color/widget_accent"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="Miércoles"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:padding="4dp"
+            android:text="⟳"
+            android:textColor="@color/widget_accent"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:orientation="horizontal">
+
+        <!-- Tarjeta Tareas -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/widget_row_background"
+            android:padding="12dp">
+
+            <FrameLayout
+                android:layout_width="58dp"
+                android:layout_height="58dp">
+
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:src="@drawable/widget_preview_ring_vacio" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="0%"
+                    android:textColor="@color/widget_progress_tareas"
+                    android:textStyle="bold"
+                    android:textSize="13sp" />
+
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="Tareas"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="0/0"
+                    android:textColor="@color/widget_progress_tareas"
+                    android:textStyle="bold"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Todas hechas"
+                    android:textColor="@color/widget_text_secondary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Tarjeta Rutinas -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/widget_row_background"
+            android:padding="12dp">
+
+            <FrameLayout
+                android:layout_width="58dp"
+                android:layout_height="58dp">
+
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:src="@drawable/widget_preview_ring_vacio" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="0%"
+                    android:textColor="@color/widget_accent"
+                    android:textStyle="bold"
+                    android:textSize="13sp" />
+
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="Rutinas"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="0/2"
+                    android:textColor="@color/widget_accent"
+                    android:textStyle="bold"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="2 pendientes"
+                    android:textColor="@color/widget_text_secondary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

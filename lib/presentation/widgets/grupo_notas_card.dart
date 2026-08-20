@@ -267,6 +267,11 @@ class _GrupoNotasDetalleScreenState extends ConsumerState<GrupoNotasDetalleScree
         title: Text(widget.nombreGrupo),
         actions: [
           IconButton(
+            icon: const Icon(Icons.post_add_rounded),
+            tooltip: 'Nueva nota',
+            onPressed: () => mostrarDialogoNota(context, ref, grupoNombrePorDefecto: widget.nombreGrupo),
+          ),
+          IconButton(
             icon: const Icon(Icons.playlist_add_rounded),
             tooltip: 'Agregar notas',
             onPressed: () => _agregarNotas(context, ref, todasLasNotas.where((n) => n.grupoNombre.isEmpty).toList()),
