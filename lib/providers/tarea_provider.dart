@@ -429,11 +429,29 @@ extension TipoOrdenLabel on TipoOrden {
 }
 
 class OrdenNotifier extends Notifier<TipoOrden> {
-  @override
-  TipoOrden build() => TipoOrden.creacion;
+  static const String _key = 'tipo_orden_v1';
 
-  void cambiarOrden(TipoOrden nuevo) {
+  @override
+  TipoOrden build() {
+    _cargarOrden();
+    return TipoOrden.creacion;
+  }
+
+  Future<void> _cargarOrden() async {
+    final prefs = await SharedPreferences.getInstance();
+    final guardado = prefs.getString(_key);
+    if (guardado != null) {
+      state = TipoOrden.values.firstWhere(
+        (t) => t.name == guardado,
+        orElse: () => TipoOrden.creacion,
+      );
+    }
+  }
+
+  Future<void> cambiarOrden(TipoOrden nuevo) async {
     state = nuevo;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, nuevo.name);
   }
 }
 
