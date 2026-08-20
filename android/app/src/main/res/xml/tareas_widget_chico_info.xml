@@ -6,6 +6,5 @@
     android:updatePeriodMillis="0"
     android:resizeMode="none"
     android:widgetCategory="home_screen"
-    android:previewImage="@drawable/widget_preview_tareas_chico"
     android:previewLayout="@layout/widget_preview_layout_mas_importantes"
     android:description="@string/tareas_widget_chico_description" />
