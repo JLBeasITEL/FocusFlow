@@ -7,4 +7,5 @@
     android:resizeMode="none"
     android:widgetCategory="home_screen"
     android:previewImage="@drawable/widget_preview_tareas_grande"
+    android:previewLayout="@layout/widget_preview_layout_mas_importantes_lista"
     android:description="@string/tareas_widget_grande_description" />

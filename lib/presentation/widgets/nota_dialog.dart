@@ -33,11 +33,16 @@ void alternarDestacadaConFeedback(BuildContext context, WidgetRef ref, String id
 // con idAEditar busca la nota por id (en vez de por índice posicional) para
 // poder invocarse tanto desde el tablero principal como desde dentro de un
 // grupo, donde la posición visible no coincide con el índice en el estado.
-void mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? idAEditar}) {
+// grupoNombrePorDefecto solo aplica al crear (se ignora si idAEditar no es
+// null): deja la nota nueva ya sumada a ese grupo en vez de suelta en el
+// tablero. Lo usa el botón "Nueva nota" de GrupoNotasDetalleScreen (ver
+// grupo_notas_card.dart) para crear directamente dentro de la carpeta
+// abierta, sin el paso extra de agregarla después con "Agregar notas".
+Future<void> mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? idAEditar, String? grupoNombrePorDefecto}) {
   final List<NotaPostIt> notasActuales = ref.read(notaProvider);
   final bool esNueva = idAEditar == null;
   final int indice = esNueva ? -1 : notasActuales.indexWhere((n) => n.id == idAEditar);
-  if (!esNueva && indice == -1) return; // La nota ya no existe (se borró mientras tanto)
+  if (!esNueva && indice == -1) return Future.value(); // La nota ya no existe (se borró mientras tanto)
   final NotaPostIt? notaActual = esNueva ? null : notasActuales[indice];
 
   final controller = TextEditingController(text: esNueva ? '' : notaActual!.texto);
@@ -57,7 +62,7 @@ void mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? idAEditar}
   List<TextEditingController> controllersLista = itemsTemp.map((e) => TextEditingController(text: e.texto)).toList();
   List<FocusNode> focusNodesLista = itemsTemp.map((e) => FocusNode()).toList();
 
-  showGeneralDialog(
+  return showGeneralDialog(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Cerrar',
@@ -400,6 +405,7 @@ void mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? idAEditar}
                                         rotacion: (math.Random().nextDouble() - 0.5) * 0.1,
                                         tipo: tipoActual,
                                         titulo: tituloController.text.trim(),
+                                        grupoNombre: grupoNombrePorDefecto ?? '',
                                         elementosLista: itemsTemp,
                                         creadaEn: ahora,
                                       );
@@ -431,6 +437,63 @@ void mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? idAEditar}
         );
       },
     );
+}
+
+// Ruta invisible que solo existe para abrir mostrarDialogoNota() con un
+// BuildContext y WidgetRef reales (el click en el widget de Notas llega
+// desde main.dart, fuera del árbol de widgets, y ese diálogo los necesita
+// a ambos). No pinta nada propio: se empuja sin transición ni barrera sobre
+// HomeScreen (mismo patrón que 'programar_rutina' en main.dart) y se cierra
+// sola en cuanto el diálogo se despacha, dejando a HomeScreen tal cual
+// hubiera quedado si el usuario tocara el botón "+" de la pestaña Notas.
+class NuevaNotaTrigger extends ConsumerStatefulWidget {
+  const NuevaNotaTrigger({super.key});
+
+  @override
+  ConsumerState<NuevaNotaTrigger> createState() => _NuevaNotaTriggerState();
+}
+
+class _NuevaNotaTriggerState extends ConsumerState<NuevaNotaTrigger> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await mostrarDialogoNota(context, ref);
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+// Misma idea que NuevaNotaTrigger pero para abrir una nota puntual al tocar
+// su tarjeta en el widget de Notas (ver 'abrir_nota' en main.dart): en vez
+// de crear, busca idNota en notaProvider y abre su diálogo en modo vista
+// previa. Si la nota ya no existe (se borró entre que se generó el widget y
+// el toque), mostrarDialogoNota no abre nada y este trigger simplemente se
+// cierra solo, dejando al usuario en la pestaña Notas sin ningún error.
+class AbrirNotaTrigger extends ConsumerStatefulWidget {
+  final String idNota;
+
+  const AbrirNotaTrigger({super.key, required this.idNota});
+
+  @override
+  ConsumerState<AbrirNotaTrigger> createState() => _AbrirNotaTriggerState();
+}
+
+class _AbrirNotaTriggerState extends ConsumerState<AbrirNotaTrigger> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await mostrarDialogoNota(context, ref, idAEditar: widget.idNota);
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 // =========================================================================

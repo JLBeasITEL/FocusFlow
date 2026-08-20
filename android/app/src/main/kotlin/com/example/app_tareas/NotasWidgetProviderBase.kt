@@ -28,9 +28,10 @@ data class NotaCardIds(
 // A diferencia de Rutinas, ambas variantes muestran EXACTAMENTE el mismo par
 // de notas (WidgetNotasService.actualizar() publica una sola clave para las
 // dos) — solo cambia cuánto texto entra por tarjeta según el layout.
-// Cualquier toque en el widget (tarjeta, botón "+ Nueva nota" o el resto de
-// la superficie) lleva a la pantalla de Notas: no hay edición ni creación
-// directa desde acá.
+// Tocar una tarjeta puntual abre esa nota directamente (ver 'abrir_nota' en
+// main.dart); tocar el resto de la superficie lleva a la pantalla de Notas
+// sin abrir ninguna en particular. El botón "+ Nueva nota" en cambio abre de
+// una vez el formulario de creación de la app.
 abstract class NotasWidgetProviderBase(
     private val layoutResId: Int,
     private val cardIds: List<NotaCardIds>,
@@ -118,6 +119,17 @@ abstract class NotasWidgetProviderBase(
 
                     views.setViewVisibility(card.tiempo, if (item.tiempoRelativo.isEmpty()) View.GONE else View.VISIBLE)
                     views.setTextViewText(card.tiempo, item.tiempoRelativo)
+
+                    // Propio de esta tarjeta (no de la raíz): abre la app
+                    // directo en ESTA nota en vez de solo llevar a la
+                    // pestaña Notas. Al tener su propio PendingIntent, el
+                    // click ya no burbujea hacia widget_notas_root.
+                    val abrirNotaPendingIntent = HomeWidgetLaunchIntent.getActivity(
+                        context,
+                        MainActivity::class.java,
+                        Uri.parse("homewidget://abrir_nota?id=${Uri.encode(item.id)}"),
+                    )
+                    views.setOnClickPendingIntent(card.contenedor, abrirNotaPendingIntent)
                 } catch (e: Throwable) {
                     views.setViewVisibility(card.contenedor, View.GONE)
                 }
@@ -141,13 +153,19 @@ abstract class NotasWidgetProviderBase(
             )
             views.setOnClickPendingIntent(R.id.widget_notas_root, abrirNotasPendingIntent)
             // Los distintos botones "+ Nueva nota" (uno fijo en Chico, uno en
-            // el header y otro en el estado vacío de Grande) llevan al mismo
-            // destino que el resto del widget: no crean la nota directamente,
-            // solo evitan que el usuario tenga que buscar dónde tocar. Un id
-            // que no exista en el layout actual simplemente no recibe nada.
-            views.setOnClickPendingIntent(R.id.widget_notas_nueva, abrirNotasPendingIntent)
-            views.setOnClickPendingIntent(R.id.widget_notas_nueva_header, abrirNotasPendingIntent)
-            views.setOnClickPendingIntent(R.id.widget_notas_nueva_vacio, abrirNotasPendingIntent)
+            // el header y otro en el estado vacío de Grande) abren de una vez
+            // el formulario de creación (ver 'nueva_nota' en main.dart), en
+            // vez de solo llevar a la pantalla de Notas como el resto del
+            // widget. Un id que no exista en el layout actual simplemente no
+            // recibe nada.
+            val nuevaNotaPendingIntent = HomeWidgetLaunchIntent.getActivity(
+                context,
+                MainActivity::class.java,
+                Uri.parse("homewidget://nueva_nota"),
+            )
+            views.setOnClickPendingIntent(R.id.widget_notas_nueva, nuevaNotaPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_notas_nueva_header, nuevaNotaPendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_notas_nueva_vacio, nuevaNotaPendingIntent)
 
             // Botón de alternancia 2/4 notas (solo existe en el layout
             // Grande): a diferencia de "abrir la app", esto corre headless

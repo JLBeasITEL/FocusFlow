@@ -100,32 +100,57 @@ class Tarea {
   // --- MOTOR DE URGENCIA INTELIGENTE ---
   // Al usar 'get', la urgencia se recalcula automáticamente cada vez que la pantalla la lee
   int get urgencia {
-    // 1. Si está completada, o no tiene fecha límite, o no tiene tiempo estimado, 
+    // 1. Si está completada o no tiene fecha límite, no hay nada que calcular:
     // usamos la urgencia manual de toda la vida.
-    if (esCompletada || fechaLimite == null || horasEstimadas == null) {
+    if (esCompletada || fechaLimite == null) {
       return urgenciaBase;
     }
 
-    // 2. Si tiene auto-piloto, calculamos cuánto tiempo falta
     final ahora = DateTime.now();
     final tiempoRestante = fechaLimite!.difference(ahora);
 
-    // Si ya se pasó la fecha o si el tiempo que falta es IGUAL O MENOR al que necesitas
-    if (tiempoRestante.inHours <= horasEstimadas!) {
-      return 4; // MUY ALTO (¡Empieza ahora!)
-    } 
-    // Si tienes un "colchón" del 50% de tiempo extra
-    else if (tiempoRestante.inHours <= (horasEstimadas! * 1.5).round()) {
-      return 3; // ALTO
-    } 
-    // Si tienes el doble de tiempo necesario
-    else if (tiempoRestante.inHours <= (horasEstimadas! * 2).round()) {
-      return 2; // MEDIO
-    } 
-    // Si tienes muchísimo tiempo de sobra
-    else {
-      return 1; // BAJO
+    // 2. Auto-piloto por horas estimadas: el más preciso, porque lo llenó el
+    // usuario a mano. Tiene prioridad sobre el de recurrencia si ambos aplican.
+    if (horasEstimadas != null) {
+      // Si ya se pasó la fecha o si el tiempo que falta es IGUAL O MENOR al que necesitas
+      if (tiempoRestante.inHours <= horasEstimadas!) {
+        return 4; // MUY ALTO (¡Empieza ahora!)
+      }
+      // Si tienes un "colchón" del 50% de tiempo extra
+      else if (tiempoRestante.inHours <= (horasEstimadas! * 1.5).round()) {
+        return 3; // ALTO
+      }
+      // Si tienes el doble de tiempo necesario
+      else if (tiempoRestante.inHours <= (horasEstimadas! * 2).round()) {
+        return 2; // MEDIO
+      }
+      // Si tienes muchísimo tiempo de sobra
+      else {
+        return 1; // BAJO
+      }
     }
+
+    // 3. Sin horas estimadas: si la tarea es recurrente, la urgencia sube
+    // sola a medida que se acerca la fecha, en proporción a qué tan seguido
+    // se repite (una tarea mensual se pone urgente mucho antes que una
+    // diaria). "Mes" se aproxima a 30 días: alcanza para esto, no hace falta
+    // exactitud de calendario.
+    if (tipoRecurrencia != TipoRecurrencia.ninguna && intervalo != null) {
+      final horasIntervalo = (tipoRecurrencia == TipoRecurrencia.dias ? intervalo! : intervalo! * 30) * 24;
+
+      if (tiempoRestante.inHours <= horasIntervalo * 0.10) {
+        return 4; // MUY ALTO: queda 10% o menos del intervalo
+      } else if (tiempoRestante.inHours <= horasIntervalo * 0.25) {
+        return 3; // ALTO: queda 25% o menos
+      } else if (tiempoRestante.inHours <= horasIntervalo * 0.50) {
+        return 2; // MEDIO: queda la mitad o menos
+      } else {
+        return 1; // BAJO: sobra tiempo
+      }
+    }
+
+    // 4. Nada de lo anterior aplica: urgencia 100% manual.
+    return urgenciaBase;
   }
 
   // Calcula la próxima fecha límite de una tarea recurrente a partir de la
