@@ -6,6 +6,5 @@
     android:updatePeriodMillis="0"
     android:resizeMode="none"
     android:widgetCategory="home_screen"
-    android:previewImage="@drawable/widget_preview_rutinas"
     android:previewLayout="@layout/widget_preview_layout_rutinas"
     android:description="@string/rutinas_widget_chico_description" />

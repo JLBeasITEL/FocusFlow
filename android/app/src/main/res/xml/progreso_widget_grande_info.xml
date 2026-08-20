@@ -16,6 +16,5 @@
     android:updatePeriodMillis="0"
     android:resizeMode="none"
     android:widgetCategory="home_screen"
-    android:previewImage="@drawable/widget_preview_progreso"
     android:previewLayout="@layout/widget_preview_layout_progreso_anillos"
     android:description="@string/progreso_widget_grande_description" />

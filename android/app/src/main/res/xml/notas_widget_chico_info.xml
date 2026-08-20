@@ -6,6 +6,5 @@
     android:updatePeriodMillis="0"
     android:resizeMode="none"
     android:widgetCategory="home_screen"
-    android:previewImage="@drawable/widget_preview_notas"
     android:previewLayout="@layout/widget_preview_layout_notas"
     android:description="@string/notas_widget_chico_description" />
