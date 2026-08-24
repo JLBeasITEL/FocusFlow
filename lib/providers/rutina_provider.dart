@@ -137,15 +137,8 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       // Con "await" en cada iteración: cada rutina termina su ciclo completo
       // antes de pasar a la siguiente, evitando que dos rutinas distintas se
       // crucen entre sí durante el arranque.
-      //
-      // Medición temporal (quitar cuando se confirme el impacto en producción):
-      // cuenta cuántas rutinas activas hicieron trabajo real (reset o relleno)
-      // contra cuántas se saltaron por tener colchón suficiente.
-      int totalRutinasActivas = 0;
-      int rutinasConTrabajoReal = 0;
       for (var rutina in state) {
         if (rutina.activa) {
-          totalRutinasActivas++;
           // Marcamos la rutina como "en proceso" mientras se rellena su
           // colchón. Sin esto, si el usuario la elimina justo en este
           // instante (la pantalla de gestión ya está disponible aunque
@@ -158,20 +151,13 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           // cancelarlas. Ver la nota completa en eliminarRutina.
           if (_idsEnProceso.contains(rutina.id)) continue;
           _idsEnProceso.add(rutina.id);
-          bool huboTrabajoReal = false;
           try {
-            huboTrabajoReal = await _rellenarColchonSiHaceFalta(rutina);
+            await _rellenarColchonSiHaceFalta(rutina);
           } finally {
             _idsEnProceso.remove(rutina.id);
           }
-          if (huboTrabajoReal) rutinasConTrabajoReal++;
         }
       }
-      print(
-        "🔔 DEBUG: 📊 Apertura de app — rutinas activas: $totalRutinasActivas "
-        "| con trabajo real (reset/relleno): $rutinasConTrabajoReal "
-        "| saltadas (colchón suficiente): ${totalRutinasActivas - rutinasConTrabajoReal}",
-      );
     }
 
     // Incondicional (no solo cuando huboCambios): el reseteo por cambio de
@@ -287,18 +273,13 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   // incremental que NO reprograma todo en cada apertura de la app.
   // ============================================================
   Future<void> _resetCompletoNotificacionesRutina(Rutina rutina) async {
-    print("🔔 DEBUG: -- INICIANDO RESET COMPLETO DE ALARMAS --");
-    print("🔔 DEBUG: Rutina: '${rutina.titulo}' | Completada: ${rutina.completada} | IDs previos: ${rutina.notificacionesActivas}");
-
     // 1. Cancelamos EXACTAMENTE lo que se había programado la última vez.
     // Ya no hay fórmula que recalcular: solo tomamos la lista tal cual está guardada.
     await NotificacionesService().cancelarListaDeIds(rutina.notificacionesActivas);
-    print("🔔 DEBUG: Notificaciones previas canceladas por ID exacto.");
 
     // 2. Si la rutina no está activa, no programamos nada nuevo.
     if (!rutina.activa) {
       await _guardarListaDeIds(rutina.id, []);
-      print("🔔 DEBUG: La rutina está inactiva. Proceso terminado.");
       return;
     }
 
@@ -357,9 +338,6 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           proximaFecha.month == ahora.month &&
           proximaFecha.day == ahora.day) {
         proximaFecha = proximaFecha.add(const Duration(days: 7));
-        print("🔔 DEBUG: ⏩ Rutina de hoy marcada completa. Primera ocurrencia del colchón: $proximaFecha");
-      } else {
-        print("🔔 DEBUG: ⏰ Primera ocurrencia del colchón: $proximaFecha");
       }
 
       // Programamos "semanasColchon" ocurrencias consecutivas hacia adelante.
@@ -426,7 +404,6 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     // fecha del occurrence más lejano, para saber con certeza qué cancelar
     // y cuándo hará falta rellenar la próxima vez.
     await _guardarListaDeIds(rutina.id, nuevosIds, ultimaFechaProgramada: fechaMasLejana, idsPorOcurrencia: mapaPorFecha);
-    print("🔔 DEBUG: -- FINALIZÓ EL RESET COMPLETO. Nuevos IDs guardados: $nuevosIds | Colchón hasta: $fechaMasLejana --");
   }
 
   // Formato yyyy-MM-dd, igual al usado para fechaCompletada, para usar
@@ -468,7 +445,6 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     // campo desde cero de forma segura.
     if (rutina.ultimaFechaProgramada == null ||
         (rutina.notificacionesActivas.isNotEmpty && rutina.idsPorOcurrencia.isEmpty)) {
-      print("🔔 DEBUG: 🌱 '${rutina.titulo}' sin ultimaFechaProgramada o sin idsPorOcurrencia. Sembrando con reset completo.");
       await _resetCompletoNotificacionesRutina(rutina);
       return true;
     }
@@ -482,12 +458,10 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     // 500 alarmas de Android): con objetivo de 2 semanas, rellenamos cuando
     // queda menos de la mitad (1 semana), igual que antes era la mitad de 4.
     if (diasDeColchon >= 7) {
-      print("🔔 DEBUG: ✅ '${rutina.titulo}' con colchón suficiente ($diasDeColchon días). Se omite trabajo.");
       return false;
     }
 
     // c. Colchón corto (o agotado): rellenamos solo lo que falta.
-    print("🔔 DEBUG: ⏳ '${rutina.titulo}' con colchón corto ($diasDeColchon días). Rellenando...");
 
     final int baseId = _generarIdNumerico(rutina.id);
     const int semanasColchonObjetivo = 2;
@@ -576,12 +550,10 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     }
 
     if (idsNuevos.isEmpty) {
-      print("🔔 DEBUG: '${rutina.titulo}' no generó ocurrencias nuevas al rellenar.");
       return false;
     }
 
     await _agregarIdsYActualizarFecha(rutina.id, idsNuevos, fechaMasLejana, idsPorOcurrenciaNuevos: mapaPorFechaNuevo);
-    print("🔔 DEBUG: -- RELLENO TERMINADO. IDs agregados: $idsNuevos | Colchón ahora hasta: $fechaMasLejana --");
     return true;
   }
 
@@ -695,7 +667,6 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       final bool seCancelaronIdsDeHoy = !rutinaAntes.completada && idsDeHoy.isNotEmpty;
       if (seCancelaronIdsDeHoy) {
         await NotificacionesService().cancelarListaDeIds(idsDeHoy);
-        print("🔔 DEBUG: ⚡ Cancelación prioritaria (solo hoy) ejecutada para '${rutinaAntes.titulo}': $idsDeHoy");
       }
 
       state = [
@@ -749,7 +720,6 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         final int nuevaRacha = rutinaActualizada.racha;
         if (nuevaRacha % rachaPorMoneda == 0) {
           await ref.read(monedasProvider.notifier).agregar(1);
-          print("🪙 DEBUG: +1 moneda de racha por hito cumplido en '${rutinaAntes.titulo}' (racha=$nuevaRacha)");
         }
       }
     } finally {
@@ -817,7 +787,6 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       final int costo = rutinaAntes.omisionesSeguidas + 1;
       final bool pudoPagar = await ref.read(monedasProvider.notifier).gastar(costo);
       if (!pudoPagar) {
-        print("🪙 DEBUG: omisión rechazada para '${rutinaAntes.titulo}': faltan monedas (costo=$costo)");
         return false;
       }
 

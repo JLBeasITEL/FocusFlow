@@ -1,8 +1,8 @@
 import 'dart:io';
-import 'dart:typed_data'; 
 import 'package:app_tareas/presentation/screens/pantalla_alarma.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:flutter/material.dart'; 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' hide Priority;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // Importación crucial para leer los sonidos
@@ -25,10 +25,11 @@ class NotificacionesService {
   // esto, este log lo hace inconfundible en vez de perderse entre los demás
   // "❌ Error" genéricos.
   void _logErrorAlarma(String contexto, Object e) {
+    if (!kDebugMode) return;
     if (e.toString().contains('Maximum limit of concurrent alarms')) {
-      print('🚨 LÍMITE DE ALARMAS DE ANDROID ALCANZADO ($contexto): $e');
+      debugPrint('🚨 LÍMITE DE ALARMAS DE ANDROID ALCANZADO ($contexto): $e');
     } else {
-      print('❌ Error en $contexto: $e');
+      debugPrint('❌ Error en $contexto: $e');
     }
   }
   
@@ -448,7 +449,6 @@ class NotificacionesService {
     for (int i = 1; i <= 3; i++) {
       await _plugin.cancel(idBase + (i * 10000));
     }
-    print('🧹 Recordatorios secundarios cancelados para ID: $idBase');
   }
 
   Future<void> posponerAlerta(int idAlarma, String titulo, String cuerpo, int minutos) async {
@@ -485,15 +485,13 @@ class NotificacionesService {
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         payload: datosPayload,
       );
-      print('✅ Alarma pospuesta exitosamente para dentro de $minutos minutos');
     } catch (e) {
-      print('❌ Error al posponer la alarma: $e');
+      if (kDebugMode) debugPrint('❌ Error al posponer la alarma: $e');
     }
   }
 
   // --- BOMBA NUCLEAR PARA ALARMAS FANTASMAS ---
   Future<void> limpiarTodasLasAlarmasDelSistema() async {
     await _plugin.cancelAll();
-    print('🧹 Todas las alarmas de Android han sido reseteadas');
   }
 }

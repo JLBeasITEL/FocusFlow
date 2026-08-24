@@ -181,7 +181,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       if (!borrado) {
         await NotificacionesService().limpiarTodasLasAlarmasDelSistema();
         await prefs.setBool('fantasmas_borrados', true);
-        print('🧹 Limpieza nuclear ejecutada por única vez');
 
         // A diferencia de las rutinas (que RutinaNotifier.build() ya
         // reprograma por su cuenta al abrir la app, ver el comentario de
@@ -222,25 +221,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       });
     });
   }
-
-  // --- FUNCIÓN DE RESPALDO ANTI-BORRADO ---
-  /*void _resincronizarRutinasSilenciosamente() {
-    // 1. Leemos todas las rutinas de la memoria mediante Riverpod
-    final rutinas = ref.read(rutinaProvider);
-    
-    // 2. Filtramos solo las que el usuario dejó encendidas (activas)
-    final rutinasActivas = rutinas.where((r) => r.activa).toList();
-
-    // 3. Reprogramamos las alarmas en el sistema Android
-    for (var rutina in rutinasActivas) {
-       // OJO: Aquí debes descomentar y ajustar la siguiente línea según 
-       // cómo se llame la función que usas normalmente para programar alarmas:
-       
-       // NotificacionesService().programarRutina(rutina);
-       
-       print('🔄 Resincronizando rutina silenciosamente: ${rutina.titulo}');
-    }
-  } */
 
   @override
   void dispose() {

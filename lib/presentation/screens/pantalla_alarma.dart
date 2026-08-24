@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -147,7 +148,7 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
                     try {
                       await FlutterLocalNotificationsPlugin().cancel(widget.idAlarma);
                     } catch (e) {
-                      print('Error al detener la alarma: $e');
+                      if (kDebugMode) debugPrint('Error al detener la alarma: $e');
                     }
                     
                     // 2. REEMPLAZO: En lugar de cerrar la app, forzamos abrir el HomeScreen

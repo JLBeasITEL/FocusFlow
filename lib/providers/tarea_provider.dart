@@ -65,8 +65,6 @@ class TareaNotifier extends Notifier<List<Tarea>> {
         
         // 4. ¡CRÍTICO! Guardamos en la base de datos para borrar las viejas para siempre
         _guardarTareas();
-        
-        print('🧹 Limpieza de tareas completadas ejecutada correctamente (Día: $hoy)');
       } else {
         // Si ya se limpió hoy, simplemente cargamos las tareas normales
         state = tareasCargadas;
