@@ -47,6 +47,7 @@ app.*.map.json
 # Archivos de firma de Android
 key.properties
 *.jks
+*.keystore
 # Logs de depuraci�n
 alarma_*.txt
 analyze*.txt
