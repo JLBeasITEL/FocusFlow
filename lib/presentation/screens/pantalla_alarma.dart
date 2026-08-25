@@ -35,7 +35,7 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
 
   // Canal nativo que permite mostrar esta pantalla sobre el bloqueo del
   // dispositivo SOLO mientras la alarma está visible. Ver MainActivity.kt.
-  static const _canalAlarma = MethodChannel('com.example.app_tareas/alarm_screen');
+  static const _canalAlarma = MethodChannel('com.beasdev.focusflow/alarm_screen');
 
   // --- 1. ENCENDER LA PANTALLA AL INICIAR ---
   @override

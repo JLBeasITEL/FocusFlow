@@ -1,4 +1,4 @@
-package com.example.app_tareas
+package com.beasdev.focusflow
 
 import android.content.Context
 import android.content.SharedPreferences

@@ -1,4 +1,4 @@
-package com.example.app_tareas
+package com.beasdev.focusflow
 
 import android.content.Intent
 import android.os.Build
@@ -10,7 +10,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.example.app_tareas/alarm_screen"
+    private val CHANNEL = "com.beasdev.focusflow/alarm_screen"
 
     // Debe coincidir con el prefijo de payload que arma NotificacionesService
     // para las notificaciones de alarma (ver notificaciones_service.dart,

@@ -1,4 +1,4 @@
-package com.example.app_tareas
+package com.beasdev.focusflow
 
 class NotasWidgetProviderChico : NotasWidgetProviderBase(
     layoutResId = R.layout.widget_notas_chico,

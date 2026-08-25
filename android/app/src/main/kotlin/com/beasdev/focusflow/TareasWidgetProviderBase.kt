@@ -1,4 +1,4 @@
-package com.example.app_tareas
+package com.beasdev.focusflow
 
 import android.appwidget.AppWidgetManager
 import android.content.Context

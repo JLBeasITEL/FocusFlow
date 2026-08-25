@@ -1,4 +1,4 @@
-package com.example.app_tareas
+package com.beasdev.focusflow
 
 class TareasWidgetProviderGrande : TareasWidgetProviderBase(
     layoutResId = R.layout.widget_tareas_grande,

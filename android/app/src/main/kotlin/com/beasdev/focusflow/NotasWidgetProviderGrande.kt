@@ -1,4 +1,4 @@
-package com.example.app_tareas
+package com.beasdev.focusflow
 
 // 4 NotaCardIds (no 2, como Chico): Grande admite el modo "4 notas" del
 // botón de alternancia del header (ver NotasWidgetProviderBase.kt). En modo
