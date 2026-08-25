@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de privacidad — FocusFlow</title>
+<meta name="description" content="Política de privacidad de FocusFlow. La aplicación funciona sin conexión y no envía datos a ningún servidor.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --tinta:#1B2033;
+    --tinta-suave:#4C5468;
+    --papel:#FFFFFF;
+    --niebla:#EDF0F5;
+    --borde:#DCE1EA;
+    --sello:#2F6F5E;
+    --sello-fondo:#E6F1EC;
+    --radio:14px;
+    --medida:34rem;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;
+    background:var(--papel);
+    color:var(--tinta);
+    font-family:"Newsreader",Georgia,"Times New Roman",serif;
+    font-size:1.0625rem;
+    line-height:1.7;
+  }
+  .envoltura{
+    max-width:var(--medida);
+    margin:0 auto;
+    padding:0 1.5rem;
+  }
+
+  /* Encabezado */
+  .cabecera{
+    border-bottom:1px solid var(--borde);
+    padding:2.5rem 0 2rem;
+  }
+  .cabecera .envoltura{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:1.5rem;
+  }
+  .titulos{min-width:0;}
+  .logo{
+    flex:0 0 auto;
+    width:64px;
+    height:64px;
+    border-radius:15px;
+    display:block;
+    border:1px solid var(--borde);
+  }
+  @media (max-width:28rem){
+    .logo{width:52px;height:52px;border-radius:12px;}
+  }
+  .marca{
+    font-family:"Bricolage Grotesque",system-ui,sans-serif;
+    font-weight:700;
+    font-size:1.05rem;
+    letter-spacing:-0.01em;
+    margin:0 0 0.6rem;
+  }
+  .cabecera h1{
+    font-family:"Bricolage Grotesque",system-ui,sans-serif;
+    font-weight:600;
+    font-size:clamp(1.9rem,6vw,2.6rem);
+    line-height:1.1;
+    letter-spacing:-0.025em;
+    margin:0 0 0.9rem;
+  }
+  .fecha{
+    font-family:"Bricolage Grotesque",system-ui,sans-serif;
+    font-size:0.8rem;
+    color:var(--tinta-suave);
+    margin:0;
+  }
+
+  /* Declaración principal */
+  .sello{
+    background:var(--sello-fondo);
+    border:1px solid #C8DFD5;
+    border-radius:var(--radio);
+    padding:1.5rem 1.4rem;
+    margin:2.5rem 0;
+  }
+  .sello p{margin:0;}
+  .sello p + p{margin-top:0.9rem;}
+  .sello .principal{
+    font-family:"Bricolage Grotesque",system-ui,sans-serif;
+    font-weight:600;
+    font-size:1.25rem;
+    line-height:1.35;
+    letter-spacing:-0.015em;
+    color:var(--sello);
+  }
+  .sello .detalle{
+    font-size:0.97rem;
+    color:#2A4A40;
+  }
+
+  /* Secciones */
+  section{margin:2.75rem 0;}
+  h2{
+    font-family:"Bricolage Grotesque",system-ui,sans-serif;
+    font-weight:600;
+    font-size:1.2rem;
+    letter-spacing:-0.015em;
+    line-height:1.3;
+    margin:0 0 0.85rem;
+    padding-top:0.4rem;
+    border-top:2px solid var(--tinta);
+  }
+  h3{
+    font-family:"Bricolage Grotesque",system-ui,sans-serif;
+    font-weight:600;
+    font-size:0.95rem;
+    margin:1.6rem 0 0.4rem;
+  }
+  p{margin:0 0 1rem;}
+  ul{margin:0 0 1rem;padding-left:1.15rem;}
+  li{margin-bottom:0.45rem;}
+  strong{font-weight:500;color:var(--tinta);}
+  a{color:var(--sello);text-decoration:underline;text-underline-offset:2px;}
+  a:focus-visible,summary:focus-visible{
+    outline:2px solid var(--sello);
+    outline-offset:3px;
+    border-radius:3px;
+  }
+
+  /* Tabla de permisos */
+  .permisos{
+    border:1px solid var(--borde);
+    border-radius:var(--radio);
+    overflow:hidden;
+    margin:1.25rem 0;
+  }
+  .permiso{
+    padding:0.95rem 1.1rem;
+    border-bottom:1px solid var(--borde);
+  }
+  .permiso:last-child{border-bottom:none;}
+  .permiso dt{
+    font-family:"Bricolage Grotesque",system-ui,sans-serif;
+    font-weight:600;
+    font-size:0.88rem;
+    margin:0 0 0.15rem;
+  }
+  .permiso dd{
+    margin:0;
+    font-size:0.97rem;
+    color:var(--tinta-suave);
+    line-height:1.55;
+  }
+  dl{margin:0;}
+
+  /* Lista de datos */
+  .datos{
+    background:var(--niebla);
+    border-radius:var(--radio);
+    padding:1.25rem 1.4rem;
+    margin:1.25rem 0;
+  }
+  .datos h3{margin-top:0;}
+  .datos h3:not(:first-child){margin-top:1.4rem;}
+  .datos ul{margin-bottom:0;}
+  .datos li{font-size:0.97rem;}
+
+  /* Nota al pie */
+  .pie{
+    border-top:1px solid var(--borde);
+    margin-top:3.5rem;
+    padding:1.75rem 0 3rem;
+    font-size:0.88rem;
+    color:var(--tinta-suave);
+  }
+  .pie p{margin:0 0 0.5rem;}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important;transition:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<header class="cabecera">
+  <div class="envoltura">
+    <div class="titulos">
+      <p class="marca">FocusFlow</p>
+      <h1>Política de privacidad</h1>
+      <p class="fecha">Última actualización: 24 de agosto de 2026</p>
+    </div>
+    <img class="logo" src="focusflow-logo.png" alt="Logotipo de FocusFlow" width="64" height="64">
+  </div>
+</header>
+
+<main class="envoltura">
+
+  <div class="sello">
+    <p class="principal">FocusFlow no puede enviar tus datos a ningún lado.</p>
+    <p class="detalle">No es una promesa: es una limitación técnica. La aplicación se publica sin el permiso de acceso a internet de Android, así que no puede abrir ninguna conexión de red aunque se lo pidieras. Todo lo que escribes se queda en tu dispositivo.</p>
+  </div>
+
+  <p>Esta política explica qué información guarda FocusFlow, dónde vive y qué control tienes sobre ella. Está escrita para que se entienda sin conocimientos técnicos.</p>
+
+  <p>FocusFlow es desarrollada por <strong>Beas Dev</strong>, un desarrollador independiente.</p>
+
+  <section>
+    <h2>Qué información guarda la aplicación</h2>
+    <p>FocusFlow guarda únicamente lo que tú creas dentro de ella. No te pide tu nombre, tu correo, tu ubicación ni acceso a tus contactos, y no crea ninguna cuenta de usuario.</p>
+
+    <div class="datos">
+      <h3>Contenido que tú creas</h3>
+      <ul>
+        <li>Tareas: título, descripción, fecha límite, horas estimadas, subtareas y los grupos en que las organizas</li>
+        <li>Plantillas de tareas que guardes para reutilizar</li>
+        <li>Rutinas: nombre, días y horas programadas, y tu racha acumulada</li>
+        <li>Notas: texto, listas de puntos y color</li>
+      </ul>
+
+      <h3>Preferencias de la aplicación</h3>
+      <ul>
+        <li>Tema visual elegido</li>
+        <li>Sonidos seleccionados para notificaciones y alarmas</li>
+        <li>Orden y forma de visualización de tus tareas</li>
+        <li>Monedas de racha acumuladas</li>
+      </ul>
+
+      <h3>Datos para los widgets</h3>
+      <ul>
+        <li>Una copia de lo que se muestra en los widgets de tu pantalla de inicio (próximas tareas, rutinas de hoy, notas destacadas, contadores de progreso), para que puedan dibujarse sin abrir la aplicación</li>
+      </ul>
+    </div>
+
+    <p>Los campos de texto son libres, así que pueden contener lo que decidas escribir en ellos, incluyendo datos personales si tú los introduces. La aplicación no los solicita, no los interpreta ni los trata de forma distinta al resto del texto.</p>
+  </section>
+
+  <section>
+    <h2>Dónde se guarda</h2>
+    <p>Toda esta información se guarda en el almacenamiento privado de la aplicación, dentro de tu dispositivo. Android aísla ese espacio: ninguna otra aplicación puede leerlo.</p>
+    <p>No existe ningún servidor de FocusFlow. No hay copias en la nube, no hay sincronización entre dispositivos y el desarrollador no tiene ninguna forma de acceder a tu información.</p>
+  </section>
+
+  <section>
+    <h2>Lo que la aplicación no hace</h2>
+    <ul>
+      <li>No recopila ni transmite datos de uso, estadísticas ni informes de errores</li>
+      <li>No incluye publicidad ni redes publicitarias</li>
+      <li>No incorpora herramientas de análisis de terceros</li>
+      <li>No comparte, vende ni cede información a nadie</li>
+      <li>No utiliza cookies ni tecnologías de seguimiento</li>
+      <li>No requiere registro ni cuenta de usuario</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Permisos que solicita y para qué</h2>
+    <p>Todos los permisos que pide FocusFlow existen para que los recordatorios lleguen a tiempo. Ninguno se usa para recopilar información.</p>
+
+    <div class="permisos">
+      <dl>
+        <div class="permiso">
+          <dt>Notificaciones</dt>
+          <dd>Mostrar los recordatorios de tus tareas y rutinas.</dd>
+        </div>
+        <div class="permiso">
+          <dt>Alarmas exactas</dt>
+          <dd>Que los recordatorios suenen a la hora que programaste y no minutos después.</dd>
+        </div>
+        <div class="permiso">
+          <dt>Notificaciones de pantalla completa</dt>
+          <dd>Mostrar las alarmas sobre la pantalla de bloqueo, como haría un despertador.</dd>
+        </div>
+        <div class="permiso">
+          <dt>Mantener la pantalla encendida</dt>
+          <dd>Evitar que la pantalla se apague mientras una alarma está sonando.</dd>
+        </div>
+        <div class="permiso">
+          <dt>Vibración</dt>
+          <dd>Acompañar las notificaciones con vibración.</dd>
+        </div>
+        <div class="permiso">
+          <dt>Ejecutar al encender el dispositivo</dt>
+          <dd>Volver a programar tus recordatorios después de reiniciar el teléfono, para que no se pierdan.</dd>
+        </div>
+        <div class="permiso">
+          <dt>Servicio en primer plano</dt>
+          <dd>Permitir que las alarmas programadas se ejecuten de forma confiable.</dd>
+        </div>
+        <div class="permiso">
+          <dt>Ignorar optimización de batería</dt>
+          <dd>Evitar que el sistema cancele tus recordatorios para ahorrar energía. Es opcional y puedes negarlo.</dd>
+        </div>
+      </dl>
+    </div>
+
+    <p>FocusFlow <strong>no solicita</strong> permiso de acceso a internet, cámara, micrófono, ubicación, contactos ni almacenamiento externo.</p>
+  </section>
+
+  <section>
+    <h2>Exportar y restaurar tus datos</h2>
+    <p>La aplicación puede generar un archivo de respaldo con tus tareas, rutinas, notas, plantillas y preferencias, en formato JSON legible.</p>
+    <p>Al exportarlo, FocusFlow crea el archivo en tu dispositivo y abre el menú de compartir de Android. <strong>Tú eliges a dónde va</strong>: guardarlo en el teléfono, enviarlo por correo, subirlo a un servicio de almacenamiento. La aplicación no lo envía a ninguna parte por su cuenta.</p>
+    <p>Si eliges enviarlo a un servicio externo, ese archivo pasa a regirse por la política de privacidad de ese servicio. FocusFlow ya no tiene control sobre él.</p>
+    <p>Para restaurarlo, seleccionas el archivo desde tu dispositivo. La lectura también es completamente local.</p>
+  </section>
+
+  <section>
+    <h2>Enviar comentarios</h2>
+    <p>La aplicación incluye una opción para enviar comentarios al desarrollador. Al usarla, FocusFlow prepara un correo con el texto que escribiste y abre tu aplicación de correo. <strong>El mensaje no se envía solo</strong>: tú decides si pulsas enviar.</p>
+    <p>Si lo envías, tu dirección de correo y el contenido del mensaje llegan al desarrollador, igual que en cualquier correo que escribas. Esa información se usa únicamente para responderte y mejorar la aplicación.</p>
+  </section>
+
+  <section>
+    <h2>Borrar tus datos</h2>
+    <p>Puedes eliminar tareas, rutinas y notas individualmente en cualquier momento desde la aplicación.</p>
+    <p>Para eliminar absolutamente todo, <strong>desinstala FocusFlow</strong>. Android borra el almacenamiento privado de la aplicación al desinstalarla, incluyendo los datos de los widgets. Como no hay servidores ni copias externas, esa acción elimina toda tu información de forma definitiva.</p>
+    <p>Si quieres conservar tus datos antes de desinstalar, exporta un respaldo primero.</p>
+  </section>
+
+  <section>
+    <h2>Menores de edad</h2>
+    <p>FocusFlow no está dirigida específicamente a menores de 13 años y no recopila información de ningún usuario, independientemente de su edad. Como toda la información permanece en el dispositivo y nunca se transmite, no existe recopilación de datos de menores.</p>
+  </section>
+
+  <section>
+    <h2>Cambios en esta política</h2>
+    <p>Si FocusFlow incorpora funciones que cambien cómo se manejan los datos, esta política se actualizará y la fecha del encabezado reflejará la modificación. Los cambios relevantes se anunciarán en las notas de la versión correspondiente en Google Play.</p>
+  </section>
+
+  <section>
+    <h2>Contacto</h2>
+    <p>Si tienes dudas sobre esta política o sobre cómo FocusFlow maneja tu información, puedes escribir a:</p>
+    <p><a href="mailto:jl.beas.itel@gmail.com">jl.beas.itel@gmail.com</a></p>
+  </section>
+
+</main>
+
+<footer class="pie">
+  <div class="envoltura">
+    <p>FocusFlow — Beas Dev</p>
+    <p>Ciudad Guzmán, Jalisco, México</p>
+  </div>
+</footer>
+
+</body>
+</html>
