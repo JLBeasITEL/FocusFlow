@@ -102,9 +102,7 @@ class _ItemTablero {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  int _currentIndex = 0; 
-  //Memoria de los grupos que el usuario ha minimizado
-  final Set<String> _gruposColapsados = {};
+  int _currentIndex = 0;
   // Grupo que se está arrastrando en este momento para reordenarlo (o null
   // si no hay ningún arrastre en curso). Se usa para colapsarlo mientras
   // se mueve y devolverlo a su estado previo al soltarlo.
@@ -1207,7 +1205,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             itemBuilder: (context, index) {
                               final grupo = listaGrupos[index];
                               final tareasDelGrupo = mapaGrupos[grupo]!;
-                              final isColapsado = _gruposColapsados.contains(grupo);
+                              final isColapsado = ref.watch(gruposColapsadosProvider).contains(grupo);
 
                               // --- COLOR DINÁMICO DEL TEMA ---
                               // Extraemos el color de la interfaz de Flutter.
@@ -1226,13 +1224,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                 colorTema: colorTema,
                                 temaActual: temaActual,
                                 onToggle: () {
-                                  setState(() {
-                                    if (isColapsado) {
-                                      _gruposColapsados.remove(grupo); // Abrir
-                                    } else {
-                                      _gruposColapsados.add(grupo); // Minimizar
-                                    }
-                                  });
+                                  ref.read(gruposColapsadosProvider.notifier).toggle(grupo);
                                 },
                               );
                             },
