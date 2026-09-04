@@ -190,6 +190,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
           children: [
             TextField(
               controller: _tituloController,
+              textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
                 labelText: 'Título del hábito',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
@@ -199,6 +200,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
             const SizedBox(height: 15),
             TextField(
               controller: _descripcionController,
+              textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
                 labelText: 'Descripción (Opcional)',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
@@ -498,6 +500,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                             Expanded(
                               child: TextField(
                                 controller: _tituloController,
+                                textCapitalization: TextCapitalization.sentences,
                                 decoration: InputDecoration(
                                   labelText: 'Título del hábito',
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
@@ -509,6 +512,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                             Expanded(
                               child: TextField(
                                 controller: _descripcionController,
+                                textCapitalization: TextCapitalization.sentences,
                                 decoration: InputDecoration(
                                   labelText: 'Descripción (Opcional)',
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),

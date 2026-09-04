@@ -890,6 +890,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
 
             TextField(
               controller: _tituloController,
+              textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
                 labelText: '¿Qué hay que hacer?',
                 filled: true, fillColor: Colors.grey.shade100,
@@ -1007,6 +1008,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
               TextField(
                 controller: _descripcionController,
                 maxLines: 2,
+                textCapitalization: TextCapitalization.sentences,
                 decoration: InputDecoration(
                   labelText: 'Descripción',
                   filled: true, fillColor: Colors.grey.shade50,
@@ -1193,6 +1195,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                               Expanded(
                                 child: TextField(
                                   controller: _nuevaSubtareaController,
+                                  textCapitalization: TextCapitalization.sentences,
                                   decoration: InputDecoration(
                                     hintText: 'Agregar paso...',
                                     isDense: true,
@@ -1385,6 +1388,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
       children: [
         TextField(
           controller: _tituloController,
+          textCapitalization: TextCapitalization.sentences,
           decoration: InputDecoration(
             labelText: '¿Qué hay que hacer?',
             filled: true, fillColor: Colors.grey.shade100,
@@ -1398,6 +1402,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
           minLines: 3,
           maxLines: 5,
           textAlignVertical: TextAlignVertical.top,
+          textCapitalization: TextCapitalization.sentences,
           decoration: InputDecoration(
             labelText: 'Descripción',
             alignLabelWithHint: true,
@@ -1688,6 +1693,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                           Expanded(
                             child: TextField(
                               controller: _nuevaSubtareaController,
+                              textCapitalization: TextCapitalization.sentences,
                               decoration: InputDecoration(
                                 hintText: 'Agregar paso...',
                                 isDense: true,
