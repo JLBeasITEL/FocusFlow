@@ -121,6 +121,7 @@ Future<void> mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? id
                                     controller: controller,
                                     autofocus: true,
                                     maxLines: 8, minLines: 3,
+                                    textCapitalization: TextCapitalization.sentences,
                                     style: const TextStyle(fontSize: 20, color: Colors.black87, fontWeight: FontWeight.w500, height: 1.4),
                                     decoration: const InputDecoration(hintText: 'Escribe tu idea...', border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero),
                                   )
@@ -160,6 +161,7 @@ Future<void> mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? id
                                                   controller: controllersLista[i],
                                                   focusNode: focusNodesLista[i],
                                                   onChanged: (val) => itemsTemp[i].texto = val,
+                                                  textCapitalization: TextCapitalization.sentences,
                                                   textInputAction: TextInputAction.next, // Configura el botón del teclado como "Siguiente"
                                                   onSubmitted: (val) {
                                                     // Si el usuario presiona Enter estando en el último elemento de la lista, crea uno nuevo automáticamente
