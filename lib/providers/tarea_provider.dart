@@ -227,6 +227,7 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     _guardarTareas();
 
     await ref.read(ordenGruposProvider.notifier).renombrar(grupoAnterior, grupoNuevo);
+    await ref.read(gruposColapsadosProvider.notifier).renombrar(grupoAnterior, grupoNuevo);
   }
 
   // Elimina un grupo; las tareas que lo usaban pasan a 'General'.
@@ -241,6 +242,7 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     _guardarTareas();
 
     await ref.read(ordenGruposProvider.notifier).eliminar(grupo);
+    await ref.read(gruposColapsadosProvider.notifier).eliminar(grupo);
   }
 
   // --- MÉTODOS DE SUBTAREAS ---
@@ -403,6 +405,64 @@ class OrdenGruposNotifier extends Notifier<List<String>> {
 
 final ordenGruposProvider = NotifierProvider<OrdenGruposNotifier, List<String>>(() {
   return OrdenGruposNotifier();
+});
+
+// --- ESTADO ABIERTO/CERRADO DE GRUPOS (CARPETAS) ---
+// Guarda qué carpetas dejó minimizadas el usuario, para que sobrevivan al
+// reinicio de la app. Ausencia de un grupo en el set = carpeta abierta
+// (mismo comportamiento que había antes de persistir esto), así que un
+// grupo nuevo siempre aparece abierto sin necesidad de inicializarlo acá.
+// El nombre del grupo es la llave (ver Tarea.grupo en models/tarea.dart:
+// no existe un id de grupo separado), por eso renombrarGrupo/eliminarGrupo
+// en TareaNotifier avisan a este notifier para no dejar basura ni perder
+// el estado al renombrar.
+class GruposColapsadosNotifier extends Notifier<Set<String>> {
+  static const String _key = 'tareas_grupos_colapsados_v1';
+
+  @override
+  Set<String> build() {
+    _cargar();
+    return {};
+  }
+
+  Future<void> _cargar() async {
+    final prefs = await SharedPreferences.getInstance();
+    final guardado = prefs.getString(_key);
+    if (guardado != null) {
+      state = Set<String>.from(jsonDecode(guardado));
+    }
+  }
+
+  Future<void> _guardar() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(state.toList()));
+  }
+
+  Future<void> toggle(String grupo) async {
+    final nuevoSet = {...state};
+    if (!nuevoSet.remove(grupo)) nuevoSet.add(grupo);
+    state = nuevoSet;
+    await _guardar();
+  }
+
+  Future<void> renombrar(String anterior, String nuevo) async {
+    if (!state.contains(anterior)) return;
+    final nuevoSet = {...state}..remove(anterior);
+    nuevoSet.add(nuevo);
+    state = nuevoSet;
+    await _guardar();
+  }
+
+  Future<void> eliminar(String grupo) async {
+    if (!state.contains(grupo)) return;
+    final nuevoSet = {...state}..remove(grupo);
+    state = nuevoSet;
+    await _guardar();
+  }
+}
+
+final gruposColapsadosProvider = NotifierProvider<GruposColapsadosNotifier, Set<String>>(() {
+  return GruposColapsadosNotifier();
 });
 
 // --- PROVIDERS DE UI MODERNOS ---
