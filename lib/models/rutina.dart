@@ -93,6 +93,22 @@ class Rutina {
   final int omisionesSeguidas;
   final List<String> historialOmisiones;
 
+  // ============================================================
+  // rachaPagadaHasta — hito de racha más alto ya pagado con moneda
+  // ------------------------------------------------------------
+  // Antes, el otorgamiento de moneda en toggleCompletada solo miraba
+  // "¿racha es múltiplo de 7?", recalculado desde cero en cada toggle.
+  // Como desmarcar resta 1 a la racha sin revertir la moneda, marcar/
+  // desmarcar/marcar sobre el mismo múltiplo de 7 pagaba una moneda
+  // nueva cada vez, sin límite. Este campo registra hasta qué racha ya
+  // se pagó, así el mismo hito nunca vuelve a cobrar dos veces — ver
+  // el chequeo en toggleCompletada.
+  //
+  // Al desmarcar NO se revierte (decisión de producto: la moneda ya
+  // ganada se conserva), así que este campo tampoco retrocede.
+  // ============================================================
+  final int rachaPagadaHasta;
+
   Rutina({
     required this.id,
     required this.titulo,
@@ -111,6 +127,7 @@ class Rutina {
     this.fechaOmitida,
     this.omisionesSeguidas = 0,
     this.historialOmisiones = const [],
+    this.rachaPagadaHasta = 0,
   });
 
   Rutina copyWith({
@@ -131,6 +148,7 @@ class Rutina {
     String? fechaOmitida,
     int? omisionesSeguidas,
     List<String>? historialOmisiones,
+    int? rachaPagadaHasta,
   }) {
     return Rutina(
       id: id ?? this.id,
@@ -150,6 +168,7 @@ class Rutina {
       fechaOmitida: fechaOmitida ?? this.fechaOmitida,
       omisionesSeguidas: omisionesSeguidas ?? this.omisionesSeguidas,
       historialOmisiones: historialOmisiones ?? this.historialOmisiones,
+      rachaPagadaHasta: rachaPagadaHasta ?? this.rachaPagadaHasta,
     );
   }
 
@@ -175,6 +194,7 @@ class Rutina {
       'fechaOmitida': fechaOmitida,
       'omisionesSeguidas': omisionesSeguidas,
       'historialOmisiones': historialOmisiones,
+      'rachaPagadaHasta': rachaPagadaHasta,
     };
   }
 
@@ -237,6 +257,16 @@ class Rutina {
               ?.map((e) => e as String)
               .toList() ??
           const [],
+      // Rutinas guardadas ANTES de este campo (fix de monedas infinitas):
+      // si falta, se siembra con la racha actual de esa misma rutina, NO
+      // con 0. Con 0, un tester que ya llegó a una racha alta bajo el
+      // código viejo podría cobrar de nuevo el mismo hito con solo
+      // desmarcar y volver a marcar tras actualizar. Sembrar con la racha
+      // actual bloquea ese re-cobro puntual sin afectar los hitos futuros
+      // (la comparación en toggleCompletada es contra múltiplos de 7 POR
+      // ENCIMA de este valor, así que sembrar con un valor que no es en
+      // sí mismo múltiplo de 7 no cambia cuándo se paga el próximo hito).
+      rachaPagadaHasta: json['rachaPagadaHasta'] as int? ?? (json['racha'] as int? ?? 0),
     );
   }
 }

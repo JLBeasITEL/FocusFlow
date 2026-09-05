@@ -669,12 +669,34 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         await NotificacionesService().cancelarListaDeIds(idsDeHoy);
       }
 
+      // ============================================================
+      // OTORGAMIENTO DE MONEDAS DE RACHA — cálculo previo al copyWith
+      // ------------------------------------------------------------
+      // Solo al MARCAR como completada (no al desmarcar), y usando
+      // EXACTAMENTE el mismo criterio de "racha cumplida" que dispara
+      // el diálogo de felicitación en rutina_card.dart: cada vez que
+      // la racha llega a un nuevo múltiplo de rachaPorMoneda (7, 14,
+      // 21, 28...) se otorga 1 moneda MÁS. A diferencia de antes, el
+      // hito solo paga si supera rachaPagadaHasta — si el usuario
+      // desmarca y vuelve a marcar sobre el mismo múltiplo de 7, ya no
+      // se vuelve a otorgar (ver el campo en el modelo Rutina). Al
+      // desmarcar NO se revierte la moneda ya ganada (decisión de
+      // producto) ni se retrocede rachaPagadaHasta.
+      // ============================================================
+      final int nuevaRacha = !rutinaAntes.completada
+          ? rutinaAntes.racha + 1
+          : (rutinaAntes.racha > 0 ? rutinaAntes.racha - 1 : 0);
+      final bool otorgaMoneda = !rutinaAntes.completada &&
+          nuevaRacha % rachaPorMoneda == 0 &&
+          nuevaRacha > rutinaAntes.rachaPagadaHasta;
+
       state = [
         for (final r in state)
           if (r.id == id)
             r.copyWith(
               completada: !r.completada,
-              racha: !r.completada ? r.racha + 1 : (r.racha > 0 ? r.racha - 1 : 0),
+              racha: nuevaRacha,
+              rachaPagadaHasta: otorgaMoneda ? nuevaRacha : r.rachaPagadaHasta,
               fechaCompletada: !r.completada ? hoy : null,
               // Una completada real "paga" cualquier racha de omisiones
               // seguidas: la próxima omisión vuelve a costar 1 moneda.
@@ -697,31 +719,16 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       // (y de lo que ya se canceló/reprogramó en Android).
       await _guardarRutinas();
 
+      if (otorgaMoneda) {
+        await ref.read(monedasProvider.notifier).agregar(1);
+      }
+
       final rutinaActualizada = state.firstWhere((r) => r.id == id);
       // Al completar se consume una ocurrencia del colchón: puede que
       // amerite rellenar, pero el horario no cambió, así que no hace
       // falta un reset completo (la cancelación prioritaria de arriba ya
       // se encargó de la notificación de HOY).
       await _rellenarColchonSiHaceFalta(rutinaActualizada);
-
-      // ============================================================
-      // OTORGAMIENTO DE MONEDAS DE RACHA
-      // ------------------------------------------------------------
-      // Solo al MARCAR como completada (no al desmarcar), y usando
-      // EXACTAMENTE el mismo criterio de "racha cumplida" que dispara
-      // el diálogo de felicitación en rutina_card.dart: cada vez que
-      // la racha llega a un nuevo múltiplo de rachaPorMoneda (7, 14,
-      // 21, 28...) se otorga 1 moneda MÁS — sin tope, se repite
-      // indefinidamente mientras la racha siga creciendo. Vive acá (no
-      // en el widget) para que sea la fuente de verdad única, sin
-      // depender de que la UI esté montada.
-      // ============================================================
-      if (!rutinaAntes.completada) {
-        final int nuevaRacha = rutinaActualizada.racha;
-        if (nuevaRacha % rachaPorMoneda == 0) {
-          await ref.read(monedasProvider.notifier).agregar(1);
-        }
-      }
     } finally {
       _idsEnProceso.remove(id);
     }
