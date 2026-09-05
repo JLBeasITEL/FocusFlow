@@ -872,14 +872,6 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     }
   }
 
-  Future<void> incrementarRacha(String id) async {
-    state = [
-      for (final r in state)
-        if (r.id == id) r.copyWith(racha: r.racha + 1) else r,
-    ];
-    await _guardarRutinas();
-  }
-
   // ============================================================
   // eliminarRutina — con espera por operaciones en curso
   // ------------------------------------------------------------
