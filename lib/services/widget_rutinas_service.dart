@@ -99,8 +99,16 @@ class WidgetRutinasService {
       // Sobre rutinasDeHoy COMPLETA (antes de recortar a _maxItems): el badge
       // "X/Y hechas" y los footers "+N rutinas más" necesitan el total real,
       // no el subconjunto que termina viajando a cada variante del widget.
+      // Una omitida HOY cuenta como hecha (decisión de producto: omitir
+      // cuesta monedas y preserva la racha, así que el widget no puede
+      // seguir mostrándola como pendiente) — mismo criterio de fecha que
+      // omitidaHoy más abajo, sin tocar totalProgramadas.
       final totalProgramadas = rutinasDeHoy.length;
-      final totalHechas = rutinasDeHoy.where((r) => r.completada && r.fechaCompletada == hoyStr).length;
+      final totalHechas = rutinasDeHoy
+          .where((r) =>
+              (r.completada && r.fechaCompletada == hoyStr) ||
+              (r.omitida && r.fechaOmitida == hoyStr))
+          .length;
 
       final List<Rutina> rutinasLimitadas = rutinasDeHoy.length > _maxItems
           ? rutinasDeHoy.sublist(0, _maxItems)
