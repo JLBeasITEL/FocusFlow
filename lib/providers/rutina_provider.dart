@@ -87,7 +87,15 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         
         // 1. Desmarcar si es un nuevo día
         if (r.fechaCompletada != hoyStr && r.completada) {
-          rutinaActualizada = rutinaActualizada.copyWith(completada: false);
+          // La completada "se sostuvo" hasta el cierre del día (nunca se
+          // desmarcó): el valor guardado en omisionesSeguidasAntesDeMarcar
+          // (ver toggleCompletada) ya no sirve para nada — se descarta acá
+          // limpiándolo a -1, para que nunca "sobreviva" a un cambio de día
+          // ni se use por error para restaurar una omisión de otro ciclo.
+          rutinaActualizada = rutinaActualizada.copyWith(
+            completada: false,
+            omisionesSeguidasAntesDeMarcar: -1,
+          );
           huboCambios = true;
         }
 
@@ -690,6 +698,33 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
           nuevaRacha % rachaPorMoneda == 0 &&
           nuevaRacha > rutinaAntes.rachaPagadaHasta;
 
+      // ============================================================
+      // COSTO DE OMISIÓN — escrow de un día (BUG 2)
+      // ------------------------------------------------------------
+      // Al MARCAR: se "paga" cualquier racha de omisiones (omisionesSeguidas
+      // vuelve a 0), pero antes se guarda el valor que tenía en
+      // omisionesSeguidasAntesDeMarcar, por si el usuario desmarca HOY MISMO.
+      // Al DESMARCAR: si hay un valor guardado de hoy (!= -1), se restaura
+      // — deshacer un marcado no debe "condonar" omisiones que ya se habían
+      // acumulado antes de marcar. Si no hay valor guardado (p. ej. el
+      // marcado original fue ayer y _cargarRutinas ya limpió el escrow al
+      // rollover, o la rutina viene de antes de este campo), se deja
+      // omisionesSeguidas como está — mismo comportamiento que antes de
+      // este fix, sin inventar un valor que no existe.
+      // ============================================================
+      final int nuevaOmisionesSeguidas;
+      final int nuevoEscrowOmisiones;
+      if (!rutinaAntes.completada) {
+        nuevaOmisionesSeguidas = 0;
+        nuevoEscrowOmisiones = rutinaAntes.omisionesSeguidas;
+      } else if (rutinaAntes.omisionesSeguidasAntesDeMarcar != -1) {
+        nuevaOmisionesSeguidas = rutinaAntes.omisionesSeguidasAntesDeMarcar;
+        nuevoEscrowOmisiones = -1;
+      } else {
+        nuevaOmisionesSeguidas = rutinaAntes.omisionesSeguidas;
+        nuevoEscrowOmisiones = -1;
+      }
+
       state = [
         for (final r in state)
           if (r.id == id)
@@ -698,9 +733,8 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
               racha: nuevaRacha,
               rachaPagadaHasta: otorgaMoneda ? nuevaRacha : r.rachaPagadaHasta,
               fechaCompletada: !r.completada ? hoy : null,
-              // Una completada real "paga" cualquier racha de omisiones
-              // seguidas: la próxima omisión vuelve a costar 1 moneda.
-              omisionesSeguidas: !r.completada ? 0 : r.omisionesSeguidas,
+              omisionesSeguidas: nuevaOmisionesSeguidas,
+              omisionesSeguidasAntesDeMarcar: nuevoEscrowOmisiones,
               // Quitamos los IDs de hoy (ya cancelados) de ambos registros,
               // para que la contabilidad del colchón siga siendo exacta.
               // Solo si de verdad los cancelamos arriba (nunca al desmarcar).

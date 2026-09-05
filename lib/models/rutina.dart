@@ -109,6 +109,35 @@ class Rutina {
   // ============================================================
   final int rachaPagadaHasta;
 
+  // ============================================================
+  // omisionesSeguidasAntesDeMarcar — "escrow" de un día, para BUG 2
+  // ------------------------------------------------------------
+  // -1 = sin valor guardado (estado normal). Al marcar completada
+  // (toggleCompletada), justo antes de resetear omisionesSeguidas a 0,
+  // se guarda acá el valor que tenía — para poder restaurarlo si el
+  // usuario desmarca ESE MISMO DÍA (deshacer un marcado no debería
+  // "condonar" omisiones que ya se habían acumulado antes de marcar).
+  // Al desmarcar, si este campo tiene un valor (!= -1), se restaura
+  // omisionesSeguidas y este campo vuelve a -1.
+  //
+  // Nunca sobrevive más de un día: _cargarRutinas lo limpia a -1 en el
+  // mismo rollover que resetea completada, así que si el usuario NUNCA
+  // desmarca (la completada "se sostiene" hasta el cambio de día), el
+  // valor guardado queda descartado para siempre — correcto, porque en
+  // ese caso la completada fue real y omisionesSeguidas=0 ya es el
+  // valor correcto y definitivo.
+  //
+  // Es un int no-nullable (no int?) a propósito: el patrón de copyWith
+  // de este archivo usa "parámetro null = sin cambios" (ver
+  // notificacionesActivas/idsPorOcurrencia), así que un campo que
+  // necesita poder LIMPIARSE explícitamente no puede ser nullable sin
+  // ese mismo copyWith absorbiendo el null como "no tocar" en vez de
+  // "vaciar" (es lo que le pasa hoy a fechaCompletada al desmarcar,
+  // sin relación con este campo). Con -1 como sentinel evitamos ese
+  // problema: limpiar es pasar el literal -1, nunca null.
+  // ============================================================
+  final int omisionesSeguidasAntesDeMarcar;
+
   Rutina({
     required this.id,
     required this.titulo,
@@ -128,6 +157,7 @@ class Rutina {
     this.omisionesSeguidas = 0,
     this.historialOmisiones = const [],
     this.rachaPagadaHasta = 0,
+    this.omisionesSeguidasAntesDeMarcar = -1,
   });
 
   Rutina copyWith({
@@ -149,6 +179,7 @@ class Rutina {
     int? omisionesSeguidas,
     List<String>? historialOmisiones,
     int? rachaPagadaHasta,
+    int? omisionesSeguidasAntesDeMarcar,
   }) {
     return Rutina(
       id: id ?? this.id,
@@ -169,6 +200,7 @@ class Rutina {
       omisionesSeguidas: omisionesSeguidas ?? this.omisionesSeguidas,
       historialOmisiones: historialOmisiones ?? this.historialOmisiones,
       rachaPagadaHasta: rachaPagadaHasta ?? this.rachaPagadaHasta,
+      omisionesSeguidasAntesDeMarcar: omisionesSeguidasAntesDeMarcar ?? this.omisionesSeguidasAntesDeMarcar,
     );
   }
 
@@ -195,6 +227,7 @@ class Rutina {
       'omisionesSeguidas': omisionesSeguidas,
       'historialOmisiones': historialOmisiones,
       'rachaPagadaHasta': rachaPagadaHasta,
+      'omisionesSeguidasAntesDeMarcar': omisionesSeguidasAntesDeMarcar,
     };
   }
 
@@ -267,6 +300,9 @@ class Rutina {
       // ENCIMA de este valor, así que sembrar con un valor que no es en
       // sí mismo múltiplo de 7 no cambia cuándo se paga el próximo hito).
       rachaPagadaHasta: json['rachaPagadaHasta'] as int? ?? (json['racha'] as int? ?? 0),
+      // Rutinas guardadas ANTES de este campo: -1 (sin valor guardado) es
+      // el mismo default que una rutina nueva, seguro sin migración especial.
+      omisionesSeguidasAntesDeMarcar: json['omisionesSeguidasAntesDeMarcar'] as int? ?? -1,
     );
   }
 }
