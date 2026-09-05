@@ -87,7 +87,15 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         
         // 1. Desmarcar si es un nuevo día
         if (r.fechaCompletada != hoyStr && r.completada) {
-          rutinaActualizada = rutinaActualizada.copyWith(completada: false);
+          // La completada "se sostuvo" hasta el cierre del día (nunca se
+          // desmarcó): el valor guardado en omisionesSeguidasAntesDeMarcar
+          // (ver toggleCompletada) ya no sirve para nada — se descarta acá
+          // limpiándolo a -1, para que nunca "sobreviva" a un cambio de día
+          // ni se use por error para restaurar una omisión de otro ciclo.
+          rutinaActualizada = rutinaActualizada.copyWith(
+            completada: false,
+            omisionesSeguidasAntesDeMarcar: -1,
+          );
           huboCambios = true;
         }
 
@@ -669,16 +677,64 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         await NotificacionesService().cancelarListaDeIds(idsDeHoy);
       }
 
+      // ============================================================
+      // OTORGAMIENTO DE MONEDAS DE RACHA — cálculo previo al copyWith
+      // ------------------------------------------------------------
+      // Solo al MARCAR como completada (no al desmarcar), y usando
+      // EXACTAMENTE el mismo criterio de "racha cumplida" que dispara
+      // el diálogo de felicitación en rutina_card.dart: cada vez que
+      // la racha llega a un nuevo múltiplo de rachaPorMoneda (7, 14,
+      // 21, 28...) se otorga 1 moneda MÁS. A diferencia de antes, el
+      // hito solo paga si supera rachaPagadaHasta — si el usuario
+      // desmarca y vuelve a marcar sobre el mismo múltiplo de 7, ya no
+      // se vuelve a otorgar (ver el campo en el modelo Rutina). Al
+      // desmarcar NO se revierte la moneda ya ganada (decisión de
+      // producto) ni se retrocede rachaPagadaHasta.
+      // ============================================================
+      final int nuevaRacha = !rutinaAntes.completada
+          ? rutinaAntes.racha + 1
+          : (rutinaAntes.racha > 0 ? rutinaAntes.racha - 1 : 0);
+      final bool otorgaMoneda = !rutinaAntes.completada &&
+          nuevaRacha % rachaPorMoneda == 0 &&
+          nuevaRacha > rutinaAntes.rachaPagadaHasta;
+
+      // ============================================================
+      // COSTO DE OMISIÓN — escrow de un día (BUG 2)
+      // ------------------------------------------------------------
+      // Al MARCAR: se "paga" cualquier racha de omisiones (omisionesSeguidas
+      // vuelve a 0), pero antes se guarda el valor que tenía en
+      // omisionesSeguidasAntesDeMarcar, por si el usuario desmarca HOY MISMO.
+      // Al DESMARCAR: si hay un valor guardado de hoy (!= -1), se restaura
+      // — deshacer un marcado no debe "condonar" omisiones que ya se habían
+      // acumulado antes de marcar. Si no hay valor guardado (p. ej. el
+      // marcado original fue ayer y _cargarRutinas ya limpió el escrow al
+      // rollover, o la rutina viene de antes de este campo), se deja
+      // omisionesSeguidas como está — mismo comportamiento que antes de
+      // este fix, sin inventar un valor que no existe.
+      // ============================================================
+      final int nuevaOmisionesSeguidas;
+      final int nuevoEscrowOmisiones;
+      if (!rutinaAntes.completada) {
+        nuevaOmisionesSeguidas = 0;
+        nuevoEscrowOmisiones = rutinaAntes.omisionesSeguidas;
+      } else if (rutinaAntes.omisionesSeguidasAntesDeMarcar != -1) {
+        nuevaOmisionesSeguidas = rutinaAntes.omisionesSeguidasAntesDeMarcar;
+        nuevoEscrowOmisiones = -1;
+      } else {
+        nuevaOmisionesSeguidas = rutinaAntes.omisionesSeguidas;
+        nuevoEscrowOmisiones = -1;
+      }
+
       state = [
         for (final r in state)
           if (r.id == id)
             r.copyWith(
               completada: !r.completada,
-              racha: !r.completada ? r.racha + 1 : (r.racha > 0 ? r.racha - 1 : 0),
+              racha: nuevaRacha,
+              rachaPagadaHasta: otorgaMoneda ? nuevaRacha : r.rachaPagadaHasta,
               fechaCompletada: !r.completada ? hoy : null,
-              // Una completada real "paga" cualquier racha de omisiones
-              // seguidas: la próxima omisión vuelve a costar 1 moneda.
-              omisionesSeguidas: !r.completada ? 0 : r.omisionesSeguidas,
+              omisionesSeguidas: nuevaOmisionesSeguidas,
+              omisionesSeguidasAntesDeMarcar: nuevoEscrowOmisiones,
               // Quitamos los IDs de hoy (ya cancelados) de ambos registros,
               // para que la contabilidad del colchón siga siendo exacta.
               // Solo si de verdad los cancelamos arriba (nunca al desmarcar).
@@ -697,31 +753,16 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       // (y de lo que ya se canceló/reprogramó en Android).
       await _guardarRutinas();
 
+      if (otorgaMoneda) {
+        await ref.read(monedasProvider.notifier).agregar(1);
+      }
+
       final rutinaActualizada = state.firstWhere((r) => r.id == id);
       // Al completar se consume una ocurrencia del colchón: puede que
       // amerite rellenar, pero el horario no cambió, así que no hace
       // falta un reset completo (la cancelación prioritaria de arriba ya
       // se encargó de la notificación de HOY).
       await _rellenarColchonSiHaceFalta(rutinaActualizada);
-
-      // ============================================================
-      // OTORGAMIENTO DE MONEDAS DE RACHA
-      // ------------------------------------------------------------
-      // Solo al MARCAR como completada (no al desmarcar), y usando
-      // EXACTAMENTE el mismo criterio de "racha cumplida" que dispara
-      // el diálogo de felicitación en rutina_card.dart: cada vez que
-      // la racha llega a un nuevo múltiplo de rachaPorMoneda (7, 14,
-      // 21, 28...) se otorga 1 moneda MÁS — sin tope, se repite
-      // indefinidamente mientras la racha siga creciendo. Vive acá (no
-      // en el widget) para que sea la fuente de verdad única, sin
-      // depender de que la UI esté montada.
-      // ============================================================
-      if (!rutinaAntes.completada) {
-        final int nuevaRacha = rutinaActualizada.racha;
-        if (nuevaRacha % rachaPorMoneda == 0) {
-          await ref.read(monedasProvider.notifier).agregar(1);
-        }
-      }
     } finally {
       _idsEnProceso.remove(id);
     }
@@ -863,14 +904,6 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         }
       }
     }
-  }
-
-  Future<void> incrementarRacha(String id) async {
-    state = [
-      for (final r in state)
-        if (r.id == id) r.copyWith(racha: r.racha + 1) else r,
-    ];
-    await _guardarRutinas();
   }
 
   // ============================================================
