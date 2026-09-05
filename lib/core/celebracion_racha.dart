@@ -21,6 +21,12 @@ Future<void> alternarCompletadaConCelebracion({
   // llamó a esta función todavía no se reconstruyó con el nuevo valor.
   final nuevaRacha = rutina.racha + 1;
   if (nuevaRacha % rachaPorMoneda != 0) return;
+  // Mismo criterio que toggleCompletada (rutina_provider.dart): si este
+  // hito de racha ya se pagó antes (el usuario desmarcó y volvió a marcar
+  // sobre el mismo múltiplo de 7), ya no se otorga una moneda nueva — así
+  // que tampoco corresponde mostrar el diálogo de felicitación, que sin
+  // este chequeo diría "+1 moneda" aunque no se otorgó ninguna.
+  if (nuevaRacha <= rutina.rachaPagadaHasta) return;
 
   final String textoFelicidades =
       '¡Felicidades! Llevas $nuevaRacha veces seguidas sin fallar con este hábito.\n'
