@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Variante comprimida de widget_progreso_grande.xml, para instancias con
+     OPTION_APPWIDGET_MIN_WIDTH por debajo de UMBRAL_ANCHO_COMPACTO_GRANDE_DP
+     (ProgresoWidgetCommon.kt) — ver diag/widget-progreso-ancho-real. Mismos
+     @id que la variante ancha (así ProgresoWidgetProviderGrande no necesita
+     ramas por id, solo elige qué layout inflar y qué diametroDp/grosorDp
+     pasarle a dibujarAnilloProgreso).
+
+     Alternativa (a) aprobada: NO es un apilado vertical completo (Tareas
+     arriba, Rutinas abajo) — la medición real mostró que la tablet da MENOS
+     alto que el POCO (124-176dp vs 184-200dp), así que duplicar la altura de
+     las tarjetas no entra. En cambio, los dos anillos se mantienen en la
+     misma fila (angostados a 40dp) y solo el texto secundario de cada
+     métrica (antes "pendientes" + nota de omitidas por separado, ver WIP
+     anterior) se mueve a una línea compartida debajo, con todo el ancho del
+     widget disponible en vez de la mitad de una columna — ahí no hace falta
+     partirlo en dos líneas, así que en Rutinas se concatena con
+     sufijoOmitidas() en vez de aplicarNotaOmitidas(), y widget_progreso_
+     rutinas_omitidas_nota no existe en esta variante. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_progreso_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="Progreso"
+            android:textColor="@color/widget_accent"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_progreso_dia_hoy"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_progreso_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:padding="4dp"
+            android:text="⟳"
+            android:textColor="@color/widget_accent"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <!-- Fila de anillos, angostados a 40dp (ver diametroDp=40 en el
+         provider) para que la columna de al lado (solo label + fracción,
+         sin texto secundario) tenga margen incluso en 216dp de ancho. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <!-- Tareas: anillo + label/fracción -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <FrameLayout
+                android:layout_width="40dp"
+                android:layout_height="40dp">
+
+                <ImageView
+                    android:id="@+id/widget_progreso_tareas_anillo"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="Porcentaje de tareas completadas hoy" />
+
+                <TextView
+                    android:id="@+id/widget_progreso_tareas_porcentaje"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:textColor="@color/widget_progress_tareas"
+                    android:textStyle="bold"
+                    android:textSize="9sp" />
+
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="Tareas"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/widget_progreso_tareas_fraccion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="@color/widget_progress_tareas"
+                    android:textStyle="bold"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Rutinas: anillo + label/fracción -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <FrameLayout
+                android:layout_width="40dp"
+                android:layout_height="40dp">
+
+                <ImageView
+                    android:id="@+id/widget_progreso_rutinas_anillo"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="Porcentaje de rutinas completadas hoy" />
+
+                <TextView
+                    android:id="@+id/widget_progreso_rutinas_porcentaje"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:textColor="@color/widget_accent"
+                    android:textStyle="bold"
+                    android:textSize="9sp" />
+
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="Rutinas"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/widget_progreso_rutinas_fraccion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="@color/widget_accent"
+                    android:textStyle="bold"
+                    android:textSize="14sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Texto secundario, compartido y a todo el ancho del widget (no media
+         columna) — por eso Rutinas puede concatenar pendientes + omitidas en
+         una sola línea sin necesitar la nota separada de la variante ancha. -->
+    <TextView
+        android:id="@+id/widget_progreso_tareas_pendientes"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/widget_progreso_rutinas_pendientes"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="10sp" />
+
+</LinearLayout>

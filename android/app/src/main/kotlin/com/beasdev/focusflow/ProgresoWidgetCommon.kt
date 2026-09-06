@@ -1,5 +1,6 @@
 package com.beasdev.focusflow
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
@@ -298,6 +299,33 @@ fun aplicarNotaOmitidas(views: RemoteViews, viewId: Int, omitidas: Int) {
     if (omitidas > 0) {
         views.setTextViewText(viewId, "($omitidas omitida${if (omitidas == 1) "" else "s"})")
     }
+}
+
+// Umbral de OPTION_APPWIDGET_MIN_WIDTH (el ancho en PORTRAIT, no
+// MAX_WIDTH/landscape) bajo el cual se usa el layout comprimido en vez del
+// ancho/lado-a-lado. Fijado con mediciones reales (rama
+// diag/widget-progreso-ancho-real): POCO/HyperOS da minWidth=345dp
+// (Grande) / 252dp (Chico); la tablet Huawei/EMUI da minWidth=216dp
+// (Grande) — Chico no fue medible ahí (EMUI no dispara onUpdate al
+// agregarlo y resizeMode="none" impide forzarlo redimensionando), su
+// umbral de 190dp es inferido a partir de la misma caída relativa que
+// sufre Grande entre ambos dispositivos, no una medición directa.
+// Se evalúa una única vez por instancia con minWidth: el layout queda fijo
+// y no cambia al rotar — decisión explícita para evitar repintados a mitad
+// de un giro, aunque eso implique que en la Huawei el layout comprimido se
+// use también en landscape (294dp), donde el ancho ancho alcanzaría.
+const val UMBRAL_ANCHO_COMPACTO_GRANDE_DP = 260
+const val UMBRAL_ANCHO_COMPACTO_CHICO_DP = 190
+
+// minWidth=0 (clave ausente del Bundle) no se observó en las mediciones,
+// pero sin garantía en todos los launchers: ante esa duda se prefiere el
+// layout ancho, el que ya funciona hace tiempo, en vez de asumir un ancho
+// angosto sin dato real.
+fun esLayoutCompacto(appWidgetManager: AppWidgetManager, appWidgetId: Int, umbralDp: Int): Boolean {
+    val minWidth = appWidgetManager
+        .getAppWidgetOptions(appWidgetId)
+        .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+    return minWidth in 1 until umbralDp
 }
 
 // Texto "N rutina(s)/tarea(s) pendiente(s)" con pluralización, o un texto

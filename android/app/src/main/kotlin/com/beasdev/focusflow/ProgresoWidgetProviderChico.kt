@@ -36,12 +36,18 @@ class ProgresoWidgetProviderChico : HomeWidgetProvider() {
         widgetData: SharedPreferences,
     ) {
         val resumen = leerProgresoResumen(widgetData)
-        val views = RemoteViews(context.packageName, R.layout.widget_progreso_chico)
+        // Layout fijo por instancia según minWidth (ancho en portrait): ver
+        // esLayoutCompacto/UMBRAL_ANCHO_COMPACTO_CHICO_DP en
+        // ProgresoWidgetCommon.kt. El umbral de Chico es inferido (no
+        // medido en la Huawei), a diferencia del de Grande.
+        val compacto = esLayoutCompacto(appWidgetManager, appWidgetId, UMBRAL_ANCHO_COMPACTO_CHICO_DP)
+        val layoutId = if (compacto) R.layout.widget_progreso_chico_compacto else R.layout.widget_progreso_chico
+        val views = RemoteViews(context.packageName, layoutId)
 
         val anillo = dibujarAnilloProgreso(
             context = context,
-            diametroDp = 84,
-            grosorDp = 9f,
+            diametroDp = if (compacto) 56 else 84,
+            grosorDp = if (compacto) 6f else 9f,
             progresoPorcentaje = resumen.tareasPorcentaje,
             colorProgreso = ContextCompat.getColor(context, R.color.widget_progress_tareas),
         )
@@ -56,27 +62,32 @@ class ProgresoWidgetProviderChico : HomeWidgetProvider() {
             R.id.widget_progreso_rutinas_fraccion,
             "${resumen.rutinasHechas}/${resumen.rutinasTotal}",
         )
-        aplicarNotaOmitidas(views, R.id.widget_progreso_rutinas_omitidas_nota, resumen.rutinasOmitidas)
+        val rutinasPendientesTexto = textoPendientes(resumen.rutinasPendientes, "rutina pendiente", "rutinas pendientes", "Todas hechas")
+        if (compacto) {
+            // widget_progreso_chico_compacto.xml no tiene una línea propia
+            // para la nota de omitidas — se concatena acá, mismo criterio
+            // que ProgresoWidgetProviderGrande en su variante comprimida.
+            views.setTextViewText(R.id.widget_progreso_rutinas_pendientes, rutinasPendientesTexto + sufijoOmitidas(resumen.rutinasOmitidas))
+        } else {
+            aplicarNotaOmitidas(views, R.id.widget_progreso_rutinas_omitidas_nota, resumen.rutinasOmitidas)
+            views.setTextViewText(R.id.widget_progreso_rutinas_pendientes, rutinasPendientesTexto)
+        }
         // Bitmap en vez de ProgressBar declarativo: necesario para pintar el
         // tramo omitido rayado (ver dibujarBarraProgreso en
-        // ProgresoWidgetCommon.kt). anchoDp=140 es una resolución interna de
+        // ProgresoWidgetCommon.kt). anchoDp es una resolución interna de
         // diseño, no el ancho real del host — el ImageView usa
         // scaleType="fitXY" para estirarse al ancho real que le dé el launcher.
         views.setImageViewBitmap(
             R.id.widget_progreso_rutinas_bar,
             dibujarBarraProgreso(
                 context = context,
-                anchoDp = 140,
-                altoDp = 6,
+                anchoDp = if (compacto) 100 else 140,
+                altoDp = if (compacto) 5 else 6,
                 progresoPorcentaje = resumen.rutinasPorcentaje,
                 colorProgreso = ContextCompat.getColor(context, R.color.widget_accent),
                 colorFondo = ContextCompat.getColor(context, R.color.widget_border),
                 progresoOmitidoPorcentaje = resumen.rutinasOmitidoPorcentaje,
             ),
-        )
-        views.setTextViewText(
-            R.id.widget_progreso_rutinas_pendientes,
-            textoPendientes(resumen.rutinasPendientes, "rutina pendiente", "rutinas pendientes", "Todas hechas"),
         )
 
         val abrirPendingIntent = HomeWidgetLaunchIntent.getActivity(
