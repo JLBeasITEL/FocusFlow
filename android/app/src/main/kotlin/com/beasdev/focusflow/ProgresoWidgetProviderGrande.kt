@@ -58,12 +58,21 @@ class ProgresoWidgetProviderGrande : HomeWidgetProvider() {
 
         views.setImageViewBitmap(
             R.id.widget_progreso_rutinas_anillo,
-            dibujarAnilloProgreso(context, diametroDp = 58, grosorDp = 7f, progresoPorcentaje = resumen.rutinasPorcentaje, colorProgreso = colorRutinas),
+            dibujarAnilloProgreso(
+                context,
+                diametroDp = 58,
+                grosorDp = 7f,
+                progresoPorcentaje = resumen.rutinasPorcentaje,
+                colorProgreso = colorRutinas,
+                progresoOmitidoPorcentaje = resumen.rutinasOmitidoPorcentaje,
+            ),
         )
         views.setTextViewText(R.id.widget_progreso_rutinas_porcentaje, "${resumen.rutinasPorcentaje}%")
+        // El sufijo "(N omitida)" va en la fracción, no en el % de arriba:
+        // ese texto vive dentro del anillo de 58dp, sin espacio de sobra.
         views.setTextViewText(
             R.id.widget_progreso_rutinas_fraccion,
-            "${resumen.rutinasHechas}/${resumen.rutinasTotal}",
+            "${resumen.rutinasHechas}/${resumen.rutinasTotal}${sufijoOmitidas(resumen.rutinasOmitidas)}",
         )
         views.setTextViewText(
             R.id.widget_progreso_rutinas_pendientes,

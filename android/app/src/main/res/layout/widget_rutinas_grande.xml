@@ -56,14 +56,18 @@
                 android:textColor="@color/widget_text_secondary"
                 android:textSize="13sp" />
 
-            <ProgressBar
+            <!-- Bitmap generado en RutinasWidgetProviderBase.kt (ver
+                 dibujarBarraProgreso): reemplaza al ProgressBar declarativo
+                 anterior porque RemoteViews no admite un patrón de rayas
+                 para el tramo omitido. fitXY estira el Bitmap (generado a
+                 una resolución interna fija) al ancho real que dé el host. -->
+            <ImageView
                 android:id="@+id/widget_rutinas_progreso_bar"
-                style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="0dp"
                 android:layout_height="6dp"
                 android:layout_weight="1"
-                android:max="100"
-                android:progressDrawable="@drawable/widget_progress_rutinas" />
+                android:scaleType="fitXY"
+                android:contentDescription="Progreso de rutinas de hoy" />
 
         </LinearLayout>
 

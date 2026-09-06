@@ -54,9 +54,25 @@ class ProgresoWidgetProviderChico : HomeWidgetProvider() {
 
         views.setTextViewText(
             R.id.widget_progreso_rutinas_fraccion,
-            "${resumen.rutinasHechas}/${resumen.rutinasTotal}",
+            "${resumen.rutinasHechas}/${resumen.rutinasTotal}${sufijoOmitidas(resumen.rutinasOmitidas)}",
         )
-        views.setProgressBar(R.id.widget_progreso_rutinas_bar, 100, resumen.rutinasPorcentaje, false)
+        // Bitmap en vez de ProgressBar declarativo: necesario para pintar el
+        // tramo omitido rayado (ver dibujarBarraProgreso en
+        // ProgresoWidgetCommon.kt). anchoDp=140 es una resolución interna de
+        // diseño, no el ancho real del host — el ImageView usa
+        // scaleType="fitXY" para estirarse al ancho real que le dé el launcher.
+        views.setImageViewBitmap(
+            R.id.widget_progreso_rutinas_bar,
+            dibujarBarraProgreso(
+                context = context,
+                anchoDp = 140,
+                altoDp = 6,
+                progresoPorcentaje = resumen.rutinasPorcentaje,
+                colorProgreso = ContextCompat.getColor(context, R.color.widget_accent),
+                colorFondo = ContextCompat.getColor(context, R.color.widget_border),
+                progresoOmitidoPorcentaje = resumen.rutinasOmitidoPorcentaje,
+            ),
+        )
         views.setTextViewText(
             R.id.widget_progreso_rutinas_pendientes,
             textoPendientes(resumen.rutinasPendientes, "rutina pendiente", "rutinas pendientes", "Todas hechas"),

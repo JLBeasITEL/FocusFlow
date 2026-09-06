@@ -26,6 +26,11 @@ class WidgetRutinasService {
   static const String _widgetDataChicoKey = 'rutinas_widget_data_chico';
   static const String _widgetTotalProgramadasKey = 'rutinas_widget_total_programadas';
   static const String _widgetTotalHechasKey = 'rutinas_widget_total_hechas';
+  // Cuántas de las "hechas" de arriba son en realidad omitidas (pagadas con
+  // moneda), publicado aparte para que el lado Kotlin pueda pintar el tramo
+  // omitido distinto del completado real en anillo/barra — ver
+  // ProgresoWidgetCommon.kt.
+  static const String _widgetTotalOmitidasKey = 'rutinas_widget_total_omitidas';
   // Dos widgets de tamaño fijo (ver RutinasWidgetProviderBase.kt) en vez del
   // provider único redimensionable anterior, mismo patrón que ya tiene Tareas.
   static const List<String> _androidWidgetNames = [
@@ -102,13 +107,16 @@ class WidgetRutinasService {
       // Una omitida HOY cuenta como hecha (decisión de producto: omitir
       // cuesta monedas y preserva la racha, así que el widget no puede
       // seguir mostrándola como pendiente) — mismo criterio de fecha que
-      // omitidaHoy más abajo, sin tocar totalProgramadas.
+      // omitidaHoy más abajo, sin tocar totalProgramadas. Se publica
+      // totalOmitidas por separado (no solo el combinado totalHechas) para
+      // que el lado Kotlin pueda pintar ese tramo distinto del completado
+      // real en el anillo/barra del widget de Progreso y en la barra
+      // agregada del widget de Rutinas.
       final totalProgramadas = rutinasDeHoy.length;
-      final totalHechas = rutinasDeHoy
-          .where((r) =>
-              (r.completada && r.fechaCompletada == hoyStr) ||
-              (r.omitida && r.fechaOmitida == hoyStr))
-          .length;
+      final totalCompletadasReales =
+          rutinasDeHoy.where((r) => r.completada && r.fechaCompletada == hoyStr).length;
+      final totalOmitidas = rutinasDeHoy.where((r) => r.omitida && r.fechaOmitida == hoyStr).length;
+      final totalHechas = totalCompletadasReales + totalOmitidas;
 
       final List<Rutina> rutinasLimitadas = rutinasDeHoy.length > _maxItems
           ? rutinasDeHoy.sublist(0, _maxItems)
@@ -160,6 +168,7 @@ class WidgetRutinasService {
       await HomeWidget.saveWidgetData<String>(_widgetDataChicoKey, jsonEncode(itemsChico));
       await HomeWidget.saveWidgetData<String>(_widgetTotalProgramadasKey, totalProgramadas.toString());
       await HomeWidget.saveWidgetData<String>(_widgetTotalHechasKey, totalHechas.toString());
+      await HomeWidget.saveWidgetData<String>(_widgetTotalOmitidasKey, totalOmitidas.toString());
       for (final nombre in _androidWidgetNames) {
         await HomeWidget.updateWidget(androidName: nombre);
       }

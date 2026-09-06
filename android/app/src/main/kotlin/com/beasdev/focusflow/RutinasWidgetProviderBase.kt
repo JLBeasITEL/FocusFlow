@@ -86,6 +86,7 @@ abstract class RutinasWidgetProviderBase(
             val totalProgramadas = widgetData.getString(WIDGET_TOTAL_PROGRAMADAS_KEY, null)?.toIntOrNull()
                 ?: items.size
             val totalHechas = widgetData.getString(WIDGET_TOTAL_HECHAS_KEY, null)?.toIntOrNull() ?: 0
+            val totalOmitidas = widgetData.getString(WIDGET_TOTAL_OMITIDAS_KEY, null)?.toIntOrNull() ?: 0
             val totalParaFooter = widgetData.getString(totalParaFooterKey, null)?.toIntOrNull() ?: items.size
             val hayRutinasHoy = totalProgramadas > 0
 
@@ -96,10 +97,29 @@ abstract class RutinasWidgetProviderBase(
 
             views.setViewVisibility(R.id.widget_rutinas_contador_row, if (hayRutinasHoy) View.VISIBLE else View.GONE)
             views.setTextViewText(R.id.widget_rutinas_hechas_num, totalHechas.toString())
-            views.setTextViewText(R.id.widget_rutinas_contador_resto, "/$totalProgramadas hechas")
+            views.setTextViewText(
+                R.id.widget_rutinas_contador_resto,
+                "/$totalProgramadas hechas${sufijoOmitidas(totalOmitidas)}",
+            )
             if (progresoBarId != null) {
                 val progreso = if (totalProgramadas > 0) (totalHechas * 100) / totalProgramadas else 0
-                views.setProgressBar(progresoBarId, 100, progreso, false)
+                val progresoOmitido = if (totalProgramadas > 0) (totalOmitidas * 100) / totalProgramadas else 0
+                // Bitmap en vez de ProgressBar declarativo, mismo motivo que
+                // en ProgresoWidgetProviderChico: pintar el tramo omitido
+                // rayado. anchoDp=140 es una resolución interna de diseño;
+                // el ImageView usa scaleType="fitXY" en el layout.
+                views.setImageViewBitmap(
+                    progresoBarId,
+                    dibujarBarraProgreso(
+                        context = context,
+                        anchoDp = 140,
+                        altoDp = 6,
+                        progresoPorcentaje = progreso,
+                        colorProgreso = ContextCompat.getColor(context, R.color.widget_accent),
+                        colorFondo = ContextCompat.getColor(context, R.color.widget_border),
+                        progresoOmitidoPorcentaje = progresoOmitido,
+                    ),
+                )
             }
 
             for (i in filaIds.indices) {
@@ -248,6 +268,7 @@ abstract class RutinasWidgetProviderBase(
     companion object {
         private const val WIDGET_TOTAL_PROGRAMADAS_KEY = "rutinas_widget_total_programadas"
         private const val WIDGET_TOTAL_HECHAS_KEY = "rutinas_widget_total_hechas"
+        private const val WIDGET_TOTAL_OMITIDAS_KEY = "rutinas_widget_total_omitidas"
 
         // Misma paleta que ya usaba RutinasWidgetProvider para estado
         // (completada/omitida), distinta de la de urgencia de Tareas.
