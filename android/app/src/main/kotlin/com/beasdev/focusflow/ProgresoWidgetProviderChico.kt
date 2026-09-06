@@ -54,8 +54,9 @@ class ProgresoWidgetProviderChico : HomeWidgetProvider() {
 
         views.setTextViewText(
             R.id.widget_progreso_rutinas_fraccion,
-            "${resumen.rutinasHechas}/${resumen.rutinasTotal}${sufijoOmitidas(resumen.rutinasOmitidas)}",
+            "${resumen.rutinasHechas}/${resumen.rutinasTotal}",
         )
+        aplicarNotaOmitidas(views, R.id.widget_progreso_rutinas_omitidas_nota, resumen.rutinasOmitidas)
         // Bitmap en vez de ProgressBar declarativo: necesario para pintar el
         // tramo omitido rayado (ver dibujarBarraProgreso en
         // ProgresoWidgetCommon.kt). anchoDp=140 es una resolución interna de

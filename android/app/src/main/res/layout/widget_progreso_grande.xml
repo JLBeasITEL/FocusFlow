@@ -163,6 +163,8 @@
                     android:id="@+id/widget_progreso_tareas_fraccion"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     android:textColor="@color/widget_progress_tareas"
                     android:textStyle="bold"
                     android:textSize="18sp" />
@@ -171,6 +173,8 @@
                     android:id="@+id/widget_progreso_tareas_pendientes"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     android:textColor="@color/widget_text_secondary"
                     android:textSize="11sp" />
 
@@ -231,14 +235,30 @@
                     android:id="@+id/widget_progreso_rutinas_fraccion"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     android:textColor="@color/widget_accent"
                     android:textStyle="bold"
                     android:textSize="18sp" />
+
+                <!-- Línea propia para "(N omitida)", mismo motivo y mismo
+                     patrón condicional (GONE si no hay omitidas) que en
+                     widget_progreso_chico.xml. -->
+                <TextView
+                    android:id="@+id/widget_progreso_rutinas_omitidas_nota"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="@color/widget_text_secondary"
+                    android:textSize="11sp" />
 
                 <TextView
                     android:id="@+id/widget_progreso_rutinas_pendientes"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     android:textColor="@color/widget_text_secondary"
                     android:textSize="11sp" />
 

@@ -130,6 +130,8 @@
                     android:id="@+id/widget_progreso_tareas_fraccion"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     android:textColor="@color/widget_text_primary"
                     android:textStyle="bold"
                     android:textSize="18sp" />
@@ -137,6 +139,8 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
                     android:text="TAREAS"
                     android:textColor="@color/widget_text_tertiary"
                     android:textSize="9sp" />
@@ -160,6 +164,8 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:ellipsize="end"
                 android:text="Rutinas"
                 android:textColor="@color/widget_accent"
                 android:textStyle="bold"
@@ -170,9 +176,26 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
+                android:maxLines="1"
+                android:ellipsize="end"
                 android:textColor="@color/widget_text_primary"
                 android:textStyle="bold"
                 android:textSize="15sp" />
+
+            <!-- Línea propia para "(N omitida)": mismo patrón condicional que
+                 el footer "+N rutinas más" del widget de Rutinas — GONE
+                 cuando no hay omitidas, para no dejar un hueco vacío. Separada
+                 de la fracción de arriba para que un ancho angosto (celdas
+                 más chicas en portrait) trunque solo esta nota corta en vez
+                 de arrastrar a "X/Y" a partirse en varias líneas. -->
+            <TextView
+                android:id="@+id/widget_progreso_rutinas_omitidas_nota"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="11sp" />
 
             <!-- Bitmap generado en ProgresoWidgetProviderChico.kt (ver
                  dibujarBarraProgreso): reemplaza al ProgressBar declarativo
@@ -192,6 +215,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
+                android:maxLines="1"
+                android:ellipsize="end"
                 android:textColor="@color/widget_text_secondary"
                 android:textSize="11sp" />
 

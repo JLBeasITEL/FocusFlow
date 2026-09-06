@@ -10,6 +10,8 @@ import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
+import android.view.View
+import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
 import java.time.LocalDate
 
@@ -279,6 +281,23 @@ private fun dibujarSegmentoRayado(
 fun sufijoOmitidas(omitidas: Int): String {
     if (omitidas <= 0) return ""
     return " ($omitidas omitida${if (omitidas == 1) "" else "s"})"
+}
+
+// Nota "(N omitida)" en su PROPIA línea, para el widget de Progreso: a
+// diferencia de sufijoOmitidas (pensado para concatenarse con espacio
+// inicial a un texto existente, como sigue haciendo el widget de Rutinas),
+// esta se pinta en un TextView dedicado — ver widget_progreso_chico.xml /
+// widget_progreso_grande.xml, id widget_progreso_rutinas_omitidas_nota.
+// Mismo patrón condicional que el footer "+N rutinas más" de
+// RutinasWidgetProviderBase: GONE cuando no hay omitidas, para no dejar un
+// hueco vacío donde antes vivía el sufijo pegado a la fracción. Separarla
+// evita que un ancho angosto (celdas más chicas en portrait) fuerce a la
+// fracción "X/Y" —el dato más importante— a partirse en varias líneas.
+fun aplicarNotaOmitidas(views: RemoteViews, viewId: Int, omitidas: Int) {
+    views.setViewVisibility(viewId, if (omitidas > 0) View.VISIBLE else View.GONE)
+    if (omitidas > 0) {
+        views.setTextViewText(viewId, "($omitidas omitida${if (omitidas == 1) "" else "s"})")
+    }
 }
 
 // Texto "N rutina(s)/tarea(s) pendiente(s)" con pluralización, o un texto
