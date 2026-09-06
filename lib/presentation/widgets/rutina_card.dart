@@ -167,108 +167,109 @@ class RutinaCard extends ConsumerWidget {
               const SizedBox(width: 12), // Separación horizontal antes del texto
 
               // ================================================================
-              // 2. ZONA CENTRAL: título, hora, racha y (si está expandida) descripción
+              // 2. ZONA CENTRAL: título a todo el ancho, descripción, y una
+              // fila inferior con hora + racha + botón de omitir.
               // ================================================================
               Expanded(
-                // IntrinsicHeight + stretch: le da a la pastilla de omitir (más
-                // abajo) la altura completa de esta fila como zona táctil,
-                // en vez de ensancharla con un SizedBox horizontal (eso fue lo
-                // que causaba el RenderFlex overflow: un ancho fijo de 48dp no
-                // le alcanzaba al contenido de la pastilla). Solo afecta a esta
-                // sub-fila (título/hora/descripción + pastilla), no al ícono ni
-                // al checkbox de la izquierda.
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        // Expanded hace que esta columna ocupe todo el espacio horizontal
-                        // sobrante entre el ícono (izquierda) y la pastilla de omitir (derecha).
-                        // ConstrainedBox(minHeight: 48): garantiza que la fila nunca sea
-                        // más baja que el mínimo táctil de Material, sin importar métricas
-                        // exactas de fuente — así la pastilla (que estira su altura a la
-                        // de esta columna) siempre llega a >=48dp de alto.
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: 48),
-                          child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start, // Alinea el texto a la izquierda
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, // Alinea el texto a la izquierda
+                  children: [
+                    // Título: ya no comparte fila con nada, ocupa todo el
+                    // ancho disponible hasta el borde derecho de la tarjeta.
+                    Text(
+                      rutina.titulo,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        // Si ya está completada, le pone una línea tachada encima del texto.
+                        decoration: rutina.completada ? TextDecoration.lineThrough : null,
+                        // Color del texto: ámbar si se omitió hoy, negro si activa, gris si desactivada.
+                        color: omitida ? colorOmitidaRutina : (activa ? Colors.black87 : Colors.grey),
+                      ),
+                      // Colapsada: hasta 2 líneas con "...". Expandida: sin límite.
+                      maxLines: esExpandida ? null : 2,
+                      overflow: esExpandida ? TextOverflow.visible : TextOverflow.ellipsis,
+                    ),
+
+                    // Descripción opcional: va ENTRE el título y la hora, solo
+                    // visible con la tarjeta expandida. AnimatedSize hace que
+                    // la tarjeta crezca/encoja con una transición suave en vez
+                    // de un salto brusco (mismo patrón de TareaCard: 300ms,
+                    // easeInOut).
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      alignment: Alignment.topLeft,
+                      child: esExpandida && tieneDescripcion
+                          ? Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                rutina.descripcion!,
+                                style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.3),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // ========================================================
+                    // Fila inferior: hora (izquierda) — racha y botón de
+                    // omitir (derecha). ConstrainedBox(minHeight: 48) +
+                    // IntrinsicHeight + stretch: le da al botón de omitir una
+                    // zona táctil de al menos 48dp de ALTO (creciendo hacia
+                    // arriba/abajo del contenido, no hacia los lados) sin
+                    // ensanchar su pastilla visual ni forzar esa misma altura
+                    // en el resto de la tarjeta — es la misma técnica que ya
+                    // se usó para corregir el RenderFlex overflow anterior.
+                    // ========================================================
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Título + racha en la misma fila: la racha queda anclada
-                            // arriba a la derecha, alineada con la primera línea del título.
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    rutina.titulo,
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      // Si ya está completada, le pone una línea tachada encima del texto.
-                                      decoration: rutina.completada ? TextDecoration.lineThrough : null,
-                                      // Color del texto: ámbar si se omitió hoy, negro si activa, gris si desactivada.
-                                      color: omitida ? colorOmitidaRutina : (activa ? Colors.black87 : Colors.grey),
-                                    ),
-                                    // Colapsada: hasta 2 líneas con "...". Expandida: sin límite.
-                                    maxLines: esExpandida ? null : 2,
-                                    overflow: esExpandida ? TextOverflow.visible : TextOverflow.ellipsis,
+                            // Hora programada para HOY, o la etiqueta de estado
+                            // "Omitida" si se pagó con monedas para saltarla —
+                            // igual que el widget de pantalla de inicio.
+                            // Flexible (no un ancho fijo): en tarjetas angostas
+                            // con racha de 2+ dígitos y pastilla de omitir a la
+                            // vez, la hora cede ancho (con ellipsis) en vez de
+                            // desbordar la fila — racha y omitir nunca se
+                            // recortan, solo la hora si hace falta.
+                            Flexible(
+                              child: Center(
+                                child: Text(
+                                  omitida
+                                      ? 'Omitida hoy'
+                                      : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: omitida ? colorOmitidaRutina : colorFuerte,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                if (activa && rutina.racha > 0) ...[
-                                  const SizedBox(width: 6),
-                                  _RachaBadge(racha: rutina.racha),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-
-                            // Hora programada para HOY, o la etiqueta de estado "Omitida"
-                            // si se pagó con monedas para saltarla — igual que el widget
-                            // de pantalla de inicio, que ya distingue Pendiente/Hecha/Omitida.
-                            Text(
-                              omitida
-                                  ? 'Omitida hoy'
-                                  : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: omitida ? colorOmitidaRutina : colorFuerte,
-                                fontWeight: FontWeight.w600,
                               ),
                             ),
-
-                            // Descripción opcional: solo visible con la tarjeta expandida.
-                            // AnimatedSize hace que la tarjeta crezca/encoja con una
-                            // transición suave en vez de un salto brusco (mismo patrón
-                            // de TareaCard: 300ms, easeInOut).
-                            AnimatedSize(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                              alignment: Alignment.topLeft,
-                              child: esExpandida && tieneDescripcion
-                                  ? Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: Text(
-                                        rutina.descripcion!,
-                                        style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.3),
-                                      ),
-                                    )
-                                  : const SizedBox.shrink(),
-                            ),
+                            // Empuja racha y botón de omitir al extremo derecho,
+                            // dejando a la hora pegada al borde izquierdo.
+                            const Spacer(),
+                            if (activa && rutina.racha > 0) ...[
+                              Center(child: _RachaTexto(racha: rutina.racha)),
+                              // Separación con el botón de omitir: evita toques
+                              // accidentales ahora que comparten la misma fila.
+                              const SizedBox(width: 16),
+                            ],
+                            // Botón "Omitir por hoy": solo tiene sentido si
+                            // todavía está pendiente (ni completada ni ya
+                            // omitida) y la rutina está activa.
+                            if (activa && !rutina.completada && !omitida) _BotonOmitirRutina(rutina: rutina),
                           ],
                         ),
-                        ),
                       ),
-
-                      // ================================================================
-                      // 3. Botón "Omitir por hoy": solo tiene sentido si todavía está
-                      // pendiente (ni completada ni ya omitida) y la rutina está activa.
-                      // Vive en este Row (no en el externo) para heredar, vía stretch,
-                      // la altura completa de la columna título/hora/descripción como
-                      // zona táctil vertical.
-                      // ================================================================
-                      if (activa && !rutina.completada && !omitida) _BotonOmitirRutina(rutina: rutina),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -280,33 +281,28 @@ class RutinaCard extends ConsumerWidget {
 }
 
 // ============================================================
-// _RachaBadge — contador de racha (🔥N) compacto y solo informativo.
-// Se ancla junto a la primera línea del título, no es tocable (sin
-// InkWell): a diferencia de _BotonOmitirRutina, no dispara ninguna acción.
+// _RachaTexto — contador de racha (🔥N), solo informativo.
+// ------------------------------------------------------------
+// A propósito NO lleva pastilla/fondo ni InkWell: es texto suelto sobre
+// el blanco de la tarjeta, para que no se confunda con el botón de
+// omitir (que sí es tocable) al compartir ahora la misma fila inferior.
 // ============================================================
-class _RachaBadge extends StatelessWidget {
+class _RachaTexto extends StatelessWidget {
   final int racha;
-  const _RachaBadge({required this.racha});
+  const _RachaTexto({required this.racha});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('🔥', style: TextStyle(fontSize: 11)),
-          const SizedBox(width: 2),
-          Text(
-            '$racha',
-            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 12),
-          ),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('🔥', style: TextStyle(fontSize: 13)),
+        const SizedBox(width: 3),
+        Text(
+          '$racha',
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 14),
+        ),
+      ],
     );
   }
 }
@@ -337,13 +333,12 @@ class _BotonOmitirRutina extends ConsumerWidget {
       message: alcanza
           ? 'Omitir hoy por $costo 🪙 (protege tu racha)'
           : 'Te faltan monedas de racha: necesitas $costo, tienes $monedas',
-      // El área táctil gana ALTURA (no ancho): el padre (Row con stretch +
-      // IntrinsicHeight en RutinaCard) le da a este InkWell la altura
-      // completa de la columna título/hora/descripción (garantizada a
-      // >=48dp por el ConstrainedBox de esa columna). El ancho queda
-      // natural, sin forzar ningún SizedBox horizontal — eso fue lo que
-      // antes causaba el RenderFlex overflow al no caber el contenido de
-      // la pastilla en un ancho fijo de 48dp.
+      // El área táctil gana ALTURA (no ancho): el padre (fila inferior con
+      // ConstrainedBox(minHeight: 48) + IntrinsicHeight + stretch en
+      // RutinaCard) le da a este InkWell al menos 48dp de alto. El ancho
+      // queda natural, sin forzar ningún SizedBox horizontal — eso fue lo
+      // que antes causaba el RenderFlex overflow al no caber el contenido
+      // de la pastilla en un ancho fijo de 48dp.
       // La tarjeta ahora es tocable para expandir/colapsar, así que este
       // InkWell propio es lo que evita que ese toque se cuele hacia el de
       // la tarjeta (gana el gesto al ser el más interno).
@@ -363,12 +358,10 @@ class _BotonOmitirRutina extends ConsumerWidget {
               );
             }
           },
-          // topCenter (no Center): la pastilla visual queda arriba, a la
-          // misma altura que la racha y la primera línea del título; el
-          // área táctil (todo el InkWell) sigue ocupando la columna
-          // completa hacia abajo para llegar a los 48dp mínimos.
-          child: Align(
-            alignment: Alignment.topCenter,
+          // La pastilla visual queda centrada en la fila inferior (hora /
+          // racha / omitir comparten esa línea); el área táctil (todo el
+          // InkWell) sigue ocupando el alto completo de la fila.
+          child: Center(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
