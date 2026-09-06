@@ -363,7 +363,12 @@ class _BotonOmitirRutina extends ConsumerWidget {
               );
             }
           },
-          child: Center(
+          // topCenter (no Center): la pastilla visual queda arriba, a la
+          // misma altura que la racha y la primera línea del título; el
+          // área táctil (todo el InkWell) sigue ocupando la columna
+          // completa hacia abajo para llegar a los 48dp mínimos.
+          child: Align(
+            alignment: Alignment.topCenter,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
