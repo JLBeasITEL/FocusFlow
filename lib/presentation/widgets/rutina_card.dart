@@ -81,10 +81,15 @@ class RutinaCard extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
 
           // Row: acomoda todo el contenido en una sola fila horizontal.
-          // crossAxisAlignment start: ancla checkbox/ícono/pastilla arriba,
-          // para que no "floten" al centro cuando la tarjeta crece al expandirse.
+          // crossAxisAlignment center: el checkbox/botón de deshacer y el
+          // círculo del ícono quedan centrados verticalmente respecto a la
+          // altura TOTAL del bloque de la derecha (título + descripción +
+          // fila inferior), no anclados a su primera línea. Como el Row se
+          // relayoutea en cada frame en que AnimatedSize cambia la altura
+          // de ese bloque, el centrado se recalcula solo y se mantiene
+          // correcto también durante la animación de expandir/colapsar.
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
 
               // ================================================================
