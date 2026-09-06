@@ -35,7 +35,15 @@ class ProgresoWidgetProviderGrande : HomeWidgetProvider() {
         widgetData: SharedPreferences,
     ) {
         val resumen = leerProgresoResumen(widgetData)
-        val views = RemoteViews(context.packageName, R.layout.widget_progreso_grande)
+        // Layout fijo por instancia según minWidth (ancho en portrait): ver
+        // esLayoutCompacto/UMBRAL_ANCHO_COMPACTO_GRANDE_DP en
+        // ProgresoWidgetCommon.kt para la justificación del umbral y de por
+        // qué se usa minWidth (no maxWidth) a propósito.
+        val compacto = esLayoutCompacto(appWidgetManager, appWidgetId, UMBRAL_ANCHO_COMPACTO_GRANDE_DP)
+        val layoutId = if (compacto) R.layout.widget_progreso_grande_compacto else R.layout.widget_progreso_grande
+        val views = RemoteViews(context.packageName, layoutId)
+        val diametroAnillo = if (compacto) 40 else 58
+        val grosorAnillo = if (compacto) 5f else 7f
 
         views.setTextViewText(R.id.widget_progreso_dia_hoy, diaDeSemanaLegible())
 
@@ -44,7 +52,7 @@ class ProgresoWidgetProviderGrande : HomeWidgetProvider() {
 
         views.setImageViewBitmap(
             R.id.widget_progreso_tareas_anillo,
-            dibujarAnilloProgreso(context, diametroDp = 58, grosorDp = 7f, progresoPorcentaje = resumen.tareasPorcentaje, colorProgreso = colorTareas),
+            dibujarAnilloProgreso(context, diametroDp = diametroAnillo, grosorDp = grosorAnillo, progresoPorcentaje = resumen.tareasPorcentaje, colorProgreso = colorTareas),
         )
         views.setTextViewText(R.id.widget_progreso_tareas_porcentaje, "${resumen.tareasPorcentaje}%")
         views.setTextViewText(
@@ -60,8 +68,8 @@ class ProgresoWidgetProviderGrande : HomeWidgetProvider() {
             R.id.widget_progreso_rutinas_anillo,
             dibujarAnilloProgreso(
                 context,
-                diametroDp = 58,
-                grosorDp = 7f,
+                diametroDp = diametroAnillo,
+                grosorDp = grosorAnillo,
                 progresoPorcentaje = resumen.rutinasPorcentaje,
                 colorProgreso = colorRutinas,
                 progresoOmitidoPorcentaje = resumen.rutinasOmitidoPorcentaje,
@@ -72,14 +80,20 @@ class ProgresoWidgetProviderGrande : HomeWidgetProvider() {
             R.id.widget_progreso_rutinas_fraccion,
             "${resumen.rutinasHechas}/${resumen.rutinasTotal}",
         )
-        // "(N omitida)" en su propia línea (no en el % de arriba: ese texto
-        // vive dentro del anillo de 58dp, sin espacio de sobra) — ver
-        // aplicarNotaOmitidas en ProgresoWidgetCommon.kt.
-        aplicarNotaOmitidas(views, R.id.widget_progreso_rutinas_omitidas_nota, resumen.rutinasOmitidas)
-        views.setTextViewText(
-            R.id.widget_progreso_rutinas_pendientes,
-            textoPendientes(resumen.rutinasPendientes, "rutina pendiente", "rutinas pendientes", "Todas hechas"),
-        )
+        val rutinasPendientesTexto = textoPendientes(resumen.rutinasPendientes, "rutina pendiente", "rutinas pendientes", "Todas hechas")
+        if (compacto) {
+            // widget_progreso_grande_compacto.xml no tiene una línea propia
+            // para la nota de omitidas (el texto secundario comparte una
+            // sola línea a todo el ancho, alternativa (a) aprobada) — se
+            // concatena acá en vez de llamar a aplicarNotaOmitidas.
+            views.setTextViewText(R.id.widget_progreso_rutinas_pendientes, rutinasPendientesTexto + sufijoOmitidas(resumen.rutinasOmitidas))
+        } else {
+            // "(N omitida)" en su propia línea (no en el % de arriba: ese
+            // texto vive dentro del anillo de 58dp, sin espacio de sobra) —
+            // ver aplicarNotaOmitidas en ProgresoWidgetCommon.kt.
+            aplicarNotaOmitidas(views, R.id.widget_progreso_rutinas_omitidas_nota, resumen.rutinasOmitidas)
+            views.setTextViewText(R.id.widget_progreso_rutinas_pendientes, rutinasPendientesTexto)
+        }
 
         val abrirPendingIntent = HomeWidgetLaunchIntent.getActivity(
             context,

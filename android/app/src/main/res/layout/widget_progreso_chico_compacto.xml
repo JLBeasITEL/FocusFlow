@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Variante comprimida de widget_progreso_chico.xml, para instancias con
+     OPTION_APPWIDGET_MIN_WIDTH por debajo de UMBRAL_ANCHO_COMPACTO_CHICO_DP
+     (ProgresoWidgetCommon.kt) — ver diag/widget-progreso-ancho-real. Mismos
+     @id que la variante ancha, salvo widget_progreso_rutinas_omitidas_nota
+     (no existe acá: se concatena con sufijoOmitidas() a la línea de
+     pendientes en vez de vivir en su propia línea — mismo motivo que en
+     widget_progreso_grande_compacto.xml, alternativa (a) aprobada).
+
+     El anillo baja de 84dp a 56dp (ver diametroDp=56 en el provider): a
+     ~160-190dp de ancho total, el anillo de 84dp + su margen no dejaba
+     espacio real para la columna de Rutinas (label, fracción y pendientes
+     quedaban cortados en la tablet Huawei, el síntoma original de este
+     diagnóstico). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_progreso_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="10dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="Hoy"
+            android:textColor="@color/widget_accent"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_progreso_refresh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="4dp"
+            android:text="⟳"
+            android:textColor="@color/widget_accent"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_progreso_fecha_hoy"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="10sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <FrameLayout
+            android:layout_width="56dp"
+            android:layout_height="56dp">
+
+            <ImageView
+                android:id="@+id/widget_progreso_anillo_tareas"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="Progreso de tareas de hoy" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:orientation="vertical"
+                android:gravity="center_horizontal">
+
+                <TextView
+                    android:id="@+id/widget_progreso_tareas_fraccion"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:textColor="@color/widget_text_primary"
+                    android:textStyle="bold"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="TAREAS"
+                    android:textColor="@color/widget_text_tertiary"
+                    android:textSize="7sp" />
+
+            </LinearLayout>
+
+        </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_progreso_columna_rutinas"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="Rutinas"
+                android:textColor="@color/widget_accent"
+                android:textStyle="bold"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/widget_progreso_rutinas_fraccion"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="@color/widget_text_primary"
+                android:textStyle="bold"
+                android:textSize="13sp" />
+
+            <ImageView
+                android:id="@+id/widget_progreso_rutinas_bar"
+                android:layout_width="match_parent"
+                android:layout_height="5dp"
+                android:layout_marginTop="4dp"
+                android:scaleType="fitXY"
+                android:contentDescription="Progreso de rutinas de hoy" />
+
+            <TextView
+                android:id="@+id/widget_progreso_rutinas_pendientes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="9sp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>
