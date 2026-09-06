@@ -1441,12 +1441,22 @@ class _GrupoTareasSectionState extends State<_GrupoTareasSection> with SingleTic
 // observa (ref.watch) el estado actual de rutinaProvider y construye la lista
 // de RutinaCard para HOY. Toda la lógica de cancelar/programar notificaciones
 // vive en rutina_provider.dart y rutina_card.dart, NO aquí.
-class _SeccionRutinasHoy extends ConsumerWidget {
+class _SeccionRutinasHoy extends ConsumerStatefulWidget {
   final ScrollController scrollController;
   const _SeccionRutinasHoy({required this.scrollController});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SeccionRutinasHoy> createState() => _SeccionRutinasHoyState();
+}
+
+class _SeccionRutinasHoyState extends ConsumerState<_SeccionRutinasHoy> {
+  // Id de la única rutina con la tarjeta expandida (o null si ninguna).
+  // Vive aquí (en el contenedor de la lista) y no en RutinaCard para que
+  // expandir una tarjeta colapse automáticamente cualquier otra.
+  String? _idRutinaExpandida;
+
+  @override
+  Widget build(BuildContext context) {
     final listaCompleta = ref.watch(rutinaProvider);
     final temaActual = ref.watch(temaProvider);
     final colorPrincipal = temaActual.colorPrincipal;
@@ -1520,15 +1530,23 @@ class _SeccionRutinasHoy extends ConsumerWidget {
                         ),
                       )
                     : OverflowScrollbar(
-                        controller: scrollController,
+                        controller: widget.scrollController,
                         child: ListView.builder(
-                        controller: scrollController,
+                        controller: widget.scrollController,
                         padding: EdgeInsets.only(top: 16, bottom: 100 + MediaQuery.of(context).padding.bottom, left: 16, right: 16),
                         itemCount: rutinasDeHoy.length,
-                        itemBuilder: (context, index) => RutinaCard(
-                          rutina: rutinasDeHoy[index],
-                          colorTema: colorPrincipal
-                        ),
+                        itemBuilder: (context, index) {
+                          final rutina = rutinasDeHoy[index];
+                          return RutinaCard(
+                            key: ValueKey(rutina.id),
+                            rutina: rutina,
+                            colorTema: colorPrincipal,
+                            esExpandida: _idRutinaExpandida == rutina.id,
+                            onToggleExpansion: () => setState(() {
+                              _idRutinaExpandida = _idRutinaExpandida == rutina.id ? null : rutina.id;
+                            }),
+                          );
+                        },
                         ),
                       ),
               ),
