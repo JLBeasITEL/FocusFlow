@@ -58,13 +58,24 @@ class ProgresoWidgetProviderGrande : HomeWidgetProvider() {
 
         views.setImageViewBitmap(
             R.id.widget_progreso_rutinas_anillo,
-            dibujarAnilloProgreso(context, diametroDp = 58, grosorDp = 7f, progresoPorcentaje = resumen.rutinasPorcentaje, colorProgreso = colorRutinas),
+            dibujarAnilloProgreso(
+                context,
+                diametroDp = 58,
+                grosorDp = 7f,
+                progresoPorcentaje = resumen.rutinasPorcentaje,
+                colorProgreso = colorRutinas,
+                progresoOmitidoPorcentaje = resumen.rutinasOmitidoPorcentaje,
+            ),
         )
         views.setTextViewText(R.id.widget_progreso_rutinas_porcentaje, "${resumen.rutinasPorcentaje}%")
         views.setTextViewText(
             R.id.widget_progreso_rutinas_fraccion,
             "${resumen.rutinasHechas}/${resumen.rutinasTotal}",
         )
+        // "(N omitida)" en su propia línea (no en el % de arriba: ese texto
+        // vive dentro del anillo de 58dp, sin espacio de sobra) — ver
+        // aplicarNotaOmitidas en ProgresoWidgetCommon.kt.
+        aplicarNotaOmitidas(views, R.id.widget_progreso_rutinas_omitidas_nota, resumen.rutinasOmitidas)
         views.setTextViewText(
             R.id.widget_progreso_rutinas_pendientes,
             textoPendientes(resumen.rutinasPendientes, "rutina pendiente", "rutinas pendientes", "Todas hechas"),
