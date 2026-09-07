@@ -89,18 +89,36 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
     return;
   }
 
-  final rutina = Rutina(
-    id: widget.rutinaAEditar?.id ?? const Uuid().v4(),
-    titulo: _tituloController.text.trim(),
-    descripcion: _descripcionController.text.trim().isEmpty ? null : _descripcionController.text.trim(),
-    horarios: _horarios,
-    esFlexible: _esFlexible,
-    iconoCode: _iconoSeleccionado,
-    racha: widget.rutinaAEditar?.racha ?? 0,
-    activa: widget.rutinaAEditar?.activa ?? true,
-    completada: widget.rutinaAEditar?.completada ?? false,
-    fechaCompletada: widget.rutinaAEditar?.fechaCompletada,
-  );
+  final String descripcionIngresada = _descripcionController.text.trim();
+  final Rutina? rutinaAEditar = widget.rutinaAEditar;
+
+  // EDICIÓN: se deriva de la rutina existente (copyWith) para no perder
+  // ningún campo que este formulario no conoce (omitida, fechaOmitida,
+  // omisionesSeguidas, historialOmisiones, rachaPagadaHasta,
+  // omisionesSeguidasAntesDeMarcar, idsPorOcurrencia, ultimaFechaProgramada,
+  // notificacionesActivas, racha, completada, fechaCompletada) — antes se
+  // reconstruía una Rutina desde cero y todos esos campos volvían a su valor
+  // por defecto en cada edición (ver auditoría: reseteaba rachaPagadaHasta y
+  // omisionesSeguidas, permitiendo cobrar monedas de más o abaratar el costo
+  // de omitir con solo cambiar el título o el ícono).
+  final Rutina rutina = rutinaAEditar != null
+      ? rutinaAEditar.copyWith(
+          titulo: _tituloController.text.trim(),
+          horarios: _horarios,
+          esFlexible: _esFlexible,
+          iconoCode: _iconoSeleccionado,
+          descripcion: descripcionIngresada.isEmpty ? null : descripcionIngresada,
+          limpiarDescripcion: descripcionIngresada.isEmpty,
+        )
+      // CREACIÓN: sin cambios respecto al comportamiento anterior.
+      : Rutina(
+          id: const Uuid().v4(),
+          titulo: _tituloController.text.trim(),
+          descripcion: descripcionIngresada.isEmpty ? null : descripcionIngresada,
+          horarios: _horarios,
+          esFlexible: _esFlexible,
+          iconoCode: _iconoSeleccionado,
+        );
 
   setState(() => _guardando = true);
   try {
