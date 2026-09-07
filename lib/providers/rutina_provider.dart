@@ -596,6 +596,16 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     // rutina ANTES de la edición, para que _resetCompletoNotificacionesRutina
     // pueda cancelarlos correctamente (si el formulario de edición no
     // trae ese dato, se perdería el rastro de lo programado anteriormente).
+    //
+    // NOTA: desde que rutina_form_screen.dart deriva la edición con copyWith
+    // sobre la rutina existente (en vez de reconstruirla desde cero), lo que
+    // llega acá en rutinaEditada.notificacionesActivas YA debería traer el
+    // valor correcto en el caso normal, dejando esta reinyección redundante.
+    // Se conserva de todos modos como red de seguridad: sigue protegiendo
+    // contra una rutina desactualizada (p. ej. si notificacionesActivas
+    // cambió en background — relleno del colchón — entre que se abrió el
+    // formulario y se guardó la edición) o contra cualquier otro llamador
+    // futuro de editarRutina que no pase por ese formulario.
     if (_idsEnProceso.contains(rutinaEditada.id)) return;
     _idsEnProceso.add(rutinaEditada.id);
     try {
