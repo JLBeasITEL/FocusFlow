@@ -180,11 +180,18 @@ class Rutina {
     List<String>? historialOmisiones,
     int? rachaPagadaHasta,
     int? omisionesSeguidasAntesDeMarcar,
+    // Excepción al patrón "parámetro null = sin cambios" de este copyWith:
+    // descripcion es el único campo editable desde el formulario que es a la
+    // vez nullable y limpiable por el usuario (borrar el texto = guardar
+    // null), así que un `descripcion: null` normal sería indistinguible de
+    // "no lo toques" y la descripción vieja quedaría pegada para siempre.
+    // Este flag separa ambos casos sin recurrir a un valor centinela.
+    bool limpiarDescripcion = false,
   }) {
     return Rutina(
       id: id ?? this.id,
       titulo: titulo ?? this.titulo,
-      descripcion: descripcion ?? this.descripcion,
+      descripcion: limpiarDescripcion ? null : (descripcion ?? this.descripcion),
       horarios: horarios ?? this.horarios,
       iconoCode: iconoCode ?? this.iconoCode,
       activa: activa ?? this.activa,
