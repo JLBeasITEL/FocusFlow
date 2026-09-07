@@ -38,16 +38,26 @@ Rutina _rutinaDePrueba({
   bool completada = false,
   List<int> notificacionesActivas = const [],
   DateTime? ultimaFechaProgramada,
+  String? descripcion,
+  int racha = 0,
+  int rachaPagadaHasta = 0,
+  int omisionesSeguidas = 0,
+  List<String> historialOmisiones = const [],
 }) {
   return Rutina(
     id: id,
     titulo: titulo,
+    descripcion: descripcion,
     horarios: horarios,
     iconoCode: 0xe000,
     activa: true,
     completada: completada,
     notificacionesActivas: notificacionesActivas,
     ultimaFechaProgramada: ultimaFechaProgramada,
+    racha: racha,
+    rachaPagadaHasta: rachaPagadaHasta,
+    omisionesSeguidas: omisionesSeguidas,
+    historialOmisiones: historialOmisiones,
   );
 }
 
@@ -264,6 +274,154 @@ void main() {
       );
     },
   );
+
+  // ============================================================
+  // Regresión: rutina_form_screen.dart reconstruía una Rutina nueva desde
+  // cero al editar, en vez de derivarla de la existente. Campos que ese
+  // formulario no conoce (rachaPagadaHasta, omisionesSeguidas,
+  // historialOmisiones, descripcion) volvían a su valor por defecto en
+  // cada edición — explotable para cobrar de más una moneda de racha ya
+  // pagada, o para abaratar el costo de la próxima omisión con solo
+  // cambiar el ícono o el título. El fix deriva la edición con copyWith
+  // sobre la rutina existente; estos tests fijan ese comportamiento.
+  // ============================================================
+  test(
+    'editarRutina (derivada con copyWith, como ahora hace el formulario) preserva '
+    'racha, rachaPagadaHasta, omisionesSeguidas e historialOmisiones al editar solo el ícono',
+    () async {
+      const idRutina = '11111111-1111-1111-1111-111111111111';
+      const horaFija = TimeOfDay(hour: 8, minute: 0);
+      final horarios = {0: horaFija};
+
+      final rutinaOriginal = _rutinaDePrueba(
+        id: idRutina,
+        titulo: 'Meditar',
+        horarios: horarios,
+        racha: 7,
+        rachaPagadaHasta: 7,
+        omisionesSeguidas: 5,
+        historialOmisiones: const ['2024-01-01'],
+      );
+
+      SharedPreferences.setMockInitialValues({
+        'lista_rutinas_v2': '[${_jsonDeRutina(rutinaOriginal)}]',
+      });
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(rutinaProvider.notifier);
+      await _dejarQueTermineElTrabajoAsincrono();
+
+      final rutinaAntes = container.read(rutinaProvider).firstWhere((r) => r.id == idRutina);
+
+      // Mismo patrón que ahora usa rutina_form_screen.dart al editar: derivar
+      // con copyWith desde la rutina existente, cambiando solo el ícono.
+      const nuevoIcono = 0xe001;
+      final rutinaEditada = rutinaAntes.copyWith(
+        titulo: rutinaAntes.titulo,
+        horarios: rutinaAntes.horarios,
+        esFlexible: rutinaAntes.esFlexible,
+        iconoCode: nuevoIcono,
+      );
+
+      await notifier.editarRutina(rutinaEditada);
+      await _dejarQueTermineElTrabajoAsincrono();
+
+      final rutinaDespues = container.read(rutinaProvider).firstWhere((r) => r.id == idRutina);
+
+      expect(rutinaDespues.iconoCode, equals(nuevoIcono));
+      expect(rutinaDespues.racha, equals(7), reason: 'la racha no debe alterarse al editar');
+      expect(rutinaDespues.rachaPagadaHasta, equals(7),
+          reason: 'rachaPagadaHasta no debe resetearse al editar (evita cobrar la moneda de nuevo)');
+      expect(rutinaDespues.omisionesSeguidas, equals(5),
+          reason: 'omisionesSeguidas no debe resetearse al editar (evita abaratar el costo de omitir)');
+      expect(rutinaDespues.historialOmisiones, equals(const ['2024-01-01']));
+    },
+  );
+
+  test('editar una rutina borrando la descripción la deja en null', () async {
+    const idRutina = '22222222-2222-2222-2222-222222222222';
+    const horaFija = TimeOfDay(hour: 9, minute: 0);
+    final horarios = {1: horaFija};
+
+    final rutinaOriginal = _rutinaDePrueba(
+      id: idRutina,
+      titulo: 'Leer',
+      horarios: horarios,
+      descripcion: 'Diez páginas antes de dormir',
+    );
+
+    SharedPreferences.setMockInitialValues({
+      'lista_rutinas_v2': '[${_jsonDeRutina(rutinaOriginal)}]',
+    });
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final notifier = container.read(rutinaProvider.notifier);
+    await _dejarQueTermineElTrabajoAsincrono();
+
+    final rutinaAntes = container.read(rutinaProvider).firstWhere((r) => r.id == idRutina);
+
+    // Mismo patrón que rutina_form_screen.dart cuando el usuario deja el
+    // campo de descripción vacío: limpiarDescripcion:true.
+    final rutinaEditada = rutinaAntes.copyWith(
+      titulo: rutinaAntes.titulo,
+      horarios: rutinaAntes.horarios,
+      esFlexible: rutinaAntes.esFlexible,
+      iconoCode: rutinaAntes.iconoCode,
+      descripcion: null,
+      limpiarDescripcion: true,
+    );
+
+    await notifier.editarRutina(rutinaEditada);
+    await _dejarQueTermineElTrabajoAsincrono();
+
+    final rutinaDespues = container.read(rutinaProvider).firstWhere((r) => r.id == idRutina);
+    expect(rutinaDespues.descripcion, isNull);
+  });
+
+  test('editar una rutina sin tocar la descripción la conserva', () async {
+    const idRutina = '33333333-3333-3333-3333-333333333333';
+    const horaFija = TimeOfDay(hour: 10, minute: 0);
+    final horarios = {2: horaFija};
+
+    final rutinaOriginal = _rutinaDePrueba(
+      id: idRutina,
+      titulo: 'Estirar',
+      horarios: horarios,
+      descripcion: 'Rutina de 10 minutos',
+    );
+
+    SharedPreferences.setMockInitialValues({
+      'lista_rutinas_v2': '[${_jsonDeRutina(rutinaOriginal)}]',
+    });
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final notifier = container.read(rutinaProvider.notifier);
+    await _dejarQueTermineElTrabajoAsincrono();
+
+    final rutinaAntes = container.read(rutinaProvider).firstWhere((r) => r.id == idRutina);
+
+    // El formulario precarga el controller con la descripción existente; si
+    // el usuario no la toca, se reenvía el mismo texto con
+    // limpiarDescripcion:false.
+    final rutinaEditada = rutinaAntes.copyWith(
+      titulo: 'Estirar (editado)',
+      horarios: rutinaAntes.horarios,
+      esFlexible: rutinaAntes.esFlexible,
+      iconoCode: rutinaAntes.iconoCode,
+      descripcion: rutinaAntes.descripcion,
+      limpiarDescripcion: false,
+    );
+
+    await notifier.editarRutina(rutinaEditada);
+    await _dejarQueTermineElTrabajoAsincrono();
+
+    final rutinaDespues = container.read(rutinaProvider).firstWhere((r) => r.id == idRutina);
+    expect(rutinaDespues.descripcion, equals('Rutina de 10 minutos'));
+    expect(rutinaDespues.titulo, equals('Estirar (editado)'));
+  });
 }
 
 bool _mismaListaDeIds(List<int> a, List<int> b) {
