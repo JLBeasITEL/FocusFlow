@@ -35,9 +35,16 @@ class RutinaLandscapeCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: colorFuerte.withValues(alpha: 0.18)),
       ),
+      // Sin mainAxisSize.min (queremos que el Column SÍ llene el alto fijo
+      // de la celda, ver mainAxisExtent en home_screen.dart) y con
+      // mainAxisAlignment.center: cuando ocultarHora (o cualquier otro
+      // motivo futuro) deja menos contenido, se centra dentro de esa altura
+      // fija en vez de quedar arriba con un hueco al fondo — el grid ya
+      // fuerza la misma altura de celda para todas las tarjetas, así que
+      // acá no hay opción de "encoger", solo de recentrar.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Row(
             children: [

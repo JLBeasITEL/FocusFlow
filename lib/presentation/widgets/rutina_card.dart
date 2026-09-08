@@ -230,13 +230,19 @@ class RutinaCard extends ConsumerWidget {
                             )
                           : const SizedBox.shrink(),
                     ),
-                    const SizedBox(height: 8),
-
                     // ========================================================
-                    // Fila inferior: hora (izquierda) — racha y botón de
-                    // omitir (derecha). Colapsada por completo (SizedBox.shrink,
-                    // sin el minHeight de 48) cuando ninguno de los tres tiene
-                    // algo que mostrar — ver filaInferiorVacia arriba.
+                    // Separador + fila inferior: hora (izquierda) — racha y
+                    // botón de omitir (derecha). El SizedBox(height: 8) va
+                    // JUNTO con la fila (no suelto antes): si filaInferiorVacia
+                    // no queda nada que mostrar abajo, y dejar ese separador
+                    // suelto sumaría una "cola" invisible al bloque de texto,
+                    // corriendo el título hacia arriba respecto al centro real
+                    // de la tarjeta (ver CrossAxisAlignment.center del Row
+                    // exterior: centra el checkbox/ícono contra la altura TOTAL
+                    // de este bloque, cola incluida). Sin la fila, se omiten
+                    // ambos widgets por completo — no solo se colapsa a
+                    // SizedBox.shrink — para que el bloque restante (aquí,
+                    // el título solo) sea lo único que el Row exterior centra.
                     // ConstrainedBox(minHeight: 48) + IntrinsicHeight + stretch:
                     // le da al botón de omitir una zona táctil de al menos 48dp
                     // de ALTO (creciendo hacia arriba/abajo del contenido, no
@@ -245,9 +251,8 @@ class RutinaCard extends ConsumerWidget {
                     // misma técnica que ya se usó para corregir el RenderFlex
                     // overflow anterior.
                     // ========================================================
-                    if (filaInferiorVacia)
-                      const SizedBox.shrink()
-                    else
+                    if (!filaInferiorVacia) ...[
+                      const SizedBox(height: 8),
                       ConstrainedBox(
                         constraints: const BoxConstraints(minHeight: 48),
                         child: IntrinsicHeight(
@@ -299,6 +304,7 @@ class RutinaCard extends ConsumerWidget {
                           ),
                         ),
                       ),
+                    ],
                   ],
                 ),
               ),
