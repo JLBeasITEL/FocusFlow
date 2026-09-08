@@ -31,12 +31,31 @@ int _generarIdNumerico(String id) {
   return hash % 100000;
 }
 
+// Copia mínima de RutinaNotifier._calcularProximaFecha (privado, no
+// importable): necesaria para que las claves de idsPorOcurrencia de las
+// rutinas de prueba (ver más abajo) caigan en las mismas fechas que
+// producción calcularía — SIEMPRE a partir del reloj inyectado que recibe
+// como parámetro, nunca de DateTime.now(), o se reintroduce exactamente el
+// no-determinismo que este archivo existe para eliminar.
+DateTime _calcularProximaFechaDePrueba(DateTime ahora, int diaSemana, TimeOfDay hora) {
+  int targetWeekday = diaSemana + 1; // Dart: 1=Lunes, 7=Domingo
+  DateTime fecha = DateTime(ahora.year, ahora.month, ahora.day, hora.hour, hora.minute);
+  while (fecha.weekday != targetWeekday || fecha.isBefore(ahora)) {
+    fecha = fecha.add(const Duration(days: 1));
+  }
+  return fecha;
+}
+
+// Mismo formato que RutinaNotifier._claveFecha (privado, no importable).
+String _claveFechaDePrueba(DateTime fecha) => fecha.toIso8601String().split('T')[0];
+
 Rutina _rutinaDePrueba({
   required String id,
   required String titulo,
   required Map<int, TimeOfDay> horarios,
   bool completada = false,
   List<int> notificacionesActivas = const [],
+  Map<String, List<int>> idsPorOcurrencia = const {},
   DateTime? ultimaFechaProgramada,
   String? descripcion,
   int racha = 0,
@@ -53,6 +72,7 @@ Rutina _rutinaDePrueba({
     activa: true,
     completada: completada,
     notificacionesActivas: notificacionesActivas,
+    idsPorOcurrencia: idsPorOcurrencia,
     ultimaFechaProgramada: ultimaFechaProgramada,
     racha: racha,
     rachaPagadaHasta: rachaPagadaHasta,
@@ -142,12 +162,21 @@ void main() {
       // --- Rutina B: "Meditar" (7 días/semana), colchón de sobra (20 días,
       // >= 2 semanas). No debe hacer NINGUNA llamada nativa (rama b).
       final notificacionesPreviasB = [111, 222, 333];
+      // idsPorOcurrencia no vacío es lo que le dice a _rellenarColchonSiHaceFalta
+      // que B ya está gestionada por el sistema nuevo (si no, la confunde con
+      // una rutina legacy y dispara un reset completo — justo la rama que este
+      // caso NO debe tomar). El agrupamiento exacto por fecha no importa para
+      // lo que este caso prueba (nada inspecciona su contenido), solo que
+      // exista; se anota bajo la fecha de hoy (según el reloj inyectado) por
+      // simplicidad.
+      final idsPorOcurrenciaB = {_claveFechaDePrueba(ahora): notificacionesPreviasB};
       final ultimaFechaB = ahora.add(const Duration(days: 20));
       final rutinaB = _rutinaDePrueba(
         id: idB,
         titulo: 'Meditar',
         horarios: {for (var d = 0; d < 7; d++) d: horaFija},
         notificacionesActivas: notificacionesPreviasB,
+        idsPorOcurrencia: idsPorOcurrenciaB,
         ultimaFechaProgramada: ultimaFechaB,
       );
 
@@ -156,8 +185,16 @@ void main() {
       // sin tocar los 20 que ya representan un colchón de 4 semanas
       // realista (mismo esquema que un reset completo: semana 0..3).
       const diaLectura = 6; // domingo
+      const horaLectura = TimeOfDay(hour: 21, minute: 0);
       final baseIdC = _generarIdNumerico(idC);
       final idExactoC = baseIdC + diaLectura;
+      // Misma fecha que produciría _calcularProximaFecha en producción para
+      // este día/hora, calculada con el reloj INYECTADO (ahora) — nunca con
+      // DateTime.now() — para que las claves de idsPorOcurrenciaC coincidan
+      // exactamente con lo que _rellenarColchonSiHaceFalta espera encontrar
+      // ya cubierto al decidir la rama c (relleno parcial) en vez de la a
+      // (reset completo).
+      final primeraOcurrenciaC = _calcularProximaFechaDePrueba(ahora, diaLectura, horaLectura);
       final notificacionesPreviasC = <int>[
         for (var semana = 0; semana < 4; semana++) ...[
           idExactoC + semana * 100000,
@@ -167,12 +204,23 @@ void main() {
           idExactoC + semana * 100000 + 30000,
         ],
       ];
+      final idsPorOcurrenciaC = {
+        for (var semana = 0; semana < 4; semana++)
+          _claveFechaDePrueba(primeraOcurrenciaC.add(Duration(days: 7 * semana))): [
+            idExactoC + semana * 100000,
+            idExactoC + semana * 100000 + 1000,
+            idExactoC + semana * 100000 + 10000,
+            idExactoC + semana * 100000 + 20000,
+            idExactoC + semana * 100000 + 30000,
+          ],
+      };
       final ultimaFechaC = ahora.add(const Duration(days: 5));
       final rutinaC = _rutinaDePrueba(
         id: idC,
         titulo: 'Leer',
-        horarios: const {diaLectura: TimeOfDay(hour: 21, minute: 0)},
+        horarios: const {diaLectura: horaLectura},
         notificacionesActivas: notificacionesPreviasC,
+        idsPorOcurrencia: idsPorOcurrenciaC,
         ultimaFechaProgramada: ultimaFechaC,
       );
 
@@ -199,7 +247,14 @@ void main() {
       // ============================================================
       // PASADA 1 — primera "apertura de la app" con el nuevo sistema.
       // ============================================================
-      final container1 = ProviderContainer();
+      // Reloj fijo en el mismo instante que ya capturamos arriba en `ahora`:
+      // sin esto, rutina_provider.dart vuelve a llamar DateTime.now() por su
+      // cuenta en varios puntos (carga, reset completo, relleno de colchón,
+      // cálculo de próxima fecha), y ese segundo "ahora" puede caer en un día
+      // distinto al que usaron las rutinas de prueba si el test corre cerca
+      // de medianoche o bajo carga — el origen real de la falla intermitente
+      // documentada en el README antes de este fix.
+      final container1 = ProviderContainer(overrides: [relojProvider.overrideWithValue(() => ahora)]);
       addTearDown(container1.dispose);
       container1.read(rutinaProvider.notifier); // dispara build() -> _cargarRutinas()
       await _dejarQueTermineElTrabajoAsincrono();
@@ -227,10 +282,22 @@ void main() {
           reason: 'C no debe tener IDs duplicados tras el relleno');
       expect(c1.ultimaFechaProgramada!.isAfter(ultimaFechaC), isTrue);
 
-      // D: colchón agotado -> se recupera solo con relleno.
+      // D: colchón agotado -> se recupera solo con relleno (rama c). No
+      // fijamos un número de semanas exacto acá a propósito: el objetivo de
+      // colchón del relleno es un literal interno de _rellenarColchonSiHaceFalta
+      // (hoy 2 semanas, ver README "Deuda técnica conocida" sobre las dos
+      // constantes de colchón independientes en rutina_provider.dart), así que
+      // un umbral tipo "20 días" quedaría desalineado la próxima vez que ese
+      // literal cambie — como ya pasó una vez. En cambio, reusamos el mismo
+      // umbral de 7 días que la propia rama b usa como frontera de "colchón
+      // suficiente" (rutina_provider.dart, condición `diasDeColchon >= 7`):
+      // cualquier relleno real, sin importar a cuántas semanas apunte
+      // internamente, tiene que dejar el colchón por encima de esa frontera,
+      // o la rama b lo habría considerado "suficiente" y no habría rellenado
+      // nada en absoluto.
       expect(d1.notificacionesActivas, isNotEmpty);
-      expect(d1.ultimaFechaProgramada!.isAfter(ahora.add(const Duration(days: 20))), isTrue,
-          reason: 'D debe terminar con colchón de ~4 semanas otra vez');
+      expect(d1.ultimaFechaProgramada!.isAfter(ahora.add(const Duration(days: 7))), isTrue,
+          reason: 'D debe terminar con el colchón por encima del umbral de "colchón suficiente"');
 
       // Ningún ID se programó dos veces en toda la pasada (garantía central
       // del esquema anti-colisión, ver PASO 4).
@@ -258,7 +325,7 @@ void main() {
       idsProgramados.clear();
       idsCancelados.clear();
 
-      final container2 = ProviderContainer();
+      final container2 = ProviderContainer(overrides: [relojProvider.overrideWithValue(() => ahora)]);
       addTearDown(container2.dispose);
       container2.read(rutinaProvider.notifier);
       await _dejarQueTermineElTrabajoAsincrono();

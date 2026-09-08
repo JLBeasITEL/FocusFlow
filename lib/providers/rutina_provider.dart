@@ -24,6 +24,12 @@ import 'monedas_provider.dart';
 // ============================================================
 const int rachaPorMoneda = 7;
 
+// Fuente única de "ahora" para todo este archivo: permite fijar el reloj en
+// tests (override con un valor constante) y, a futuro, es la misma fuente
+// que debe usar el tick del temporizador para no depender de DateTime.now()
+// directo en ningún punto del feature.
+final relojProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+
 class RutinaNotifier extends Notifier<List<Rutina>> {
   static const String _storageKey = 'lista_rutinas_v2';
 
@@ -33,6 +39,8 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   // notificacionesActivas, dejando IDs huérfanos imposibles de cancelar.
   final Set<String> _idsEnProceso = {};
 
+  DateTime get _ahora => ref.read(relojProvider)();
+
   @override
   List<Rutina> build() {
     _cargarRutinas();
@@ -41,7 +49,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
 
   // --- CALCULADORA DE PROGRESO DIARIO ---
   double get progresoDiario {
-    final hoy = DateTime.now().weekday; // 1 = Lunes, 7 = Domingo
+    final hoy = _ahora.weekday; // 1 = Lunes, 7 = Domingo
     
     final rutinasDeHoy = state.where((r) => r.horarios.containsKey(hoy)).toList();
     
@@ -76,7 +84,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       final List<dynamic> listaDecodificada = jsonDecode(rutinasJson);
       final List<Rutina> rutinas = listaDecodificada.map((item) => Rutina.fromJson(item)).toList();
 
-      final ahora = DateTime.now();
+      final ahora = _ahora;
       final hoyStr = ahora.toIso8601String().split('T')[0];
       final hoyFecha = DateTime(ahora.year, ahora.month, ahora.day);
       
@@ -292,7 +300,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     }
 
     final int baseId = _generarIdNumerico(rutina.id);
-    final ahora = DateTime.now();
+    final ahora = _ahora;
     final List<int> nuevosIds = []; // Aquí acumulamos TODO lo que programemos en este ciclo
     final Map<String, List<int>> mapaPorFecha = {}; // IDs agrupados por fecha exacta (ver idsPorOcurrencia)
     DateTime? fechaMasLejana; // El final real del colchón: se guarda en ultimaFechaProgramada
@@ -457,7 +465,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       return true;
     }
 
-    final ahora = DateTime.now();
+    final ahora = _ahora;
     final int diasDeColchon = rutina.ultimaFechaProgramada!.difference(ahora).inDays;
 
     // b. Colchón suficiente: cero llamadas nativas.
@@ -566,7 +574,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   }
 
   DateTime _calcularProximaFecha(int diaSemana, TimeOfDay hora) {
-    final ahora = DateTime.now();
+    final ahora = _ahora;
     int targetWeekday = diaSemana + 1; // Dart: 1=Lunes, 7=Domingo
 
     DateTime fecha = DateTime(ahora.year, ahora.month, ahora.day, hora.hour, hora.minute);
@@ -676,7 +684,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     _idsEnProceso.add(id);
     try {
       final rutinaAntes = state.firstWhere((r) => r.id == id);
-      final hoy = DateTime.now().toIso8601String().split('T')[0];
+      final hoy = _ahora.toIso8601String().split('T')[0];
 
       // Cancelación inmediata y prioritaria, solo al MARCAR como completa
       // (no al desmarcar), y solo de los IDs que corresponden EXACTAMENTE
@@ -805,7 +813,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     _idsEnProceso.add(id);
     try {
       final rutinaAntes = state.firstWhere((r) => r.id == id);
-      final hoy = DateTime.now().toIso8601String().split('T')[0];
+      final hoy = _ahora.toIso8601String().split('T')[0];
 
       if (rutinaAntes.omitida) {
         // --- Deshacer la omisión: reembolso ---
@@ -848,7 +856,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
         await NotificacionesService().cancelarListaDeIds(idsDeHoy);
       }
 
-      final DateTime limiteHistorial = DateTime.now().subtract(const Duration(days: 60));
+      final DateTime limiteHistorial = _ahora.subtract(const Duration(days: 60));
 
       state = [
         for (final r in state)

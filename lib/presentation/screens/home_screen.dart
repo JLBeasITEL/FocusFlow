@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart'; // Necesario para g
 import '../../providers/tarea_provider.dart';
 import '../../models/tarea.dart';
 import '../../models/nota.dart';
+import '../../models/rutina.dart';
 import '../../providers/nota_provider.dart';
 import '../widgets/add_tarea_modal.dart';
 import '../../providers/rutina_provider.dart';
@@ -32,6 +33,7 @@ import '../widgets/tarea_card_landscape.dart';
 import '../widgets/rutina_card_landscape.dart';
 import '../widgets/home_sidebar_landscape.dart';
 import '../widgets/overflow_scrollbar.dart';
+import '../../core/celebracion_racha.dart';
 
 // Puente para pedirle a HomeScreen que cambie de pestaña desde fuera del
 // árbol de widgets (el handler de clicks del widget de Rutinas en
@@ -112,6 +114,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   // _buildTabNotas / mostrarDialogoNota en widgets/nota_dialog.dart).
   bool _modoSeleccionNotas = false;
   final Set<String> _notasSeleccionadas = {};
+
+  // Rutina cuyo detalle (título completo + descripción) se muestra en el
+  // panel superpuesto al grid landscape (ver _buildContenidoRutinasLandscape
+  // más abajo). Solo tiene sentido en esa orientación: portrait resuelve lo
+  // mismo expandiendo la tarjeta in-place, sin este estado.
+  Rutina? _rutinaLandscapeSeleccionada;
 
   // Un controller propio por sección (Tareas/Rutinas/Notas), reutilizado
   // entre sus variantes portrait/landscape (nunca están montadas al mismo
@@ -432,6 +440,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     final int diaActual = DateTime.now().weekday - 1;
     final rutinasDeHoy = listaCompleta.where((r) => r.horarios.containsKey(diaActual) && r.activa).toList();
 
+    // Re-resuelve la selección contra la lista fresca de este build (por
+    // id, no por la referencia guardada): si la rutina se editó desde
+    // "Editar rutina" mientras el panel estaba abierto, el panel muestra el
+    // dato actualizado en vez de quedarse con la instancia vieja. Si ya no
+    // aparece hoy (se desactivó, se borró, o cambió el día), la selección
+    // se limpia sola sin necesidad de que el usuario cierre el panel a mano.
+    Rutina? rutinaSeleccionada;
+    if (_rutinaLandscapeSeleccionada != null) {
+      for (final r in rutinasDeHoy) {
+        if (r.id == _rutinaLandscapeSeleccionada!.id) {
+          rutinaSeleccionada = r;
+          break;
+        }
+      }
+      if (rutinaSeleccionada == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _rutinaLandscapeSeleccionada = null);
+        });
+      }
+    }
+
     if (rutinasDeHoy.isEmpty) {
       return Center(
         child: Padding(
@@ -457,20 +486,75 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         const double anchoTarget = 140;
         const double espaciado = 12;
         final int columnas = math.max(2, ((constraints.maxWidth + espaciado) / (anchoTarget + espaciado)).floor());
-        return OverflowScrollbar(
-          controller: _scrollRutinas,
-          child: GridView.builder(
-          controller: _scrollRutinas,
-          padding: EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columnas,
-            mainAxisSpacing: espaciado,
-            crossAxisSpacing: espaciado,
-            mainAxisExtent: 148,
-          ),
-          itemCount: rutinasDeHoy.length,
-          itemBuilder: (context, index) => RutinaLandscapeCard(rutina: rutinasDeHoy[index], tema: temaActual),
-          ),
+        // El grid queda siempre montado como capa base (conserva la
+        // posición de scroll al abrir/cerrar el panel); el panel de detalle
+        // se superpone encima con un AnimatedSwitcher cuando hay selección,
+        // key'eado por id de rutina para que tocar OTRA tarjeta con el
+        // panel ya abierto haga un crossfade al contenido nuevo en vez de
+        // cerrar y reabrir.
+        return Stack(
+          children: [
+            // Se mantiene montado (conserva scroll) mientras el panel está
+            // abierto, pero deja de pintarse y de recibir toques: sin esto
+            // las tarjetas de atrás asomaban por las esquinas redondeadas
+            // del panel. Se oculta del todo (no se atenúa) porque dejarlo
+            // semi-visible sugeriría que sigue siendo tocable cuando en
+            // realidad el IgnorePointer ya se lo impide — una promesa falsa.
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 200),
+              opacity: rutinaSeleccionada == null ? 1 : 0,
+              child: IgnorePointer(
+                ignoring: rutinaSeleccionada != null,
+                child: OverflowScrollbar(
+                  controller: _scrollRutinas,
+                  child: GridView.builder(
+                    controller: _scrollRutinas,
+                    padding: EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columnas,
+                      mainAxisSpacing: espaciado,
+                      crossAxisSpacing: espaciado,
+                      mainAxisExtent: 148,
+                    ),
+                    itemCount: rutinasDeHoy.length,
+                    itemBuilder: (context, index) {
+                      final rutina = rutinasDeHoy[index];
+                      return RutinaLandscapeCard(
+                        rutina: rutina,
+                        tema: temaActual,
+                        onTap: () => setState(() {
+                          _rutinaLandscapeSeleccionada = _rutinaLandscapeSeleccionada?.id == rutina.id ? null : rutina;
+                        }),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: rutinaSeleccionada == null,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(begin: const Offset(0.04, 0), end: Offset.zero).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: rutinaSeleccionada == null
+                      ? const SizedBox.shrink(key: ValueKey('sin-seleccion'))
+                      : _PanelDetalleRutinaLandscape(
+                          key: ValueKey(rutinaSeleccionada.id),
+                          rutina: rutinaSeleccionada,
+                          tema: temaActual,
+                          onCerrar: () => setState(() => _rutinaLandscapeSeleccionada = null),
+                        ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -947,9 +1031,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         ),
       ),
 
-      // Oculto mientras se seleccionan notas para armar un grupo: agregar
-      // una nota nueva en ese momento no tiene sentido y estorba el flujo.
-      floatingActionButton: (_currentIndex == 2 && _modoSeleccionNotas) ? null : FloatingActionButton.extended(
+      // Oculto mientras se seleccionan notas para armar un grupo (agregar
+      // una nota nueva en ese momento no tiene sentido y estorba el flujo)
+      // o mientras el panel de detalle de rutina landscape está abierto (el
+      // panel ocupa la misma zona donde el usuario esperaría tocar "Nuevo
+      // hábito", y abrir el formulario ahí encima sería confuso). Scaffold
+      // ya anima la aparición/desaparición del FAB al pasar a null — mismo
+      // mecanismo que ya usaba el modo selección de notas, sin necesidad de
+      // envolverlo en un AnimatedSwitcher propio.
+      floatingActionButton: (_currentIndex == 2 && _modoSeleccionNotas) || _rutinaLandscapeSeleccionada != null
+          ? null
+          : FloatingActionButton.extended(
         onPressed: () {
           if (_currentIndex == 0) {
             abrirFormularioTarea(context);
@@ -1577,6 +1669,134 @@ const String explicacionMonedasRacha =
 // TabBar de portrait). Solo cambia de apariencia; quien manda en cuál
 // pestaña está activa sigue siendo _tabController, así que rotar el
 // dispositivo entre portrait y landscape nunca deja el índice desincronizado.
+// Panel de detalle de rutina en landscape (título completo + descripción),
+// superpuesto sobre el grid en vez de un showDialog centrado: un diálogo no
+// se puede posicionar en la zona del grid sin calcular su geometría, y este
+// panel es hermano del grid dentro del mismo Stack en
+// _buildContenidoRutinasLandscape, así que ocupa exactamente esa zona sin
+// tapar el sidebar ("Hoy es...") ni el header. Sin botón "Editar": el tap
+// sobre la tarjeta no reemplaza ningún acceso existente (no hacía nada
+// antes de este rediseño) y editar ya tiene su propia entrada en el header
+// ("Editar rutina" / ícono de lápiz).
+class _PanelDetalleRutinaLandscape extends ConsumerWidget {
+  final Rutina rutina;
+  final TemaApp tema;
+  final VoidCallback onCerrar;
+  const _PanelDetalleRutinaLandscape({super.key, required this.rutina, required this.tema, required this.onCerrar});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bool tieneDescripcion = rutina.descripcion != null && rutina.descripcion!.trim().isNotEmpty;
+    final Color colorFuerte = rutina.activa ? tema.colorPrincipal : Colors.grey;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: tema.colorSuperficieCard,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorFuerte.withValues(alpha: 0.18)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: colorFuerte.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                child: Icon(IconData(rutina.iconoCode, fontFamily: 'MaterialIcons'), color: colorFuerte, size: 26),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    rutina.titulo,
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: tema.colorTextoSuperficie),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.close_rounded, color: colorFuerte),
+                tooltip: 'Cerrar',
+                onPressed: onCerrar,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Text(
+                tieneDescripcion ? rutina.descripcion! : 'Esta rutina no tiene descripción.',
+                style: TextStyle(
+                  fontSize: 15,
+                  height: 1.4,
+                  color: tieneDescripcion
+                      ? tema.colorTextoSuperficie.withValues(alpha: 0.85)
+                      : tema.colorTextoSuperficie.withValues(alpha: 0.5),
+                  fontStyle: tieneDescripcion ? FontStyle.normal : FontStyle.italic,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Acciones: mismo criterio que el checkbox/omitir de la tarjeta
+          // (omitida excluye completar/omitir — hay que deshacer primero;
+          // completada excluye omitir — ya se resolvió el día). El botón
+          // "Completar"/"Desmarcar" llama a la MISMA
+          // alternarCompletadaConCelebracion que usa el checkbox de la
+          // tarjeta (portrait y landscape): cuando el temporizador con
+          // duración se implemente ahí, este botón lo hereda solo, sin
+          // tocar este archivo — no hay una segunda lógica de completado
+          // que mantener sincronizada.
+          if (rutina.omitida)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id),
+                icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina),
+                label: Text('Deshacer omisión', style: TextStyle(color: colorOmitidaRutina, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: colorOmitidaRutina.withValues(alpha: 0.5)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => alternarCompletadaConCelebracion(
+                      context: context,
+                      ref: ref,
+                      rutina: rutina,
+                      marcarCompleta: !rutina.completada,
+                    ),
+                    icon: Icon(rutina.completada ? Icons.remove_circle_outline_rounded : Icons.check_circle_outline_rounded),
+                    label: Text(rutina.completada ? 'Desmarcar' : 'Completar', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorFuerte,
+                      foregroundColor: tema.colorSobrePrincipal,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+                if (!rutina.completada) ...[
+                  const SizedBox(width: 12),
+                  Expanded(child: BotonOmitirRutinaPanel(rutina: rutina)),
+                ],
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PildoraTab extends StatelessWidget {
   final IconData icon;
   final String label;
