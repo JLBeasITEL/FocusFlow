@@ -22,6 +22,9 @@ class ItemSubtarea {
 
   ItemSubtarea({String? id, required this.texto, this.completado = false}) : id = id ?? _uuid.v4();
 
+  ItemSubtarea copyWith({String? texto, bool? completado}) =>
+      ItemSubtarea(id: id, texto: texto ?? this.texto, completado: completado ?? this.completado);
+
   Map<String, dynamic> toJson() => {'id': id, 'texto': texto, 'completado': completado};
 
   factory ItemSubtarea.fromJson(Map<String, dynamic> json) => ItemSubtarea(
@@ -65,6 +68,12 @@ class Tarea {
   // pueda seguir contándola como "completada hoy" aunque su fechaLimite ya
   // haya avanzado a la próxima ocurrencia.
   final DateTime? fechaLimiteAnterior;
+  // Mismo propósito que fechaLimiteAnterior pero para el checklist: guarda
+  // las subtareas tal como estaban (con sus completado=true) justo antes de
+  // resetearlas al reagendar una recurrente, para que
+  // TareaNotifier.deshacerRecurrente pueda devolverlas a ese estado. null
+  // cuando no hay nada que deshacer (tarea sin subtareas, o ya deshecha).
+  final List<ItemSubtarea>? subtareasAnterior;
 
   Tarea({
     String? id,
@@ -80,6 +89,7 @@ class Tarea {
     this.intervalo,
     this.diaAncla,
     this.fechaLimiteAnterior,
+    this.subtareasAnterior,
   }) : id = id ?? _uuid.v4(),
        subtareas = subtareas ?? [];
 
@@ -197,6 +207,7 @@ class Tarea {
     Object? intervalo = _sinCambio,
     Object? diaAncla = _sinCambio,
     Object? fechaLimiteAnterior = _sinCambio,
+    Object? subtareasAnterior = _sinCambio,
   }) {
     return Tarea(
       id: id ?? this.id,
@@ -212,6 +223,7 @@ class Tarea {
       intervalo: identical(intervalo, _sinCambio) ? this.intervalo : intervalo as int?,
       diaAncla: identical(diaAncla, _sinCambio) ? this.diaAncla : diaAncla as int?,
       fechaLimiteAnterior: identical(fechaLimiteAnterior, _sinCambio) ? this.fechaLimiteAnterior : fechaLimiteAnterior as DateTime?,
+      subtareasAnterior: identical(subtareasAnterior, _sinCambio) ? this.subtareasAnterior : subtareasAnterior as List<ItemSubtarea>?,
     );
   }
 
@@ -230,6 +242,7 @@ class Tarea {
       'intervalo': intervalo,
       'diaAncla': diaAncla,
       'fechaLimiteAnterior': fechaLimiteAnterior?.toIso8601String(),
+      'subtareasAnterior': subtareasAnterior?.map((s) => s.toJson()).toList(),
     };
   }
 
@@ -256,6 +269,9 @@ class Tarea {
       intervalo: json['intervalo'] as int?,
       diaAncla: json['diaAncla'] as int?,
       fechaLimiteAnterior: json['fechaLimiteAnterior'] != null ? DateTime.tryParse(json['fechaLimiteAnterior'] as String) : null,
+      // Ausente en tareas guardadas antes de este campo: cae en null, igual
+      // que fechaLimiteAnterior.
+      subtareasAnterior: (json['subtareasAnterior'] as List?)?.map((s) => ItemSubtarea.fromJson(s as Map<String, dynamic>)).toList(),
     );
   }
 }
