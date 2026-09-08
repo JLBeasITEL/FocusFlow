@@ -89,25 +89,26 @@ void main() {
     await _abrirModalNuevaTarea(tester);
     await _expandirMasOpciones(tester);
 
+    // Orden vertical por coordenadas en pantalla, localizando cada elemento
+    // por su texto/tooltip (nunca por el tipo del contenedor que los
+    // agrupa): así el test no se acopla a si esa fila es hoy un Row, antes
+    // fue un Wrap, o mañana es otra cosa.
     final ySubtareas = tester.getTopLeft(find.text('Subtareas')).dy;
-    final yWrapPlantillas = tester.getTopLeft(find.byType(Wrap)).dy;
+    final yGuardarPlantilla = tester.getTopLeft(find.widgetWithText(OutlinedButton, 'Guardar como plantilla')).dy;
     final yGuardarTarea = tester.getTopLeft(find.widgetWithText(ElevatedButton, 'Guardar')).dy;
 
     // Subtareas antes que la fila de plantillas, y esta antes del botón final.
-    expect(ySubtareas, lessThan(yWrapPlantillas));
-    expect(yWrapPlantillas, lessThan(yGuardarTarea));
+    expect(ySubtareas, lessThan(yGuardarPlantilla));
+    expect(yGuardarPlantilla, lessThan(yGuardarTarea));
 
-    // "Usar plantilla" queda entre "Guardar como plantilla" y el lápiz: se
-    // verifica el orden real de los hijos del Wrap (no coordenadas en
-    // pantalla, que con Wrap dependen del ancho disponible y no son
-    // confiables como prueba de orden).
-    final wrap = tester.widget<Wrap>(find.byType(Wrap));
-    expect(wrap.children, hasLength(3));
-    bool tieneDescendiente(Widget child, Finder matching) =>
-        find.descendant(of: find.byWidget(child), matching: matching).evaluate().isNotEmpty;
-    expect(tieneDescendiente(wrap.children[0], find.text('Guardar como plantilla')), isTrue);
-    expect(tieneDescendiente(wrap.children[1], find.text('Usar plantilla')), isTrue);
-    expect(tieneDescendiente(wrap.children[2], find.byTooltip('Editar plantillas')), isTrue);
+    // Orden horizontal dentro de la fila: "Guardar como plantilla" a la
+    // izquierda de "Usar plantilla", y el lápiz a la derecha de ambos.
+    final xGuardarPlantilla = tester.getTopLeft(find.widgetWithText(OutlinedButton, 'Guardar como plantilla')).dx;
+    final xUsarPlantilla = tester.getTopLeft(find.widgetWithText(OutlinedButton, 'Usar plantilla')).dx;
+    final xEditarPlantillas = tester.getTopLeft(find.byTooltip('Editar plantillas')).dx;
+
+    expect(xGuardarPlantilla, lessThan(xUsarPlantilla));
+    expect(xUsarPlantilla, lessThan(xEditarPlantillas));
   });
 
   testWidgets('guardar como plantilla, reabrir el formulario y aplicarla con "Usar plantilla"', (tester) async {
