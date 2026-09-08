@@ -77,6 +77,16 @@ class RutinaCard extends ConsumerWidget {
     // del botón de omitir.
     final bool filaInferiorVacia = ocultarHora && !hayRacha && !hayBotonOmitir;
 
+    // Modo compacto: una vez que la ocurrencia de hoy ya se resolvió
+    // (completada U omitida), no hay botón de omitir en ningún caso
+    // (hayBotonOmitir ya lo excluye para ambas) — ni la racha ni "Omitida
+    // hoy" necesitan una fila propia con zona táctil, así que se fusionan
+    // con el título en una sola línea en vez de reservar una fila inferior
+    // completa. Aplica a los dos estados por igual (no solo completada) para
+    // que el criterio sea consistente: que unas tarjetas colapsen y otras no
+    // según el estado se vería arbitrario.
+    final bool modoCompacto = rutina.completada || omitida;
+
     return Card(
       // Espacio debajo de cada tarjeta, para separarla de la siguiente.
       margin: const EdgeInsets.only(bottom: 16),
@@ -195,136 +205,266 @@ class RutinaCard extends ConsumerWidget {
               const SizedBox(width: 12), // Separación horizontal antes del texto
 
               // ================================================================
-              // 2. ZONA CENTRAL: título a todo el ancho, descripción, y una
-              // fila inferior con hora + racha + botón de omitir.
+              // 2. ZONA CENTRAL: dos layouts posibles según el estado.
+              // Normal (rutina pendiente): título en su propia línea, luego
+              // descripción, luego la fila inferior de hora/racha/omitir.
+              // Compacto (completada u omitida, ver modoCompacto arriba):
+              // título y racha (u "Omitida hoy") comparten una sola línea —
+              // ver _construirContenidoCompacto para el porqué.
               // ================================================================
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start, // Alinea el texto a la izquierda
-                  children: [
-                    // Título: ya no comparte fila con nada, ocupa todo el
-                    // ancho disponible hasta el borde derecho de la tarjeta.
-                    Text(
-                      rutina.titulo,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        // Si ya está completada, le pone una línea tachada encima del texto.
-                        decoration: rutina.completada ? TextDecoration.lineThrough : null,
-                        // Color del texto: ámbar si se omitió hoy, negro si activa, gris si desactivada.
-                        color: omitida ? colorOmitidaRutina : (activa ? Colors.black87 : Colors.grey),
+                child: modoCompacto
+                    ? _construirContenidoCompacto(
+                        omitida: omitida,
+                        activa: activa,
+                        tieneDescripcion: tieneDescripcion,
+                        esExpandida: esExpandida,
+                        hayRacha: hayRacha,
+                      )
+                    : _construirContenidoNormal(
+                        context: context,
+                        omitida: omitida,
+                        activa: activa,
+                        colorFuerte: colorFuerte,
+                        tieneDescripcion: tieneDescripcion,
+                        esExpandida: esExpandida,
+                        hayRacha: hayRacha,
+                        hayBotonOmitir: hayBotonOmitir,
+                        ocultarHora: ocultarHora,
+                        filaInferiorVacia: filaInferiorVacia,
                       ),
-                      // Colapsada: hasta 2 líneas con "...". Expandida: sin límite.
-                      maxLines: esExpandida ? null : 2,
-                      overflow: esExpandida ? TextOverflow.visible : TextOverflow.ellipsis,
-                    ),
-
-                    // Descripción opcional: va ENTRE el título y la hora, solo
-                    // visible con la tarjeta expandida. AnimatedSize hace que
-                    // la tarjeta crezca/encoja con una transición suave en vez
-                    // de un salto brusco (mismo patrón de TareaCard: 300ms,
-                    // easeInOut).
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      alignment: Alignment.topLeft,
-                      child: esExpandida && tieneDescripcion
-                          ? Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: Text(
-                                rutina.descripcion!,
-                                style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.3),
-                              ),
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                    // ========================================================
-                    // Separador + fila inferior: hora (izquierda) — racha y
-                    // botón de omitir (derecha). El SizedBox(height: 8) va
-                    // JUNTO con la fila (no suelto antes): si filaInferiorVacia
-                    // no queda nada que mostrar abajo, y dejar ese separador
-                    // suelto sumaría una "cola" invisible al bloque de texto,
-                    // corriendo el título hacia arriba respecto al centro real
-                    // de la tarjeta (ver CrossAxisAlignment.center del Row
-                    // exterior: centra el checkbox/ícono contra la altura TOTAL
-                    // de este bloque, cola incluida). Sin la fila, se omiten
-                    // ambos widgets por completo — no solo se colapsa a
-                    // SizedBox.shrink — para que el bloque restante (aquí,
-                    // el título solo) sea lo único que el Row exterior centra.
-                    // ConstrainedBox(minHeight: _alturaTactilBotonOmitir) +
-                    // IntrinsicHeight + stretch: le da al botón de omitir una
-                    // zona táctil de ese alto mínimo (creciendo hacia
-                    // arriba/abajo del contenido, no hacia los lados) sin
-                    // ensanchar su pastilla visual ni forzar esa misma altura
-                    // en el resto de la tarjeta — es la misma técnica que ya
-                    // se usó para corregir el RenderFlex overflow anterior.
-                    // El mínimo solo se aplica si el botón de omitir
-                    // realmente va a mostrarse (hayBotonOmitir): sin él (rutina
-                    // completada u omitida), la fila —con solo la racha o la
-                    // etiqueta de estado— se dimensiona a su contenido real,
-                    // sin la zona táctil de más que nadie necesita ahí.
-                    // ========================================================
-                    if (!filaInferiorVacia) ...[
-                      const SizedBox(height: 8),
-                      ConstrainedBox(
-                        constraints: BoxConstraints(minHeight: hayBotonOmitir ? _alturaTactilBotonOmitir : 0),
-                        child: IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // Hora programada para HOY, la etiqueta de estado
-                              // "Omitida" si se pagó con monedas para saltarla
-                              // (igual que el widget de pantalla de inicio), o
-                              // nada si ya se completó sin omitir (el checkbox
-                              // marcado y el título tachado ya lo comunican).
-                              // Flexible (no un ancho fijo): en tarjetas angostas
-                              // con racha de 2+ dígitos y pastilla de omitir a la
-                              // vez, la hora cede ancho (con ellipsis) en vez de
-                              // desbordar la fila — racha y omitir nunca se
-                              // recortan, solo la hora si hace falta.
-                              Flexible(
-                                child: Center(
-                                  child: ocultarHora
-                                      ? const SizedBox.shrink()
-                                      : Text(
-                                          omitida
-                                              ? 'Omitida hoy'
-                                              : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: omitida ? colorOmitidaRutina : colorFuerte,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                ),
-                              ),
-                              // Empuja racha y botón de omitir al extremo derecho,
-                              // dejando a la hora pegada al borde izquierdo.
-                              const Spacer(),
-                              if (hayRacha) ...[
-                                Center(child: _RachaTexto(racha: rutina.racha)),
-                                // Separación con el botón de omitir: evita toques
-                                // accidentales ahora que comparten la misma fila.
-                                const SizedBox(width: 16),
-                              ],
-                              // Botón "Omitir por hoy": solo tiene sentido si
-                              // todavía está pendiente (ni completada ni ya
-                              // omitida) y la rutina está activa.
-                              if (hayBotonOmitir) _BotonOmitirRutina(rutina: rutina),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  // ============================================================
+  // _construirContenidoNormal — rutina pendiente (ni completada ni omitida).
+  // Título en su propia línea, descripción opcional, y la fila inferior de
+  // siempre (hora — racha — botón de omitir). Extraído tal cual estaba
+  // antes de introducir el modo compacto: comportamiento sin cambios para
+  // este caso, incluidos los caminos de ocultarHora/filaInferiorVacia que
+  // en la práctica ya no se alcanzan acá (solo aplicaban a completada/
+  // omitida, que ahora van siempre por _construirContenidoCompacto) — se
+  // conservan para no alterar nada de este método por fuera de la
+  // bifurcación en sí.
+  // ============================================================
+  Widget _construirContenidoNormal({
+    required BuildContext context,
+    required bool omitida,
+    required bool activa,
+    required Color colorFuerte,
+    required bool tieneDescripcion,
+    required bool esExpandida,
+    required bool hayRacha,
+    required bool hayBotonOmitir,
+    required bool ocultarHora,
+    required bool filaInferiorVacia,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start, // Alinea el texto a la izquierda
+      children: [
+        // Título: ya no comparte fila con nada, ocupa todo el
+        // ancho disponible hasta el borde derecho de la tarjeta.
+        Text(
+          rutina.titulo,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            // Si ya está completada, le pone una línea tachada encima del texto.
+            decoration: rutina.completada ? TextDecoration.lineThrough : null,
+            // Color del texto: ámbar si se omitió hoy, negro si activa, gris si desactivada.
+            color: omitida ? colorOmitidaRutina : (activa ? Colors.black87 : Colors.grey),
+          ),
+          // Colapsada: hasta 2 líneas con "...". Expandida: sin límite.
+          maxLines: esExpandida ? null : 2,
+          overflow: esExpandida ? TextOverflow.visible : TextOverflow.ellipsis,
+        ),
+
+        // Descripción opcional: va ENTRE el título y la hora, solo
+        // visible con la tarjeta expandida. AnimatedSize hace que
+        // la tarjeta crezca/encoja con una transición suave en vez
+        // de un salto brusco (mismo patrón de TareaCard: 300ms,
+        // easeInOut).
+        AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: Alignment.topLeft,
+          child: esExpandida && tieneDescripcion
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    rutina.descripcion!,
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.3),
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        // ========================================================
+        // Separador + fila inferior: hora (izquierda) — racha y
+        // botón de omitir (derecha). El SizedBox(height: 8) va
+        // JUNTO con la fila (no suelto antes): si filaInferiorVacia
+        // no queda nada que mostrar abajo, y dejar ese separador
+        // suelto sumaría una "cola" invisible al bloque de texto,
+        // corriendo el título hacia arriba respecto al centro real
+        // de la tarjeta (ver CrossAxisAlignment.center del Row
+        // exterior: centra el checkbox/ícono contra la altura TOTAL
+        // de este bloque, cola incluida). Sin la fila, se omiten
+        // ambos widgets por completo — no solo se colapsa a
+        // SizedBox.shrink — para que el bloque restante (aquí,
+        // el título solo) sea lo único que el Row exterior centra.
+        // ConstrainedBox(minHeight: _alturaTactilBotonOmitir) +
+        // IntrinsicHeight + stretch: le da al botón de omitir una
+        // zona táctil de ese alto mínimo (creciendo hacia
+        // arriba/abajo del contenido, no hacia los lados) sin
+        // ensanchar su pastilla visual ni forzar esa misma altura
+        // en el resto de la tarjeta — es la misma técnica que ya
+        // se usó para corregir el RenderFlex overflow anterior.
+        // El mínimo solo se aplica si el botón de omitir
+        // realmente va a mostrarse (hayBotonOmitir): sin él (rutina
+        // completada u omitida), la fila —con solo la racha o la
+        // etiqueta de estado— se dimensiona a su contenido real,
+        // sin la zona táctil de más que nadie necesita ahí.
+        // ========================================================
+        if (!filaInferiorVacia) ...[
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: hayBotonOmitir ? _alturaTactilBotonOmitir : 0),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Hora programada para HOY, la etiqueta de estado
+                  // "Omitida" si se pagó con monedas para saltarla
+                  // (igual que el widget de pantalla de inicio), o
+                  // nada si ya se completó sin omitir (el checkbox
+                  // marcado y el título tachado ya lo comunican).
+                  // Flexible (no un ancho fijo): en tarjetas angostas
+                  // con racha de 2+ dígitos y pastilla de omitir a la
+                  // vez, la hora cede ancho (con ellipsis) en vez de
+                  // desbordar la fila — racha y omitir nunca se
+                  // recortan, solo la hora si hace falta.
+                  Flexible(
+                    child: Center(
+                      child: ocultarHora
+                          ? const SizedBox.shrink()
+                          : Text(
+                              omitida
+                                  ? 'Omitida hoy'
+                                  : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: omitida ? colorOmitidaRutina : colorFuerte,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
+                  // Empuja racha y botón de omitir al extremo derecho,
+                  // dejando a la hora pegada al borde izquierdo.
+                  const Spacer(),
+                  if (hayRacha) ...[
+                    Center(child: _RachaTexto(racha: rutina.racha)),
+                    // Separación con el botón de omitir: evita toques
+                    // accidentales ahora que comparten la misma fila.
+                    const SizedBox(width: 16),
+                  ],
+                  // Botón "Omitir por hoy": solo tiene sentido si
+                  // todavía está pendiente (ni completada ni ya
+                  // omitida) y la rutina está activa.
+                  if (hayBotonOmitir) _BotonOmitirRutina(rutina: rutina),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ============================================================
+  // _construirContenidoCompacto — rutina completada U omitida.
+  // ------------------------------------------------------------
+  // Una vez que la ocurrencia de hoy ya se resolvió, no hay botón de omitir
+  // en ningún caso (hayBotonOmitir ya lo excluye para completada Y
+  // omitida) — ni la racha ni la etiqueta "Omitida hoy" necesitan zona
+  // táctil propia, así que en vez de reservar una fila inferior completa
+  // se fusionan con el título en una sola línea: título a la izquierda
+  // (Expanded, admite varias líneas igual que en modo normal — un Row con
+  // Expanded no obliga a truncar a una sola línea, la fila simplemente
+  // crece con el texto), "Omitida hoy" y/o la racha a la derecha. La
+  // tarjeta queda notablemente más baja al no reservar esa fila aparte.
+  // Aplica a los dos estados por igual (no solo completada): un criterio
+  // que colapsara unas tarjetas sí y otras no según el estado se vería
+  // arbitrario, y el color ámbar + el ícono de deshacer ya distinguen
+  // "omitida" de "completada" sin necesitar además una fila propia.
+  // La descripción expandible, que en modo normal vive ENTRE el título y
+  // la fila inferior, pasa a vivir DEBAJO de esta línea combinada — ya no
+  // hay un "entre" posible una vez que título y racha comparten renglón.
+  // ============================================================
+  Widget _construirContenidoCompacto({
+    required bool omitida,
+    required bool activa,
+    required bool tieneDescripcion,
+    required bool esExpandida,
+    required bool hayRacha,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text(
+                rutina.titulo,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  decoration: rutina.completada ? TextDecoration.lineThrough : null,
+                  color: omitida ? colorOmitidaRutina : (activa ? Colors.black87 : Colors.grey),
+                ),
+                // Mismo criterio que en modo normal: hasta 2 líneas
+                // colapsada, sin límite si la tarjeta está expandida.
+                maxLines: esExpandida ? null : 2,
+                overflow: esExpandida ? TextOverflow.visible : TextOverflow.ellipsis,
+              ),
+            ),
+            if (omitida) ...[
+              const SizedBox(width: 12),
+              Text(
+                'Omitida hoy',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 14, color: colorOmitidaRutina, fontWeight: FontWeight.w600),
+              ),
+            ],
+            if (hayRacha) ...[
+              const SizedBox(width: 12),
+              _RachaTexto(racha: rutina.racha),
+            ],
+          ],
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: Alignment.topLeft,
+          child: esExpandida && tieneDescripcion
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    rutina.descripcion!,
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.3),
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
     );
   }
 }
