@@ -143,7 +143,17 @@ class TareaNotifier extends Notifier<List<Tarea>> {
       for (final tarea in state)
         if (tarea.id == id)
           completandoRecurrente
-              ? tarea.copyWith(fechaLimite: nuevaFecha, fechaLimiteAnterior: tarea.fechaLimite, esCompletada: false)
+              ? tarea.copyWith(
+                  fechaLimite: nuevaFecha,
+                  fechaLimiteAnterior: tarea.fechaLimite,
+                  esCompletada: false,
+                  // Respalda el checklist marcado antes de resetearlo, para que
+                  // deshacerRecurrente pueda devolverlo. null (no []) cuando la
+                  // tarea no tiene subtareas, para no dejar un respaldo vacío
+                  // sin sentido persistido.
+                  subtareasAnterior: tarea.subtareas.isEmpty ? null : tarea.subtareas,
+                  subtareas: tarea.subtareas.map((s) => s.copyWith(completado: false)).toList(),
+                )
               : tarea.copyWith(esCompletada: !tarea.esCompletada)
         else
           tarea,
