@@ -54,6 +54,21 @@ class RutinaCard extends ConsumerWidget {
     // Si la rutina está activa, usamos su color de tema; si está desactivada, todo se ve gris.
     final Color colorFuerte = activa ? colorTema : Colors.grey;
 
+    // Cambio de UI independiente del temporizador: la hora de hoy deja de
+    // tener sentido una vez que la ocurrencia de hoy ya se resolvió.
+    // "Omitida hoy" se mantiene (es su propia etiqueta de estado, no la
+    // hora); al completar sin omitir no queda ninguna etiqueta — el
+    // checkbox marcado y el título tachado ya comunican el estado, así que
+    // no hace falta repetirlo con texto.
+    final bool ocultarHora = rutina.completada && !omitida;
+    final bool hayRacha = activa && rutina.racha > 0;
+    final bool hayBotonOmitir = activa && !rutina.completada && !omitida;
+    // Si no queda hora, ni racha, ni botón de omitir, la fila entera no
+    // tiene nada que mostrar: se colapsa por completo (sin el minHeight de
+    // 48 fijo) en vez de dejar una franja vacía del alto de la zona táctil
+    // del botón de omitir.
+    final bool filaInferiorVacia = ocultarHora && !hayRacha && !hayBotonOmitir;
+
     return Card(
       // Espacio debajo de cada tarjeta, para separarla de la siguiente.
       margin: const EdgeInsets.only(bottom: 16),
@@ -219,61 +234,71 @@ class RutinaCard extends ConsumerWidget {
 
                     // ========================================================
                     // Fila inferior: hora (izquierda) — racha y botón de
-                    // omitir (derecha). ConstrainedBox(minHeight: 48) +
-                    // IntrinsicHeight + stretch: le da al botón de omitir una
-                    // zona táctil de al menos 48dp de ALTO (creciendo hacia
-                    // arriba/abajo del contenido, no hacia los lados) sin
-                    // ensanchar su pastilla visual ni forzar esa misma altura
-                    // en el resto de la tarjeta — es la misma técnica que ya
-                    // se usó para corregir el RenderFlex overflow anterior.
+                    // omitir (derecha). Colapsada por completo (SizedBox.shrink,
+                    // sin el minHeight de 48) cuando ninguno de los tres tiene
+                    // algo que mostrar — ver filaInferiorVacia arriba.
+                    // ConstrainedBox(minHeight: 48) + IntrinsicHeight + stretch:
+                    // le da al botón de omitir una zona táctil de al menos 48dp
+                    // de ALTO (creciendo hacia arriba/abajo del contenido, no
+                    // hacia los lados) sin ensanchar su pastilla visual ni
+                    // forzar esa misma altura en el resto de la tarjeta — es la
+                    // misma técnica que ya se usó para corregir el RenderFlex
+                    // overflow anterior.
                     // ========================================================
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      child: IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Hora programada para HOY, o la etiqueta de estado
-                            // "Omitida" si se pagó con monedas para saltarla —
-                            // igual que el widget de pantalla de inicio.
-                            // Flexible (no un ancho fijo): en tarjetas angostas
-                            // con racha de 2+ dígitos y pastilla de omitir a la
-                            // vez, la hora cede ancho (con ellipsis) en vez de
-                            // desbordar la fila — racha y omitir nunca se
-                            // recortan, solo la hora si hace falta.
-                            Flexible(
-                              child: Center(
-                                child: Text(
-                                  omitida
-                                      ? 'Omitida hoy'
-                                      : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: omitida ? colorOmitidaRutina : colorFuerte,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                    if (filaInferiorVacia)
+                      const SizedBox.shrink()
+                    else
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Hora programada para HOY, la etiqueta de estado
+                              // "Omitida" si se pagó con monedas para saltarla
+                              // (igual que el widget de pantalla de inicio), o
+                              // nada si ya se completó sin omitir (el checkbox
+                              // marcado y el título tachado ya lo comunican).
+                              // Flexible (no un ancho fijo): en tarjetas angostas
+                              // con racha de 2+ dígitos y pastilla de omitir a la
+                              // vez, la hora cede ancho (con ellipsis) en vez de
+                              // desbordar la fila — racha y omitir nunca se
+                              // recortan, solo la hora si hace falta.
+                              Flexible(
+                                child: Center(
+                                  child: ocultarHora
+                                      ? const SizedBox.shrink()
+                                      : Text(
+                                          omitida
+                                              ? 'Omitida hoy'
+                                              : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: omitida ? colorOmitidaRutina : colorFuerte,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                 ),
                               ),
-                            ),
-                            // Empuja racha y botón de omitir al extremo derecho,
-                            // dejando a la hora pegada al borde izquierdo.
-                            const Spacer(),
-                            if (activa && rutina.racha > 0) ...[
-                              Center(child: _RachaTexto(racha: rutina.racha)),
-                              // Separación con el botón de omitir: evita toques
-                              // accidentales ahora que comparten la misma fila.
-                              const SizedBox(width: 16),
+                              // Empuja racha y botón de omitir al extremo derecho,
+                              // dejando a la hora pegada al borde izquierdo.
+                              const Spacer(),
+                              if (hayRacha) ...[
+                                Center(child: _RachaTexto(racha: rutina.racha)),
+                                // Separación con el botón de omitir: evita toques
+                                // accidentales ahora que comparten la misma fila.
+                                const SizedBox(width: 16),
+                              ],
+                              // Botón "Omitir por hoy": solo tiene sentido si
+                              // todavía está pendiente (ni completada ni ya
+                              // omitida) y la rutina está activa.
+                              if (hayBotonOmitir) _BotonOmitirRutina(rutina: rutina),
                             ],
-                            // Botón "Omitir por hoy": solo tiene sentido si
-                            // todavía está pendiente (ni completada ni ya
-                            // omitida) y la rutina está activa.
-                            if (activa && !rutina.completada && !omitida) _BotonOmitirRutina(rutina: rutina),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),

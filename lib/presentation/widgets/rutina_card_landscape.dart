@@ -22,6 +22,11 @@ class RutinaLandscapeCard extends ConsumerWidget {
     final bool activa = rutina.activa;
     final bool omitida = rutina.omitida;
     final Color colorFuerte = activa ? tema.colorPrincipal : Colors.grey;
+    // Mismo criterio que en rutina_card.dart (portrait): "Omitida hoy" es su
+    // propia etiqueta de estado y se mantiene; al completar sin omitir no
+    // queda ninguna etiqueta de hora (checkbox marcado + título tachado ya
+    // lo comunican).
+    final bool ocultarHora = rutina.completada && !omitida;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -81,11 +86,13 @@ class RutinaLandscapeCard extends ConsumerWidget {
               color: omitida ? colorOmitidaRutina : (activa ? tema.colorTextoSuperficie : Colors.grey),
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            omitida ? 'Omitida hoy' : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
-            style: TextStyle(fontSize: 11, color: omitida ? colorOmitidaRutina : colorFuerte, fontWeight: FontWeight.w600),
-          ),
+          if (!ocultarHora) ...[
+            const SizedBox(height: 2),
+            Text(
+              omitida ? 'Omitida hoy' : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
+              style: TextStyle(fontSize: 11, color: omitida ? colorOmitidaRutina : colorFuerte, fontWeight: FontWeight.w600),
+            ),
+          ],
           if (activa && (rutina.racha > 0 || (!rutina.completada && !omitida))) ...[
             const SizedBox(height: 6),
             Row(
