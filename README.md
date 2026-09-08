@@ -286,16 +286,9 @@ La primera vez que se instala en un dispositivo, la app pedirá (vía `Onboardin
 
 ## Deuda técnica conocida
 
-`flutter test` corre 7 tests en rojo de forma permanente, en 3 archivos distintos. Ninguno es nuevo ni fue introducido por el fix de reseteo de campos al editar una rutina (rama `fix/rutina-form-reset-campos`, mergeada a `main` en `83ad132`) — se confirmó reproduciéndolos igual sobre el commit previo a ese trabajo. Agrupados por la acción que requieren, no por archivo:
+`flutter test` corre 1 test en rojo de forma permanente (rama `chore/limpieza-suite-tests`, que borró el boilerplate de `flutter create` y puso al día `plantillas_tarea_test.dart` con la UI actual — ver historial de esa rama para el detalle):
 
-**Borrar (no arreglar):**
-- `test/widget_test.dart` — es el boilerplate que genera `flutter create` (prueba un contador que no existe en esta app). Falla con `StateError: Bad state: No ProviderScope found` porque `main.dart` envuelve la pantalla inicial en un `ProviderScope` de Riverpod que este test nunca provee. No prueba nada real de FocusFlow.
-
-**Arreglar (hay cobertura real perdida detrás):**
-- `test/plantillas_tarea_test.dart` — 5 tests fallan porque buscan un botón con el texto exacto `"Más opciones (Esfuerzo y Fecha)"`, que ya no existe en la UI actual (el texto cambió y el test nunca se actualizó). Había cobertura real sobre el flujo de plantillas de tareas; hoy no la hay.
-- `test/rutina_notificaciones_test.dart` — el test "4 rutinas de prueba: solo hacen trabajo nativo las que realmente lo necesitan..." depende de `DateTime.now()` sin un reloj fijo/inyectable, así que su resultado varía según el día en que se corre. Requiere inyectar el reloj (o parametrizar la fecha de referencia) para volverse determinista.
-
-Con 7 tests en rojo permanente, `flutter test` perdió valor como señal (no distingue una regresión real de una falla ya conocida). Conviene dejar la suite en verde antes de arrancar la feature del temporizador por rutina.
+- `test/rutina_notificaciones_test.dart` — el test "4 rutinas de prueba: solo hacen trabajo nativo las que realmente lo necesitan..." depende de `DateTime.now()` sin un reloj fijo/inyectable, así que su resultado varía según el día en que se corre. Requiere inyectar el reloj en `rutina_provider.dart` para volverse determinista. Se resuelve junto con la feature del temporizador por rutina, que va a necesitar el mismo refactor de reloj inyectable en `toggleCompletada` — inyectarlo antes hubiera significado tocar ese archivo dos veces con el mismo objetivo.
 
 ## Registro de cambios
 
