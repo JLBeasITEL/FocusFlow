@@ -143,7 +143,17 @@ class TareaNotifier extends Notifier<List<Tarea>> {
       for (final tarea in state)
         if (tarea.id == id)
           completandoRecurrente
-              ? tarea.copyWith(fechaLimite: nuevaFecha, fechaLimiteAnterior: tarea.fechaLimite, esCompletada: false)
+              ? tarea.copyWith(
+                  fechaLimite: nuevaFecha,
+                  fechaLimiteAnterior: tarea.fechaLimite,
+                  esCompletada: false,
+                  // Respalda el checklist marcado antes de resetearlo, para que
+                  // deshacerRecurrente pueda devolverlo. null (no []) cuando la
+                  // tarea no tiene subtareas, para no dejar un respaldo vacío
+                  // sin sentido persistido.
+                  subtareasAnterior: tarea.subtareas.isEmpty ? null : tarea.subtareas,
+                  subtareas: tarea.subtareas.map((s) => s.copyWith(completado: false)).toList(),
+                )
               : tarea.copyWith(esCompletada: !tarea.esCompletada)
         else
           tarea,
@@ -167,13 +177,25 @@ class TareaNotifier extends Notifier<List<Tarea>> {
   // fechaLimite = fechaLimiteAnterior y limpia fechaLimiteAnterior (con el
   // patrón sentinel de copyWith, para poder llevarlo a null explícito). No
   // aplica a tareas no recurrentes (usa toggleTarea para esas).
+  //
+  // También restaura el checklist de subtareas desde subtareasAnterior, con
+  // el mismo patrón. Si subtareasAnterior es null (tarea sin subtareas, o ya
+  // deshecha antes) deja subtareas tal como está: no hay nada que restaurar.
   void deshacerRecurrente(String id) {
     final tarea = state.firstWhere((t) => t.id == id);
     if (tarea.fechaLimiteAnterior == null) return;
 
     state = [
       for (final t in state)
-        if (t.id == id) t.copyWith(fechaLimite: t.fechaLimiteAnterior, fechaLimiteAnterior: null) else t,
+        if (t.id == id)
+          t.copyWith(
+            fechaLimite: t.fechaLimiteAnterior,
+            fechaLimiteAnterior: null,
+            subtareas: t.subtareasAnterior ?? t.subtareas,
+            subtareasAnterior: null,
+          )
+        else
+          t,
     ];
     _guardarTareas();
 
