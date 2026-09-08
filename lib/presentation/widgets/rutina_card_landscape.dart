@@ -82,24 +82,42 @@ class RutinaLandscapeCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            rutina.titulo,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              decoration: rutina.completada ? TextDecoration.lineThrough : null,
-              color: omitida ? colorOmitidaRutina : (activa ? tema.colorTextoSuperficie : Colors.grey),
+          // Zona de texto tocable: solo título + hora, para no competir por
+          // el gesto con el checkbox/botón de deshacer omisión (fila de
+          // arriba) ni con la pastilla de omitir (fila de abajo) — ninguno
+          // de los dos vive dentro de este GestureDetector. Abre el diálogo
+          // con el título completo y la descripción (si existe) siempre,
+          // haya o no descripción: el título se trunca a 1 línea igual sin
+          // ella, y así el criterio no depende de medir si el texto
+          // realmente se cortó.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _mostrarDialogoRutina(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  rutina.titulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    decoration: rutina.completada ? TextDecoration.lineThrough : null,
+                    color: omitida ? colorOmitidaRutina : (activa ? tema.colorTextoSuperficie : Colors.grey),
+                  ),
+                ),
+                if (!ocultarHora) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    omitida ? 'Omitida hoy' : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
+                    style: TextStyle(fontSize: 11, color: omitida ? colorOmitidaRutina : colorFuerte, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (!ocultarHora) ...[
-            const SizedBox(height: 2),
-            Text(
-              omitida ? 'Omitida hoy' : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
-              style: TextStyle(fontSize: 11, color: omitida ? colorOmitidaRutina : colorFuerte, fontWeight: FontWeight.w600),
-            ),
-          ],
           if (activa && (rutina.racha > 0 || (!rutina.completada && !omitida))) ...[
             const SizedBox(height: 6),
             Row(
@@ -114,6 +132,32 @@ class RutinaLandscapeCard extends ConsumerWidget {
               ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  // Diálogo de solo lectura: título completo + descripción (si existe). Es
+  // la única forma de ver el título sin truncar y la descripción en
+  // landscape, ya que la celda del grid tiene mainAxisExtent fijo (ver
+  // home_screen.dart) y no puede crecer como la tarjeta de portrait. No
+  // incluye botón "Editar": el tap sobre la tarjeta no reemplaza ningún
+  // acceso existente (no hacía nada antes) y editar ya tiene su propia
+  // entrada dedicada en el header ("Editar rutina" / ícono de lápiz).
+  void _mostrarDialogoRutina(BuildContext context) {
+    final bool tieneDescripcion = rutina.descripcion != null && rutina.descripcion!.trim().isNotEmpty;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(rutina.titulo),
+        content: tieneDescripcion
+            ? Text(rutina.descripcion!, style: const TextStyle(height: 1.3))
+            : null,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
         ],
       ),
     );
