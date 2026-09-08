@@ -284,6 +284,19 @@ flutter run          # requiere un dispositivo/emulador Android conectado
 
 La primera vez que se instala en un dispositivo, la app pedirá (vía `OnboardingPermisos`) permisos de notificaciones, alarmas exactas, ignorar optimización de batería, y mostrar sobre otras apps — todos necesarios para que las alarmas de rutinas suenen de forma confiable incluso con la app cerrada o el teléfono en reposo.
 
+## Deuda técnica conocida
+
+`flutter test` corre 7 tests en rojo de forma permanente, en 3 archivos distintos. Ninguno es nuevo ni fue introducido por el fix de reseteo de campos al editar una rutina (rama `fix/rutina-form-reset-campos`, mergeada a `main` en `83ad132`) — se confirmó reproduciéndolos igual sobre el commit previo a ese trabajo. Agrupados por la acción que requieren, no por archivo:
+
+**Borrar (no arreglar):**
+- `test/widget_test.dart` — es el boilerplate que genera `flutter create` (prueba un contador que no existe en esta app). Falla con `StateError: Bad state: No ProviderScope found` porque `main.dart` envuelve la pantalla inicial en un `ProviderScope` de Riverpod que este test nunca provee. No prueba nada real de FocusFlow.
+
+**Arreglar (hay cobertura real perdida detrás):**
+- `test/plantillas_tarea_test.dart` — 5 tests fallan porque buscan un botón con el texto exacto `"Más opciones (Esfuerzo y Fecha)"`, que ya no existe en la UI actual (el texto cambió y el test nunca se actualizó). Había cobertura real sobre el flujo de plantillas de tareas; hoy no la hay.
+- `test/rutina_notificaciones_test.dart` — el test "4 rutinas de prueba: solo hacen trabajo nativo las que realmente lo necesitan..." depende de `DateTime.now()` sin un reloj fijo/inyectable, así que su resultado varía según el día en que se corre. Requiere inyectar el reloj (o parametrizar la fecha de referencia) para volverse determinista.
+
+Con 7 tests en rojo permanente, `flutter test` perdió valor como señal (no distingue una regresión real de una falla ya conocida). Conviene dejar la suite en verde antes de arrancar la feature del temporizador por rutina.
+
 ## Registro de cambios
 
 Resumen de lo que se agregó/cambió respecto a la primera versión de esta documentación (pubspec pasó de `1.9.10+62` a `1.9.13+65`):
