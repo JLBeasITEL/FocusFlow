@@ -138,6 +138,28 @@ class RutinaLandscapeCard extends ConsumerWidget {
   }
 }
 
+// Ejecuta la omisión y avisa si no alcanzan las monedas — la parte
+// riesgosa de "omitir" (costo, gasto, feedback si falla) en un único
+// lugar, compartida entre _BotonOmitirCompacto (pastilla de la tarjeta) y
+// BotonOmitirRutinaPanel (botón grande del panel de detalle en
+// home_screen.dart), para que ambos muestren siempre el mismo precio y el
+// mismo mensaje de "no alcanza" en vez de arriesgarse a que diverjan.
+Future<void> omitirRutinaLandscapeConFeedback({
+  required WidgetRef ref,
+  required Rutina rutina,
+  required int costo,
+  required int monedas,
+}) async {
+  final bool exito = await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
+  if (!exito) {
+    mostrarSnackBarSimple(
+      mensaje: 'No te alcanzan las monedas de racha para omitir "${rutina.titulo}" (necesitas $costo, tienes $monedas).',
+      colorFondo: colorOmitidaRutina,
+      colorTexto: Colors.white,
+    );
+  }
+}
+
 // Mismo comodín de "omitir por hoy" que _BotonOmitirRutina (rutina_card.dart),
 // en versión compacta para caber dentro de la tarjeta cuadrada de la grilla.
 class _BotonOmitirCompacto extends ConsumerWidget {
@@ -157,16 +179,7 @@ class _BotonOmitirCompacto extends ConsumerWidget {
           : 'Te faltan monedas de racha: necesitas $costo, tienes $monedas',
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () async {
-          final bool exito = await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
-          if (!exito) {
-            mostrarSnackBarSimple(
-              mensaje: 'No te alcanzan las monedas de racha para omitir "${rutina.titulo}" (necesitas $costo, tienes $monedas).',
-              colorFondo: colorOmitidaRutina,
-              colorTexto: Colors.white,
-            );
-          }
-        },
+        onTap: () => omitirRutinaLandscapeConFeedback(ref: ref, rutina: rutina, costo: costo, monedas: monedas),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
           decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
@@ -178,6 +191,39 @@ class _BotonOmitirCompacto extends ConsumerWidget {
               Text('$costo🪙', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// Versión grande del botón de omitir, para el panel de detalle
+// (home_screen.dart). Misma fuente de verdad que la pastilla de la
+// tarjeta (omitirRutinaLandscapeConFeedback): mismo costo, mismo mensaje
+// si no alcanzan las monedas — solo cambia la presentación.
+class BotonOmitirRutinaPanel extends ConsumerWidget {
+  final Rutina rutina;
+  const BotonOmitirRutinaPanel({super.key, required this.rutina});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final int monedas = ref.watch(monedasProvider);
+    final int costo = rutina.omisionesSeguidas + 1;
+    final bool alcanza = monedas >= costo;
+    final Color color = alcanza ? colorOmitidaRutina : Colors.grey;
+
+    return Tooltip(
+      message: alcanza
+          ? 'Omitir hoy por $costo 🪙 (protege tu racha)'
+          : 'Te faltan monedas de racha: necesitas $costo, tienes $monedas',
+      child: OutlinedButton.icon(
+        onPressed: () => omitirRutinaLandscapeConFeedback(ref: ref, rutina: rutina, costo: costo, monedas: monedas),
+        icon: Icon(Icons.redo_rounded, size: 18, color: color),
+        label: Text('Omitir · $costo🪙', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: color.withValues(alpha: 0.5)),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       ),
     );

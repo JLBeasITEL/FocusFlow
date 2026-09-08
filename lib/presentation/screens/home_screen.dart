@@ -33,6 +33,7 @@ import '../widgets/tarea_card_landscape.dart';
 import '../widgets/rutina_card_landscape.dart';
 import '../widgets/home_sidebar_landscape.dart';
 import '../widgets/overflow_scrollbar.dart';
+import '../../core/celebracion_racha.dart';
 
 // Puente para pedirle a HomeScreen que cambie de pestaña desde fuera del
 // árbol de widgets (el handler de clicks del widget de Rutinas en
@@ -493,28 +494,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         // cerrar y reabrir.
         return Stack(
           children: [
-            OverflowScrollbar(
-              controller: _scrollRutinas,
-              child: GridView.builder(
-                controller: _scrollRutinas,
-                padding: EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columnas,
-                  mainAxisSpacing: espaciado,
-                  crossAxisSpacing: espaciado,
-                  mainAxisExtent: 148,
+            // Se mantiene montado (conserva scroll) mientras el panel está
+            // abierto, pero deja de pintarse y de recibir toques: sin esto
+            // las tarjetas de atrás asomaban por las esquinas redondeadas
+            // del panel. Se oculta del todo (no se atenúa) porque dejarlo
+            // semi-visible sugeriría que sigue siendo tocable cuando en
+            // realidad el IgnorePointer ya se lo impide — una promesa falsa.
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 200),
+              opacity: rutinaSeleccionada == null ? 1 : 0,
+              child: IgnorePointer(
+                ignoring: rutinaSeleccionada != null,
+                child: OverflowScrollbar(
+                  controller: _scrollRutinas,
+                  child: GridView.builder(
+                    controller: _scrollRutinas,
+                    padding: EdgeInsets.only(bottom: 100 + MediaQuery.of(context).padding.bottom),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columnas,
+                      mainAxisSpacing: espaciado,
+                      crossAxisSpacing: espaciado,
+                      mainAxisExtent: 148,
+                    ),
+                    itemCount: rutinasDeHoy.length,
+                    itemBuilder: (context, index) {
+                      final rutina = rutinasDeHoy[index];
+                      return RutinaLandscapeCard(
+                        rutina: rutina,
+                        tema: temaActual,
+                        onTap: () => setState(() {
+                          _rutinaLandscapeSeleccionada = _rutinaLandscapeSeleccionada?.id == rutina.id ? null : rutina;
+                        }),
+                      );
+                    },
+                  ),
                 ),
-                itemCount: rutinasDeHoy.length,
-                itemBuilder: (context, index) {
-                  final rutina = rutinasDeHoy[index];
-                  return RutinaLandscapeCard(
-                    rutina: rutina,
-                    tema: temaActual,
-                    onTap: () => setState(() {
-                      _rutinaLandscapeSeleccionada = _rutinaLandscapeSeleccionada?.id == rutina.id ? null : rutina;
-                    }),
-                  );
-                },
               ),
             ),
             Positioned.fill(
@@ -1664,14 +1678,14 @@ const String explicacionMonedasRacha =
 // sobre la tarjeta no reemplaza ningún acceso existente (no hacía nada
 // antes de este rediseño) y editar ya tiene su propia entrada en el header
 // ("Editar rutina" / ícono de lápiz).
-class _PanelDetalleRutinaLandscape extends StatelessWidget {
+class _PanelDetalleRutinaLandscape extends ConsumerWidget {
   final Rutina rutina;
   final TemaApp tema;
   final VoidCallback onCerrar;
   const _PanelDetalleRutinaLandscape({super.key, required this.rutina, required this.tema, required this.onCerrar});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final bool tieneDescripcion = rutina.descripcion != null && rutina.descripcion!.trim().isNotEmpty;
     final Color colorFuerte = rutina.activa ? tema.colorPrincipal : Colors.grey;
     return Container(
@@ -1688,10 +1702,19 @@ class _PanelDetalleRutinaLandscape extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: colorFuerte.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                child: Icon(IconData(rutina.iconoCode, fontFamily: 'MaterialIcons'), color: colorFuerte, size: 26),
+              ),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  rutina.titulo,
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: tema.colorTextoSuperficie),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    rutina.titulo,
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: tema.colorTextoSuperficie),
+                  ),
                 ),
               ),
               IconButton(
@@ -1717,6 +1740,57 @@ class _PanelDetalleRutinaLandscape extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          // Acciones: mismo criterio que el checkbox/omitir de la tarjeta
+          // (omitida excluye completar/omitir — hay que deshacer primero;
+          // completada excluye omitir — ya se resolvió el día). El botón
+          // "Completar"/"Desmarcar" llama a la MISMA
+          // alternarCompletadaConCelebracion que usa el checkbox de la
+          // tarjeta (portrait y landscape): cuando el temporizador con
+          // duración se implemente ahí, este botón lo hereda solo, sin
+          // tocar este archivo — no hay una segunda lógica de completado
+          // que mantener sincronizada.
+          if (rutina.omitida)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id),
+                icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina),
+                label: Text('Deshacer omisión', style: TextStyle(color: colorOmitidaRutina, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: colorOmitidaRutina.withValues(alpha: 0.5)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => alternarCompletadaConCelebracion(
+                      context: context,
+                      ref: ref,
+                      rutina: rutina,
+                      marcarCompleta: !rutina.completada,
+                    ),
+                    icon: Icon(rutina.completada ? Icons.remove_circle_outline_rounded : Icons.check_circle_outline_rounded),
+                    label: Text(rutina.completada ? 'Desmarcar' : 'Completar', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorFuerte,
+                      foregroundColor: tema.colorSobrePrincipal,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+                if (!rutina.completada) ...[
+                  const SizedBox(width: 12),
+                  Expanded(child: BotonOmitirRutinaPanel(rutina: rutina)),
+                ],
+              ],
+            ),
         ],
       ),
     );
