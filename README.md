@@ -286,9 +286,9 @@ La primera vez que se instala en un dispositivo, la app pedirá (vía `Onboardin
 
 ## Deuda técnica conocida
 
-`flutter test` corre 1 test en rojo de forma permanente (rama `chore/limpieza-suite-tests`, que borró el boilerplate de `flutter create` y puso al día `plantillas_tarea_test.dart` con la UI actual — ver historial de esa rama para el detalle):
+`flutter test` corre en verde (ver historial de la rama `chore/limpieza-suite-tests` para la limpieza previa, y `feature/temporizador-rutinas` para el `relojProvider` que dejó determinista el último test que quedaba en rojo).
 
-- `test/rutina_notificaciones_test.dart` — el test "4 rutinas de prueba: solo hacen trabajo nativo las que realmente lo necesitan..." depende de `DateTime.now()` sin un reloj fijo/inyectable, así que su resultado varía según el día en que se corre. Requiere inyectar el reloj en `rutina_provider.dart` para volverse determinista. Se resuelve junto con la feature del temporizador por rutina, que va a necesitar el mismo refactor de reloj inyectable en `toggleCompletada` — inyectarlo antes hubiera significado tocar ese archivo dos veces con el mismo objetivo.
+- **Dos constantes de "colchón objetivo" independientes en `rutina_provider.dart`, candidatas a unificar**: `semanasColchon = 2` dentro de `_resetCompletoNotificacionesRutina` (rama de reset completo) y `semanasColchonObjetivo = 2` dentro de `_rellenarColchonSiHaceFalta` (rama de relleno incremental) son dos literales declarados por separado, hoy con el mismo valor por coincidencia, no porque compartan una fuente. Nada impide que alguien cambie uno sin el otro y las dos ramas queden apuntando a colchones de ancho distinto sin que ningún test lo detecte — el equivalente en producción del bug que `test/rutina_notificaciones_test.dart` tuvo con un literal de "20 días" desalineado tras la reducción de 4 a 2 semanas (ver comentario "BAJADO de 4 a 2 semanas" en el propio archivo). No se unifican ahora porque tocar ese archivo a mitad de la introducción del temporizador por rutina no vale el riesgo; evaluar unificarlas en una sola constante compartida (de archivo o de clase) la próxima vez que se toque el sistema de colchón.
 
 ## Registro de cambios
 
