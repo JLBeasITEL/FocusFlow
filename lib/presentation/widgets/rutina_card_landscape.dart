@@ -15,7 +15,12 @@ import '../../core/app_messenger.dart';
 class RutinaLandscapeCard extends ConsumerWidget {
   final Rutina rutina;
   final TemaApp tema;
-  const RutinaLandscapeCard({super.key, required this.rutina, required this.tema});
+  // Abre/actualiza el panel de detalle (título completo + descripción) en
+  // home_screen.dart, que decide él mismo si esto es una nueva selección o
+  // un toggle-para-cerrar (compara contra la rutina ya seleccionada). Esta
+  // tarjeta no sabe nada de ese estado, solo avisa que la tocaron.
+  final VoidCallback onTap;
+  const RutinaLandscapeCard({super.key, required this.rutina, required this.tema, required this.onTap});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -28,137 +33,106 @@ class RutinaLandscapeCard extends ConsumerWidget {
     // lo comunican).
     final bool ocultarHora = rutina.completada && !omitida;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: tema.colorSuperficieCard,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colorFuerte.withValues(alpha: 0.18)),
-      ),
-      // Sin mainAxisSize.min (queremos que el Column SÍ llene el alto fijo
-      // de la celda, ver mainAxisExtent en home_screen.dart) y con
-      // mainAxisAlignment.center: cuando ocultarHora (o cualquier otro
-      // motivo futuro) deja menos contenido, se centra dentro de esa altura
-      // fija en vez de quedar arriba con un hueco al fondo — el grid ya
-      // fuerza la misma altura de celda para todas las tarjetas, así que
-      // acá no hay opción de "encoger", solo de recentrar.
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            children: [
-              if (omitida)
-                IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Deshacer omisión (te devuelve las monedas)',
-                  icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina, size: 20),
-                  onPressed: !activa ? null : () => ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id),
-                )
-              else
-                SizedBox(
-                  height: 24,
-                  width: 24,
-                  child: Checkbox(
-                    value: rutina.completada,
-                    activeColor: tema.colorPrincipal,
-                    onChanged: !activa
-                        ? null
-                        : (valor) => alternarCompletadaConCelebracion(
-                              context: context,
-                              ref: ref,
-                              rutina: rutina,
-                              marcarCompleta: valor == true,
-                            ),
-                  ),
-                ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: colorFuerte.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-                child: Icon(IconData(rutina.iconoCode, fontFamily: 'MaterialIcons'), color: colorFuerte, size: 20),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Zona de texto tocable: solo título + hora, para no competir por
-          // el gesto con el checkbox/botón de deshacer omisión (fila de
-          // arriba) ni con la pastilla de omitir (fila de abajo) — ninguno
-          // de los dos vive dentro de este GestureDetector. Abre el diálogo
-          // con el título completo y la descripción (si existe) siempre,
-          // haya o no descripción: el título se trunca a 1 línea igual sin
-          // ella, y así el criterio no depende de medir si el texto
-          // realmente se cortó.
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _mostrarDialogoRutina(context),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  rutina.titulo,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    decoration: rutina.completada ? TextDecoration.lineThrough : null,
-                    color: omitida ? colorOmitidaRutina : (activa ? tema.colorTextoSuperficie : Colors.grey),
-                  ),
-                ),
-                if (!ocultarHora) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    omitida ? 'Omitida hoy' : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
-                    style: TextStyle(fontSize: 11, color: omitida ? colorOmitidaRutina : colorFuerte, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (activa && (rutina.racha > 0 || (!rutina.completada && !omitida))) ...[
-            const SizedBox(height: 6),
+    // Todo el cuerpo de la tarjeta es tocable (abre/actualiza el panel de
+    // detalle en home_screen.dart), sin robarle el gesto al checkbox, al
+    // botón de deshacer omisión ni a la pastilla de omitir: los tres son
+    // descendientes de este GestureDetector, y en la gesture arena de
+    // Flutter el recognizer más profundo (el del control) gana sobre el del
+    // padre — es el mismo mecanismo del que depende, por ejemplo, un
+    // ListTile con un IconButton de trailing. HitTestBehavior.opaque hace
+    // que el padding entre esos controles también sea tocable, no solo el
+    // texto pintado.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: tema.colorSuperficieCard,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: colorFuerte.withValues(alpha: 0.18)),
+        ),
+        // Sin mainAxisSize.min (queremos que el Column SÍ llene el alto fijo
+        // de la celda, ver mainAxisExtent en home_screen.dart) y con
+        // mainAxisAlignment.center: cuando ocultarHora (o cualquier otro
+        // motivo futuro) deja menos contenido, se centra dentro de esa altura
+        // fija en vez de quedar arriba con un hueco al fondo — el grid ya
+        // fuerza la misma altura de celda para todas las tarjetas, así que
+        // acá no hay opción de "encoger", solo de recentrar.
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
             Row(
               children: [
-                if (rutina.racha > 0) ...[
-                  Container(width: 8, height: 8, decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.orange)),
-                  const SizedBox(width: 4),
-                  Text('${rutina.racha}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 12)),
-                ],
+                if (omitida)
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    tooltip: 'Deshacer omisión (te devuelve las monedas)',
+                    icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina, size: 20),
+                    onPressed: !activa ? null : () => ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id),
+                  )
+                else
+                  SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: Checkbox(
+                      value: rutina.completada,
+                      activeColor: tema.colorPrincipal,
+                      onChanged: !activa
+                          ? null
+                          : (valor) => alternarCompletadaConCelebracion(
+                                context: context,
+                                ref: ref,
+                                rutina: rutina,
+                                marcarCompleta: valor == true,
+                              ),
+                    ),
+                  ),
                 const Spacer(),
-                if (!rutina.completada && !omitida) _BotonOmitirCompacto(rutina: rutina),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: colorFuerte.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                  child: Icon(IconData(rutina.iconoCode, fontFamily: 'MaterialIcons'), color: colorFuerte, size: 20),
+                ),
               ],
             ),
+            const SizedBox(height: 8),
+            Text(
+              rutina.titulo,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                decoration: rutina.completada ? TextDecoration.lineThrough : null,
+                color: omitida ? colorOmitidaRutina : (activa ? tema.colorTextoSuperficie : Colors.grey),
+              ),
+            ),
+            if (!ocultarHora) ...[
+              const SizedBox(height: 2),
+              Text(
+                omitida ? 'Omitida hoy' : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
+                style: TextStyle(fontSize: 11, color: omitida ? colorOmitidaRutina : colorFuerte, fontWeight: FontWeight.w600),
+              ),
+            ],
+            if (activa && (rutina.racha > 0 || (!rutina.completada && !omitida))) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  if (rutina.racha > 0) ...[
+                    Container(width: 8, height: 8, decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.orange)),
+                    const SizedBox(width: 4),
+                    Text('${rutina.racha}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 12)),
+                  ],
+                  const Spacer(),
+                  if (!rutina.completada && !omitida) _BotonOmitirCompacto(rutina: rutina),
+                ],
+              ),
+            ],
           ],
-        ],
-      ),
-    );
-  }
-
-  // Diálogo de solo lectura: título completo + descripción (si existe). Es
-  // la única forma de ver el título sin truncar y la descripción en
-  // landscape, ya que la celda del grid tiene mainAxisExtent fijo (ver
-  // home_screen.dart) y no puede crecer como la tarjeta de portrait. No
-  // incluye botón "Editar": el tap sobre la tarjeta no reemplaza ningún
-  // acceso existente (no hacía nada antes) y editar ya tiene su propia
-  // entrada dedicada en el header ("Editar rutina" / ícono de lápiz).
-  void _mostrarDialogoRutina(BuildContext context) {
-    final bool tieneDescripcion = rutina.descripcion != null && rutina.descripcion!.trim().isNotEmpty;
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(rutina.titulo),
-        content: tieneDescripcion
-            ? Text(rutina.descripcion!, style: const TextStyle(height: 1.3))
-            : null,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cerrar'),
-          ),
-        ],
+        ),
       ),
     );
   }
