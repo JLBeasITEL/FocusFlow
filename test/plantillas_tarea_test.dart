@@ -51,7 +51,7 @@ Future<void> _abrirModalNuevaTarea(WidgetTester tester) async {
 // Subtareas y Plantillas viven dentro de "Más opciones" y no se muestran
 // hasta expandirla.
 Future<void> _expandirMasOpciones(WidgetTester tester) async {
-  await tester.tap(find.text('Más opciones (Esfuerzo y Fecha)'));
+  await tester.tap(find.text('Más opciones (Descripción y Esfuerzo)'));
   await tester.pumpAndSettle();
 }
 
