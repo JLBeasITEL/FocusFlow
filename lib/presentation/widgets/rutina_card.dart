@@ -18,6 +18,14 @@ import '../../core/celebracion_racha.dart';
 // ConsumerWidget: es un widget "sin estado propio" (stateless) pero que SÍ puede
 // leer/escuchar el provider de Riverpod a través del parámetro `ref`.
 class RutinaCard extends ConsumerWidget {
+  // Alto mínimo de la fila inferior: es la zona táctil recomendada del botón
+  // de omitir (_BotonOmitirRutina), NO un alto "de la fila" en general. Solo
+  // debe aplicarse cuando ese botón realmente va a dibujarse (hayBotonOmitir)
+  // — si se aplicara siempre, una fila que solo muestra la racha (o "Omitida
+  // hoy") queda con espacio muerto de sobra por encima y por debajo, ya que
+  // ninguno de los dos necesita 48dp para verse bien.
+  static const double _alturaTactilBotonOmitir = 48;
+
   // Datos que este widget recibe desde afuera (desde la lista que lo construye).
   final Rutina rutina;     // La rutina específica que esta tarjeta va a mostrar
   final Color colorTema;   // Color del tema visual de esta rutina (para íconos, texto, etc.)
@@ -243,18 +251,23 @@ class RutinaCard extends ConsumerWidget {
                     // ambos widgets por completo — no solo se colapsa a
                     // SizedBox.shrink — para que el bloque restante (aquí,
                     // el título solo) sea lo único que el Row exterior centra.
-                    // ConstrainedBox(minHeight: 48) + IntrinsicHeight + stretch:
-                    // le da al botón de omitir una zona táctil de al menos 48dp
-                    // de ALTO (creciendo hacia arriba/abajo del contenido, no
-                    // hacia los lados) sin ensanchar su pastilla visual ni
-                    // forzar esa misma altura en el resto de la tarjeta — es la
-                    // misma técnica que ya se usó para corregir el RenderFlex
-                    // overflow anterior.
+                    // ConstrainedBox(minHeight: _alturaTactilBotonOmitir) +
+                    // IntrinsicHeight + stretch: le da al botón de omitir una
+                    // zona táctil de ese alto mínimo (creciendo hacia
+                    // arriba/abajo del contenido, no hacia los lados) sin
+                    // ensanchar su pastilla visual ni forzar esa misma altura
+                    // en el resto de la tarjeta — es la misma técnica que ya
+                    // se usó para corregir el RenderFlex overflow anterior.
+                    // El mínimo solo se aplica si el botón de omitir
+                    // realmente va a mostrarse (hayBotonOmitir): sin él (rutina
+                    // completada u omitida), la fila —con solo la racha o la
+                    // etiqueta de estado— se dimensiona a su contenido real,
+                    // sin la zona táctil de más que nadie necesita ahí.
                     // ========================================================
                     if (!filaInferiorVacia) ...[
                       const SizedBox(height: 8),
                       ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 48),
+                        constraints: BoxConstraints(minHeight: hayBotonOmitir ? _alturaTactilBotonOmitir : 0),
                         child: IntrinsicHeight(
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
