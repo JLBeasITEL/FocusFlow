@@ -33,7 +33,7 @@ import '../widgets/tarea_card_landscape.dart';
 import '../widgets/rutina_card_landscape.dart';
 import '../widgets/home_sidebar_landscape.dart';
 import '../widgets/overflow_scrollbar.dart';
-import '../../core/celebracion_racha.dart';
+import '../../core/temporizador_rutina_dialogo.dart';
 
 // Puente para pedirle a HomeScreen que cambie de pestaña desde fuera del
 // árbol de widgets (el handler de clicks del widget de Rutinas en
@@ -1744,12 +1744,11 @@ class _PanelDetalleRutinaLandscape extends ConsumerWidget {
           // Acciones: mismo criterio que el checkbox/omitir de la tarjeta
           // (omitida excluye completar/omitir — hay que deshacer primero;
           // completada excluye omitir — ya se resolvió el día). El botón
-          // "Completar"/"Desmarcar" llama a la MISMA
-          // alternarCompletadaConCelebracion que usa el checkbox de la
-          // tarjeta (portrait y landscape): cuando el temporizador con
-          // duración se implemente ahí, este botón lo hereda solo, sin
-          // tocar este archivo — no hay una segunda lógica de completado
-          // que mantener sincronizada.
+          // "Completar"/"Desmarcar" llama al MISMO manejarToqueCheckboxRutina
+          // que usa el checkbox de la tarjeta (portrait y landscape): es el
+          // único punto que decide si toca el diálogo del temporizador o si
+          // se completa directo, así que no hay una segunda lógica de
+          // completado que mantener sincronizada acá.
           if (rutina.omitida)
             SizedBox(
               width: double.infinity,
@@ -1769,11 +1768,11 @@ class _PanelDetalleRutinaLandscape extends ConsumerWidget {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => alternarCompletadaConCelebracion(
+                    onPressed: () => manejarToqueCheckboxRutina(
                       context: context,
                       ref: ref,
                       rutina: rutina,
-                      marcarCompleta: !rutina.completada,
+                      valor: !rutina.completada,
                     ),
                     icon: Icon(rutina.completada ? Icons.remove_circle_outline_rounded : Icons.check_circle_outline_rounded),
                     label: Text(rutina.completada ? 'Desmarcar' : 'Completar', style: const TextStyle(fontWeight: FontWeight.bold)),

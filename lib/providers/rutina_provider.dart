@@ -7,6 +7,7 @@ import '../services/notificaciones_service.dart';
 import '../services/widget_rutinas_service.dart';
 import '../services/widget_progreso_service.dart';
 import 'monedas_provider.dart';
+import 'temporizador_rutina_provider.dart';
 
 // ============================================================
 // rachaPorMoneda — unidad fija del hito de racha que otorga moneda
@@ -40,6 +41,18 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   final Set<String> _idsEnProceso = {};
 
   DateTime get _ahora => ref.read(relojProvider)();
+
+  // Editar, desactivar, borrar u omitir la rutina dueña de un temporizador
+  // activo lo cancela (diseño acordado): sin esto, el temporizador seguiría
+  // corriendo (persistido, con su alarma nativa) para una rutina que ya
+  // cambió de horario, se desactivó, se borró o se saltó hoy. No-op si el
+  // temporizador activo (si hay alguno) pertenece a otra rutina.
+  Future<void> _cancelarTemporizadorSiPerteneceA(String rutinaId) async {
+    final activo = ref.read(temporizadorRutinaProvider);
+    if (activo != null && activo.rutinaId == rutinaId) {
+      await ref.read(temporizadorRutinaProvider.notifier).cancelar();
+    }
+  }
 
   @override
   List<Rutina> build() {
@@ -617,6 +630,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     if (_idsEnProceso.contains(rutinaEditada.id)) return;
     _idsEnProceso.add(rutinaEditada.id);
     try {
+      await _cancelarTemporizadorSiPerteneceA(rutinaEditada.id);
       final rutinaAnterior = state.firstWhere((r) => r.id == rutinaEditada.id, orElse: () => rutinaEditada);
       final rutinaConHistorial = rutinaEditada.copyWith(
         notificacionesActivas: rutinaAnterior.notificacionesActivas,
@@ -639,6 +653,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     if (_idsEnProceso.contains(id)) return;
     _idsEnProceso.add(id);
     try {
+      await _cancelarTemporizadorSiPerteneceA(id);
       state = [
         for (final r in state)
           if (r.id == id) r.copyWith(activa: !r.activa) else r,
@@ -812,6 +827,13 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     if (_idsEnProceso.contains(id)) return false;
     _idsEnProceso.add(id);
     try {
+      // Cancela el temporizador de esta rutina si lo hay, sin importar si
+      // esta llamada está marcando la omisión o deshaciéndola (diseño
+      // acordado: "omitir cancela el temporizador"; deshacer una omisión no
+      // debería nunca encontrar uno activo en el flujo normal, ya que el
+      // diálogo del checkbox no se abre mientras la rutina está omitida,
+      // pero cancelar acá también es inofensivo si no hay ninguno).
+      await _cancelarTemporizadorSiPerteneceA(id);
       final rutinaAntes = state.firstWhere((r) => r.id == id);
       final hoy = _ahora.toIso8601String().split('T')[0];
 
@@ -961,6 +983,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       if (index == -1) return;
       final rutina = state[index];
 
+      await _cancelarTemporizadorSiPerteneceA(id);
       state = state.where((r) => r.id != id).toList();
       await _guardarRutinas();
 

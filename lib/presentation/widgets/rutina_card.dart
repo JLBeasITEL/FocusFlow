@@ -13,7 +13,7 @@ import '../../providers/monedas_provider.dart'; // Saldo de monedas de racha, pa
 import '../../models/rutina.dart';             // El modelo de datos "Rutina"
 import '../../core/colores_estado_rutina.dart';
 import '../../core/app_messenger.dart';
-import '../../core/celebracion_racha.dart';
+import '../../core/temporizador_rutina_dialogo.dart';
 
 // ConsumerWidget: es un widget "sin estado propio" (stateless) pero que SÍ puede
 // leer/escuchar el provider de Riverpod a través del parámetro `ref`.
@@ -158,11 +158,11 @@ class RutinaCard extends ConsumerWidget {
                   // Es "async" porque adentro vamos a usar "await" para esperar
                   // a que termine el proceso de cancelar/reprogramar notificaciones
                   // ANTES de continuar con el resto de la lógica (evita condiciones de carrera).
-                  : (bool? valor) => alternarCompletadaConCelebracion(
+                  : (bool? valor) => manejarToqueCheckboxRutina(
                       context: context,
                       ref: ref,
                       rutina: rutina,
-                      marcarCompleta: valor == true,
+                      valor: valor,
                     ),
               ),
 

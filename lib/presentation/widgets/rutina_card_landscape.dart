@@ -5,8 +5,8 @@ import '../../providers/rutina_provider.dart';
 import '../../providers/monedas_provider.dart';
 import '../../providers/tema_provider.dart';
 import '../../core/colores_estado_rutina.dart';
-import '../../core/celebracion_racha.dart';
 import '../../core/app_messenger.dart';
+import '../../core/temporizador_rutina_dialogo.dart';
 
 // Versión compacta de RutinaCard (widgets/rutina_card.dart) para la grilla
 // de 3 columnas del layout horizontal: mismas acciones (marcar completada,
@@ -82,11 +82,11 @@ class RutinaLandscapeCard extends ConsumerWidget {
                       activeColor: tema.colorPrincipal,
                       onChanged: !activa
                           ? null
-                          : (valor) => alternarCompletadaConCelebracion(
+                          : (valor) => manejarToqueCheckboxRutina(
                                 context: context,
                                 ref: ref,
                                 rutina: rutina,
-                                marcarCompleta: valor == true,
+                                valor: valor,
                               ),
                     ),
                   ),
