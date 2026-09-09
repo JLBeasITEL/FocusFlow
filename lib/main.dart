@@ -15,6 +15,7 @@ import 'services/widget_notas_service.dart';
 import 'services/widget_progreso_service.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'core/app_messenger.dart';
+import 'providers/temporizador_rutina_provider.dart';
 
 // 1. Creamos una llave global para navegar desde cualquier parte (incluso en segundo plano)
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -193,6 +194,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
       _sincronizarWidgetsAlPasarASegundoPlano();
+      // El tick del temporizador de rutinas no debe seguir corriendo con la
+      // app invisible: la cuenta real la lleva la alarma nativa (Android),
+      // no este Timer.periodic en memoria — ver temporizador_rutina_provider.dart.
+      container.read(temporizadorRutinaProvider.notifier).detenerTick();
+    } else if (state == AppLifecycleState.resumed) {
+      // iniciarTick() recalcula por diferencia contra venceEn ANTES de
+      // reanudar el Timer.periodic, así que el primer valor mostrado tras
+      // volver de segundo plano ya es el correcto (nunca continúa desde el
+      // valor viejo con el que se pausó).
+      container.read(temporizadorRutinaProvider.notifier).iniciarTick();
     }
   }
 
