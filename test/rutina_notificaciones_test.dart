@@ -489,6 +489,54 @@ void main() {
     expect(rutinaDespues.descripcion, equals('Rutina de 10 minutos'));
     expect(rutinaDespues.titulo, equals('Estirar (editado)'));
   });
+
+  // ============================================================
+  // duraciones (temporizador opcional por rutina, ver rutina.dart): la
+  // invariante es que siempre tiene las MISMAS claves que horarios, nunca un
+  // mapa vacío. Estos tests cubren las tres formas en que ese mapa puede
+  // originarse: derivado en 0 por el constructor cuando no se pasa
+  // explícito (el caso de _rutinaDePrueba de arriba, que nunca pasa
+  // duraciones), un valor explícito distinto de cero sobreviviendo un ciclo
+  // completo toJson/fromJson (el caso real que usa la feature), y la
+  // migración de un backup viejo sin la clave en absoluto.
+  // ============================================================
+  test('Rutina sin duraciones explícitas las deriva en 0 con las mismas claves que horarios', () {
+    final rutina = _rutinaDePrueba(
+      id: '55555555-5555-5555-5555-555555555555',
+      titulo: 'Leer',
+      horarios: {0: const TimeOfDay(hour: 8, minute: 0), 3: const TimeOfDay(hour: 20, minute: 0)},
+    );
+
+    expect(rutina.duraciones, equals({0: 0, 3: 0}),
+        reason: 'sin duraciones explícitas, debe derivarse en 0 para cada clave de horarios, nunca un mapa vacío');
+  });
+
+  test('duraciones distintas de cero sobreviven un ciclo completo toJson/fromJson', () {
+    final original = _rutinaDePrueba(
+      id: '66666666-6666-6666-6666-666666666666',
+      titulo: 'Estudiar',
+      horarios: {0: const TimeOfDay(hour: 8, minute: 0), 3: const TimeOfDay(hour: 20, minute: 0)},
+    ).copyWith(duraciones: {0: 15, 3: 45});
+
+    final restaurada = Rutina.fromJson(original.toJson());
+
+    expect(restaurada.duraciones, equals({0: 15, 3: 45}),
+        reason: 'un valor de duración distinto de cero (el caso real que usa el temporizador) no debe perderse ni truncarse a 0 al pasar por JSON');
+  });
+
+  test('fromJson de un backup viejo sin la clave duraciones la deriva en 0, nunca un mapa vacío', () {
+    final rutinaVieja = _rutinaDePrueba(
+      id: '77777777-7777-7777-7777-777777777777',
+      titulo: 'Meditar',
+      horarios: {1: const TimeOfDay(hour: 7, minute: 30), 5: const TimeOfDay(hour: 19, minute: 0)},
+    );
+    final jsonSinDuraciones = rutinaVieja.toJson()..remove('duraciones');
+
+    final restaurada = Rutina.fromJson(jsonSinDuraciones);
+
+    expect(restaurada.duraciones, equals({1: 0, 5: 0}),
+        reason: 'backup de antes del temporizador: debe sembrarse en 0 a partir de las claves de horarios, no quedar vacío');
+  });
 }
 
 bool _mismaListaDeIds(List<int> a, List<int> b) {

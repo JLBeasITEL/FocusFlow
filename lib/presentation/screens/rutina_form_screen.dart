@@ -310,43 +310,89 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
             ] else ...[
               const Text('Horarios específicos', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
+              // Fila armada a mano (antes era un CheckboxListTile): con hora
+              // Y duración a la vez son 4 elementos (checkbox, nombre, hora,
+              // duración) que ya no entran en el molde leading/trailing de
+              // ListTile. Con el controlAffinity por default de esta app,
+              // CheckboxListTile resuelve `secondary` como el LEADING y el
+              // checkbox como el TRAILING (ver checkbox_list_tile.dart) —
+              // por eso antes el checkbox quedaba a la derecha. Pero
+              // ListTile le impone a leading/trailing una altura máxima fija
+              // de 56dp sin importar el contenido (list_tile.dart,
+              // maxIconHeightConstraint): un solo botón entraba ahí, pero el
+              // Column de hora+duración apilados necesita ~90dp y desbordaba
+              // esa caja, solapándose con el título y con el propio
+              // checkbox. Con la fila armada a mano no hay ningún ListTile
+              // de por medio imponiendo ese techo.
               ...['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].asMap().entries.map((entry) {
                 int idx = entry.key;
                 bool activo = _horarios.containsKey(idx);
-                return CheckboxListTile(
-                  title: Text(entry.value, style: TextStyle(fontWeight: activo ? FontWeight.bold : FontWeight.normal)),
-                  value: activo,
-                  activeColor: Colors.deepPurple,
-                  secondary: activo ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      TextButton.icon(
-                        icon: const Icon(Icons.access_time, size: 18),
-                        onPressed: () async {
-                          final select = await showTimePicker(context: context, initialTime: _horarios[idx]!);
-                          if (select != null) setState(() => _horarios[idx] = select);
-                        },
-                        label: Text(_horarios[idx]!.format(context)),
-                      ),
-                      TextButton.icon(
-                        icon: const Icon(Icons.timer_outlined, size: 18),
-                        onPressed: () => _elegirDuracionDia(idx),
-                        label: Text(_etiquetaDuracion(_duraciones[idx] ?? 0)),
-                      ),
-                    ],
-                  ) : null,
-                  onChanged: (val) {
-                    setState(() {
-                      if (val!) {
-                        _horarios[idx] = const TimeOfDay(hour: 8, minute: 0);
-                        _duraciones[idx] = 0;
-                      } else {
-                        _horarios.remove(idx);
-                        _duraciones.remove(idx);
-                      }
-                    });
-                  },
+                void alternar() {
+                  setState(() {
+                    if (activo) {
+                      _horarios.remove(idx);
+                      _duraciones.remove(idx);
+                    } else {
+                      _horarios[idx] = const TimeOfDay(hour: 8, minute: 0);
+                      _duraciones[idx] = 0;
+                    }
+                  });
+                }
+                return InkWell(
+                  onTap: alternar,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.value,
+                            style: TextStyle(fontWeight: activo ? FontWeight.bold : FontWeight.normal),
+                          ),
+                        ),
+                        if (activo) ...[
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                icon: const Icon(Icons.access_time, size: 16),
+                                onPressed: () async {
+                                  final select = await showTimePicker(context: context, initialTime: _horarios[idx]!);
+                                  if (select != null) setState(() => _horarios[idx] = select);
+                                },
+                                label: Text(_horarios[idx]!.format(context), style: const TextStyle(fontSize: 13)),
+                              ),
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                icon: const Icon(Icons.timer_outlined, size: 16),
+                                onPressed: () => _elegirDuracionDia(idx),
+                                label: Text(_etiquetaDuracion(_duraciones[idx] ?? 0), style: const TextStyle(fontSize: 13)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        // Checkbox tal cual (sin encoger su tapTargetSize):
+                        // misma zona táctil ~48dp que ya daba CheckboxListTile
+                        // por default, y en la misma posición (derecha).
+                        Checkbox(
+                          value: activo,
+                          activeColor: Colors.deepPurple,
+                          onChanged: (_) => alternar(),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               }),
             ],
