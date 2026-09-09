@@ -18,11 +18,21 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
   final _tituloController = TextEditingController();
   final _descripcionController = TextEditingController();
   
-  bool _esFlexible = false; 
-  Map<int, TimeOfDay> _horarios = {}; 
-  
+  bool _esFlexible = false;
+  Map<int, TimeOfDay> _horarios = {};
+
   TimeOfDay _horaFija = const TimeOfDay(hour: 8, minute: 0);
   final List<bool> _diasFijos = [false, false, false, false, false, false, false];
+
+  // Duración del temporizador opcional, en paralelo a _horaFija/_horarios
+  // (ver duraciones en rutina.dart). 0 = sin temporizador ese día. La
+  // invariante real (mismas claves que _horarios) se recalcula recién al
+  // guardar (ver _guardarRutina); mientras se edita el formulario, este mapa
+  // solo existe para recordar lo que el usuario ya eligió por día.
+  int _duracionFija = 0;
+  Map<int, int> _duraciones = {};
+
+  static const List<int> _opcionesDuracion = [0, 5, 10, 15, 20, 30, 45, 60];
 
   int _iconoSeleccionado = Icons.fitness_center.codePoint;
 
@@ -54,9 +64,14 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
       _iconoSeleccionado = r.iconoCode;
       _esFlexible = r.esFlexible;
       _horarios = Map.from(r.horarios);
+      _duraciones = Map.from(r.duraciones);
 
       if (!_esFlexible && r.horarios.isNotEmpty) {
         _horaFija = r.horarios.values.first;
+        // Modo no-flexible: todas las claves comparten el mismo valor (así
+        // es como este formulario siempre las escribe), así que basta con
+        // tomar la primera para precargar el control general.
+        _duracionFija = r.duraciones.values.first;
         for (var day in r.horarios.keys) {
           _diasFijos[day] = true;
         }
@@ -89,6 +104,15 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
     return;
   }
 
+  // Se recalcula siempre a partir de las claves DEFINITIVAS de _horarios (no
+  // se confía en el estado intermedio de _duraciones, que puede haber
+  // quedado con claves de más o de menos según cómo el usuario fue tocando
+  // días) para sostener la invariante de duraciones (mismas claves que
+  // horarios, ver rutina.dart) pase lo que pase con el orden de los toques.
+  final Map<int, int> duracionesFinal = !_esFlexible
+      ? {for (final dia in _horarios.keys) dia: _duracionFija}
+      : {for (final dia in _horarios.keys) dia: _duraciones[dia] ?? 0};
+
   final String descripcionIngresada = _descripcionController.text.trim();
   final Rutina? rutinaAEditar = widget.rutinaAEditar;
 
@@ -109,6 +133,9 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
           iconoCode: _iconoSeleccionado,
           descripcion: descripcionIngresada.isEmpty ? null : descripcionIngresada,
           limpiarDescripcion: descripcionIngresada.isEmpty,
+          // copyWith NO deriva duraciones de horarios (ver rutina.dart):
+          // este formulario es quien debe pasarla ya alineada.
+          duraciones: duracionesFinal,
         )
       // CREACIÓN: sin cambios respecto al comportamiento anterior.
       : Rutina(
@@ -118,6 +145,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
           horarios: _horarios,
           esFlexible: _esFlexible,
           iconoCode: _iconoSeleccionado,
+          duraciones: duracionesFinal,
         );
 
   setState(() => _guardando = true);
@@ -146,6 +174,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
     'Horario personalizado por día: Actívalo para elegir una hora distinta cada día; desactívalo para usar siempre la misma hora.',
     'Hora general / Días de repetición: Hora fija y los días en que se repetirá (modo simple, sin horario personalizado).',
     'Horarios específicos: Hora individual para cada día que actives (modo horario personalizado).',
+    'Duración del temporizador: Opcional. Si la activas, al marcar la rutina como hecha se inicia una cuenta atrás en vez de completarla directo.',
     'Ícono: Imagen que identifica al hábito en la lista.',
   ];
 
@@ -249,6 +278,17 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                   label: Text(_horaFija.format(context)),
                 ),
               ),
+              ListTile(
+                title: const Text('Duración del temporizador (opcional)'),
+                trailing: ElevatedButton.icon(
+                  icon: const Icon(Icons.timer_outlined, size: 18),
+                  onPressed: () async {
+                    final elegida = await _elegirDuracion(_duracionFija);
+                    if (elegida != null) setState(() => _duracionFija = elegida);
+                  },
+                  label: Text(_etiquetaDuracion(_duracionFija)),
+                ),
+              ),
               const SizedBox(height: 10),
               const Text('Días de repetición', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 15),
@@ -277,20 +317,33 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                   title: Text(entry.value, style: TextStyle(fontWeight: activo ? FontWeight.bold : FontWeight.normal)),
                   value: activo,
                   activeColor: Colors.deepPurple,
-                  secondary: activo ? TextButton.icon(
-                    icon: const Icon(Icons.access_time, size: 18),
-                    onPressed: () async {
-                      final select = await showTimePicker(context: context, initialTime: _horarios[idx]!);
-                      if (select != null) setState(() => _horarios[idx] = select);
-                    },
-                    label: Text(_horarios[idx]!.format(context)),
+                  secondary: activo ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        icon: const Icon(Icons.access_time, size: 18),
+                        onPressed: () async {
+                          final select = await showTimePicker(context: context, initialTime: _horarios[idx]!);
+                          if (select != null) setState(() => _horarios[idx] = select);
+                        },
+                        label: Text(_horarios[idx]!.format(context)),
+                      ),
+                      TextButton.icon(
+                        icon: const Icon(Icons.timer_outlined, size: 18),
+                        onPressed: () => _elegirDuracionDia(idx),
+                        label: Text(_etiquetaDuracion(_duraciones[idx] ?? 0)),
+                      ),
+                    ],
                   ) : null,
                   onChanged: (val) {
                     setState(() {
                       if (val!) {
                         _horarios[idx] = const TimeOfDay(hour: 8, minute: 0);
+                        _duraciones[idx] = 0;
                       } else {
                         _horarios.remove(idx);
+                        _duraciones.remove(idx);
                       }
                     });
                   },
@@ -408,8 +461,10 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
       if (_esFlexible) {
         if (_horarios.containsKey(idx)) {
           _horarios.remove(idx);
+          _duraciones.remove(idx);
         } else {
           _horarios[idx] = const TimeOfDay(hour: 8, minute: 0);
+          _duraciones[idx] = 0;
         }
       } else {
         _diasFijos[idx] = !_diasFijos[idx];
@@ -421,6 +476,42 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
     final actual = _horarios[idx] ?? const TimeOfDay(hour: 8, minute: 0);
     final elegida = await showTimePicker(context: context, initialTime: actual);
     if (elegida != null) setState(() => _horarios[idx] = elegida);
+  }
+
+  String _etiquetaDuracion(int minutos) => minutos == 0 ? 'Sin temporizador' : '$minutos min';
+
+  // Diálogo compartido por el control general y por cada día en modo
+  // flexible (portrait y landscape): chips de valores frecuentes en vez de
+  // un campo numérico, para elegir en un solo toque sin abrir el teclado.
+  Future<int?> _elegirDuracion(int actual) {
+    return showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Duración del temporizador'),
+        content: Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: _opcionesDuracion.map((minutos) {
+            final bool seleccionado = actual == minutos;
+            return ChoiceChip(
+              label: Text(_etiquetaDuracion(minutos)),
+              selected: seleccionado,
+              selectedColor: Colors.deepPurple.withValues(alpha: 0.2),
+              onSelected: (_) => Navigator.pop(dialogContext, minutos),
+            );
+          }).toList(),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _elegirDuracionDia(int idx) async {
+    final actual = _duraciones[idx] ?? 0;
+    final elegida = await _elegirDuracion(actual);
+    if (elegida != null) setState(() => _duraciones[idx] = elegida);
   }
 
   // Mismo Wrap de 24 íconos que ya vive dentro del ExpansionTile de
@@ -554,6 +645,15 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                                 },
                                 label: Text('Hora general: ${_horaFija.format(context)}'),
                               ),
+                              const SizedBox(width: 12),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.timer_outlined, size: 18),
+                                onPressed: () async {
+                                  final elegida = await _elegirDuracion(_duracionFija);
+                                  if (elegida != null) setState(() => _duracionFija = elegida);
+                                },
+                                label: Text(_etiquetaDuracion(_duracionFija)),
+                              ),
                               const SizedBox(width: 16),
                             ],
                             const Text('Horario personalizado por día'),
@@ -595,6 +695,19 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                                             style: const TextStyle(
                                               fontSize: 13,
                                               color: Colors.deepPurple,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        GestureDetector(
+                                          onTap: () => _elegirDuracionDia(idx),
+                                          child: Text(
+                                            _etiquetaDuracion(_duraciones[idx] ?? 0),
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.deepPurple.shade300,
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
