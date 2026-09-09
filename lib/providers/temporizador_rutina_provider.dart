@@ -41,6 +41,15 @@ class TemporizadorRutina {
   }
 }
 
+// Formato mm:ss para mostrar segundosRestantes en el lugar de la hora en
+// RutinaCard/RutinaLandscapeCard. Vive acá, junto al tipo que formatea, para
+// que ninguna de las dos tarjetas duplique el cálculo.
+String formatoCuentaRegresiva(int segundos) {
+  final int minutos = segundos ~/ 60;
+  final int segs = segundos % 60;
+  return '${minutos.toString().padLeft(2, '0')}:${segs.toString().padLeft(2, '0')}';
+}
+
 class TemporizadorRutinaNotifier extends Notifier<TemporizadorRutina?> {
   static const String _storageKey = 'temporizador_rutina_activo';
 

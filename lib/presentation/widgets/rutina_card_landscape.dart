@@ -4,6 +4,7 @@ import '../../models/rutina.dart';
 import '../../providers/rutina_provider.dart';
 import '../../providers/monedas_provider.dart';
 import '../../providers/tema_provider.dart';
+import '../../providers/temporizador_rutina_provider.dart';
 import '../../core/colores_estado_rutina.dart';
 import '../../core/app_messenger.dart';
 import '../../core/temporizador_rutina_dialogo.dart';
@@ -27,11 +28,17 @@ class RutinaLandscapeCard extends ConsumerWidget {
     final bool activa = rutina.activa;
     final bool omitida = rutina.omitida;
     final Color colorFuerte = activa ? tema.colorPrincipal : Colors.grey;
+    // Mismo .select que rutina_card.dart (portrait): esta tarjeta solo se
+    // repinta cuando el temporizador que cambia es el de ESTA rutina.
+    final int? segundosRestantes = ref.watch(
+      temporizadorRutinaProvider.select((t) => (t != null && t.rutinaId == rutina.id) ? t.segundosRestantes : null),
+    );
     // Mismo criterio que en rutina_card.dart (portrait): "Omitida hoy" es su
     // propia etiqueta de estado y se mantiene; al completar sin omitir no
     // queda ninguna etiqueta de hora (checkbox marcado + título tachado ya
-    // lo comunican).
-    final bool ocultarHora = rutina.completada && !omitida;
+    // lo comunican). Con un temporizador activo para esta rutina, el
+    // contador tiene precedencia sobre ambas (ver diseño acordado).
+    final bool ocultarHora = rutina.completada && !omitida && segundosRestantes == null;
 
     // Todo el cuerpo de la tarjeta es tocable (abre/actualiza el panel de
     // detalle en home_screen.dart), sin robarle el gesto al checkbox, al
@@ -113,8 +120,14 @@ class RutinaLandscapeCard extends ConsumerWidget {
             if (!ocultarHora) ...[
               const SizedBox(height: 2),
               Text(
-                omitida ? 'Omitida hoy' : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
-                style: TextStyle(fontSize: 11, color: omitida ? colorOmitidaRutina : colorFuerte, fontWeight: FontWeight.w600),
+                segundosRestantes != null
+                    ? formatoCuentaRegresiva(segundosRestantes)
+                    : (omitida ? 'Omitida hoy' : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--')),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: (omitida && segundosRestantes == null) ? colorOmitidaRutina : colorFuerte,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
             if (activa && (rutina.racha > 0 || (!rutina.completada && !omitida))) ...[

@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/rutina_provider.dart'; // Acceso al provider que maneja el estado global de rutinas
 import '../../providers/monedas_provider.dart'; // Saldo de monedas de racha, para el botón de omitir
+import '../../providers/temporizador_rutina_provider.dart';
 import '../../models/rutina.dart';             // El modelo de datos "Rutina"
 import '../../core/colores_estado_rutina.dart';
 import '../../core/app_messenger.dart';
@@ -62,6 +63,15 @@ class RutinaCard extends ConsumerWidget {
     // Si la rutina está activa, usamos su color de tema; si está desactivada, todo se ve gris.
     final Color colorFuerte = activa ? colorTema : Colors.grey;
 
+    // .select en vez de watch directo: esta tarjeta solo debe repintarse
+    // cuando el temporizador que cambia es EL DE ESTA rutina (arranca, corre
+    // su tick de 1s, o termina) — el tick de la tarjeta de otra rutina no
+    // debe reconstruir esta. null si no hay temporizador activo para
+    // rutina.id (incluye "no hay ninguno corriendo en absoluto").
+    final int? segundosRestantes = ref.watch(
+      temporizadorRutinaProvider.select((t) => (t != null && t.rutinaId == rutina.id) ? t.segundosRestantes : null),
+    );
+
     // Cambio de UI independiente del temporizador: la hora de hoy deja de
     // tener sentido una vez que la ocurrencia de hoy ya se resolvió.
     // "Omitida hoy" se mantiene (es su propia etiqueta de estado, no la
@@ -74,8 +84,9 @@ class RutinaCard extends ConsumerWidget {
     // Si no queda hora, ni racha, ni botón de omitir, la fila entera no
     // tiene nada que mostrar: se colapsa por completo (sin el minHeight de
     // 48 fijo) en vez de dejar una franja vacía del alto de la zona táctil
-    // del botón de omitir.
-    final bool filaInferiorVacia = ocultarHora && !hayRacha && !hayBotonOmitir;
+    // del botón de omitir. Con un temporizador activo siempre hay algo que
+    // mostrar ahí (el contador), así que nunca se colapsa en ese caso.
+    final bool filaInferiorVacia = segundosRestantes == null && ocultarHora && !hayRacha && !hayBotonOmitir;
 
     // Modo compacto: una vez que la ocurrencia de hoy ya se resolvió
     // (completada U omitida), no hay botón de omitir en ningún caso
@@ -85,7 +96,15 @@ class RutinaCard extends ConsumerWidget {
     // completa. Aplica a los dos estados por igual (no solo completada) para
     // que el criterio sea consistente: que unas tarjetas colapsen y otras no
     // según el estado se vería arbitrario.
-    final bool modoCompacto = rutina.completada || omitida;
+    //
+    // Precedencia acordada: temporizador activo > completada/omitida > hora.
+    // El modo compacto no tiene ningún hueco para el contador (fusiona todo
+    // en la línea del título), así que si hay un temporizador corriendo para
+    // esta rutina se fuerza el modo normal, que sí lo tiene. En el flujo
+    // normal esta combinación no debería darse nunca (completada/omitida
+    // excluyen tener un temporizador activo, y viceversa), pero la
+    // precedencia se sostiene igual si algo dejara ambas cosas true a la vez.
+    final bool modoCompacto = (rutina.completada || omitida) && segundosRestantes == null;
 
     return Card(
       // Espacio debajo de cada tarjeta, para separarla de la siguiente.
@@ -232,6 +251,7 @@ class RutinaCard extends ConsumerWidget {
                         hayBotonOmitir: hayBotonOmitir,
                         ocultarHora: ocultarHora,
                         filaInferiorVacia: filaInferiorVacia,
+                        segundosRestantes: segundosRestantes,
                       ),
               ),
             ],
@@ -263,6 +283,7 @@ class RutinaCard extends ConsumerWidget {
     required bool hayBotonOmitir,
     required bool ocultarHora,
     required bool filaInferiorVacia,
+    required int? segundosRestantes,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start, // Alinea el texto a la izquierda
@@ -349,20 +370,27 @@ class RutinaCard extends ConsumerWidget {
                   // recortan, solo la hora si hace falta.
                   Flexible(
                     child: Center(
-                      child: ocultarHora
-                          ? const SizedBox.shrink()
-                          : Text(
-                              omitida
-                                  ? 'Omitida hoy'
-                                  : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
+                      child: segundosRestantes != null
+                          ? Text(
+                              formatoCuentaRegresiva(segundosRestantes),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: omitida ? colorOmitidaRutina : colorFuerte,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                              style: TextStyle(fontSize: 14, color: colorFuerte, fontWeight: FontWeight.w600),
+                            )
+                          : ocultarHora
+                              ? const SizedBox.shrink()
+                              : Text(
+                                  omitida
+                                      ? 'Omitida hoy'
+                                      : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: omitida ? colorOmitidaRutina : colorFuerte,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                     ),
                   ),
                   // Empuja racha y botón de omitir al extremo derecho,
