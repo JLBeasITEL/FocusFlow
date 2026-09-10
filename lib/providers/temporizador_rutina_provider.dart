@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/notificaciones_service.dart';
 import 'rutina_provider.dart';
 
 // ============================================================
@@ -106,8 +107,12 @@ class TemporizadorRutinaNotifier extends Notifier<TemporizadorRutina?> {
 
   // Persiste {rutinaId, venceEn} y publica el estado inicial. Sin pausa ni
   // reanudación (ver diseño acordado): de acá en más solo hay iniciar/
-  // cancelar.
-  Future<void> iniciar({required String rutinaId, required DateTime venceEn}) async {
+  // cancelar. `titulo` no se persiste (no forma parte de {rutinaId, venceEn}
+  // acordado): solo se usa para rotular la notificación ongoing en el
+  // instante en que arranca; si el temporizador sobrevive a un cierre de
+  // app, la notificación ya mostrada sigue viva a nivel de Android sin
+  // necesidad de que Dart la vuelva a construir.
+  Future<void> iniciar({required String rutinaId, required DateTime venceEn, required String titulo}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _storageKey,
@@ -119,6 +124,7 @@ class TemporizadorRutinaNotifier extends Notifier<TemporizadorRutina?> {
       segundosRestantes: _calcularSegundosRestantes(venceEn),
     );
     iniciarTick();
+    await NotificacionesService().mostrarNotificacionOngoingTemporizador(titulo: titulo, venceEn: venceEn);
   }
 
   Future<void> cancelar() async {
@@ -126,6 +132,7 @@ class TemporizadorRutinaNotifier extends Notifier<TemporizadorRutina?> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_storageKey);
     state = null;
+    await NotificacionesService().cancelarNotificacionOngoingTemporizador();
   }
 
   // ============================================================

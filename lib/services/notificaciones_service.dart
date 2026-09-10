@@ -37,6 +37,20 @@ class NotificacionesService {
   static const String canalRecordatoriosId = 'canal_recordatorios_v4';
   static const String canalAlarmasId = 'canal_alarmas_v4';
 
+  // ============================================================
+  // Temporizador opcional por rutina — ID fijo de la notificación ongoing
+  // ------------------------------------------------------------
+  // Un solo temporizador activo a la vez (global, ver TemporizadorRutina),
+  // así que esta notificación no necesita un ID calculado por rutina/
+  // ocurrencia: uno fijo alcanza. No colisiona con nada más generado en
+  // este archivo: el reset completo de rutinas llega como mucho a ~210005
+  // (baseId % 100000 + offsets de hasta +30000, dos semanas de colchón) y
+  // el top-up incremental arranca su propio rango en 100.000.000 (ver
+  // rutina_provider.dart, offsetSemanaRelleno).
+  // ============================================================
+  static const int idOngoingTemporizadorRutina = 999999;
+  static const String _canalTemporizadorRutinaId = 'canal_temporizador_rutina_v1';
+
   Future<void> init(GlobalKey<NavigatorState> key) async {
     _navigatorKey = key;
     tz.initializeTimeZones();
@@ -339,6 +353,55 @@ class NotificacionesService {
       );
     } catch (e) {
        _logErrorAlarma('programarAlertaRutina (id=$id)', e);
+    }
+  }
+
+  // ============================================================
+  // Notificación ongoing del temporizador de rutina
+  // ------------------------------------------------------------
+  // Cuenta atrás NATIVA: when = epoch millis de venceEn, usesChronometer +
+  // chronometerCountDown hacen que sea Android quien la actualiza segundo a
+  // segundo, no la app (que ya no necesita correr para que se vea correcta).
+  // ongoing:true la hace no descartable con un swipe. Sin actions: no hay
+  // botones. Importance/priority baja y silent:true porque es puramente
+  // informativa — no debe interrumpir con sonido ni heads-up cada vez que
+  // se (re)muestra.
+  // ============================================================
+  Future<void> mostrarNotificacionOngoingTemporizador({
+    required String titulo,
+    required DateTime venceEn,
+  }) async {
+    try {
+      final AndroidNotificationDetails detalles = AndroidNotificationDetails(
+        _canalTemporizadorRutinaId,
+        'Temporizador de rutina',
+        channelDescription: 'Cuenta atrás del temporizador activo de una rutina.',
+        importance: Importance.low,
+        priority: Priority.low,
+        ongoing: true,
+        autoCancel: false,
+        onlyAlertOnce: true,
+        silent: true,
+        when: venceEn.millisecondsSinceEpoch,
+        usesChronometer: true,
+        chronometerCountDown: true,
+      );
+      await _plugin.show(
+        idOngoingTemporizadorRutina,
+        titulo,
+        'Temporizador en curso',
+        NotificationDetails(android: detalles),
+      );
+    } catch (e) {
+      _logErrorAlarma('mostrarNotificacionOngoingTemporizador', e);
+    }
+  }
+
+  Future<void> cancelarNotificacionOngoingTemporizador() async {
+    try {
+      await _plugin.cancel(idOngoingTemporizadorRutina);
+    } catch (_) {
+      // Ignorar: si ya no existía, no es un error real.
     }
   }
 

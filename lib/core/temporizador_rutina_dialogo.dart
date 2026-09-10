@@ -121,7 +121,11 @@ Future<void> _mostrarDialogoTemporizador({
           onPressed: () async {
             Navigator.pop(dialogContext);
             final DateTime venceEn = ref.read(relojProvider)().add(Duration(minutes: duracionMinutos));
-            await ref.read(temporizadorRutinaProvider.notifier).iniciar(rutinaId: rutina.id, venceEn: venceEn);
+            await ref.read(temporizadorRutinaProvider.notifier).iniciar(
+                  rutinaId: rutina.id,
+                  venceEn: venceEn,
+                  titulo: rutina.titulo,
+                );
           },
           child: const Text('Aceptar'),
         ),
