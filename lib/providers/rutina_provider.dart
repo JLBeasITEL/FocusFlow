@@ -694,12 +694,19 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   // primera vez que se completaban. Ver [[idsPorOcurrencia]] en el
   // modelo Rutina.
   // ============================================================
-  Future<void> toggleCompletada(String id) async {
+  // fechaEfectiva (opt-in, default null = usa _ahora como siempre): el
+  // temporizador de rutina la pasa como el instante en que VENCIÓ, no en el
+  // que el usuario confirma en PantallaAlarma — pueden diferir (p. ej. si
+  // el usuario tarda en tocar "Entendido" y eso cruza la medianoche), y el
+  // diseño acordado exige que la rutina cuente para el día del vencimiento,
+  // no el de la confirmación. Ningún otro llamador (el checkbox normal, el
+  // botón del panel de detalle) pasa este parámetro.
+  Future<void> toggleCompletada(String id, {DateTime? fechaEfectiva}) async {
     if (_idsEnProceso.contains(id)) return;
     _idsEnProceso.add(id);
     try {
       final rutinaAntes = state.firstWhere((r) => r.id == id);
-      final hoy = _ahora.toIso8601String().split('T')[0];
+      final hoy = (fechaEfectiva ?? _ahora).toIso8601String().split('T')[0];
 
       // Cancelación inmediata y prioritaria, solo al MARCAR como completa
       // (no al desmarcar), y solo de los IDs que corresponden EXACTAMENTE

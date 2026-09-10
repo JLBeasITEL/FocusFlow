@@ -125,6 +125,7 @@ Future<void> _mostrarDialogoTemporizador({
                   rutinaId: rutina.id,
                   venceEn: venceEn,
                   titulo: rutina.titulo,
+                  iconoCode: rutina.iconoCode,
                 );
           },
           child: const Text('Aceptar'),

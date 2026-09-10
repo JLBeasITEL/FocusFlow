@@ -107,12 +107,19 @@ class TemporizadorRutinaNotifier extends Notifier<TemporizadorRutina?> {
 
   // Persiste {rutinaId, venceEn} y publica el estado inicial. Sin pausa ni
   // reanudación (ver diseño acordado): de acá en más solo hay iniciar/
-  // cancelar. `titulo` no se persiste (no forma parte de {rutinaId, venceEn}
-  // acordado): solo se usa para rotular la notificación ongoing en el
-  // instante en que arranca; si el temporizador sobrevive a un cierre de
-  // app, la notificación ya mostrada sigue viva a nivel de Android sin
-  // necesidad de que Dart la vuelva a construir.
-  Future<void> iniciar({required String rutinaId, required DateTime venceEn, required String titulo}) async {
+  // cancelar. `titulo`/`iconoCode` no se persisten (no forman parte de
+  // {rutinaId, venceEn} acordado): solo rotulan la notificación ongoing y
+  // la alarma de vencimiento en el instante en que arrancan -- ambas
+  // sobreviven a un cierre de la app por su cuenta (la ongoing porque
+  // Android la sigue mostrando, la alarma porque es la propia alarma
+  // nativa la que dispara la navegación via payload), sin que Dart
+  // necesite reconstruirlas.
+  Future<void> iniciar({
+    required String rutinaId,
+    required DateTime venceEn,
+    required String titulo,
+    required int iconoCode,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _storageKey,
@@ -125,6 +132,12 @@ class TemporizadorRutinaNotifier extends Notifier<TemporizadorRutina?> {
     );
     iniciarTick();
     await NotificacionesService().mostrarNotificacionOngoingTemporizador(titulo: titulo, venceEn: venceEn);
+    await NotificacionesService().programarAlarmaVencimientoTemporizador(
+      rutinaId: rutinaId,
+      rutinaTitulo: titulo,
+      iconoCode: iconoCode,
+      venceEn: venceEn,
+    );
   }
 
   Future<void> cancelar() async {
@@ -133,6 +146,7 @@ class TemporizadorRutinaNotifier extends Notifier<TemporizadorRutina?> {
     await prefs.remove(_storageKey);
     state = null;
     await NotificacionesService().cancelarNotificacionOngoingTemporizador();
+    await NotificacionesService().cancelarAlarmaVencimientoTemporizador();
   }
 
   // ============================================================

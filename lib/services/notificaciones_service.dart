@@ -49,6 +49,7 @@ class NotificacionesService {
   // rutina_provider.dart, offsetSemanaRelleno).
   // ============================================================
   static const int idOngoingTemporizadorRutina = 999999;
+  static const int idAlarmaVencimientoTemporizadorRutina = 999998;
   static const String _canalTemporizadorRutinaId = 'canal_temporizador_rutina_v1';
 
   Future<void> init(GlobalKey<NavigatorState> key) async {
@@ -97,13 +98,25 @@ class NotificacionesService {
       int id = 0;
       String titulo = '';
       String cuerpo = '';
-      int iconoCode = 0; 
+      int iconoCode = 0;
+      String? rutinaIdTemporizador;
 
-      if (partes.length >= 5) { 
+      // Rama del temporizador de rutina: va ANTES del catch-all genérico de
+      // partes.length >= 5 porque esta también lo cumple (siempre trae 7
+      // partes), pero necesita el rutinaId extra para que PantallaAlarma
+      // pueda llamar a toggleCompletada al confirmar — ninguna otra alarma
+      // (tareas, rutinas por horario) completa nada por sí sola.
+      if (partes.length >= 7 && partes[5] == 'temporizador') {
         id = int.tryParse(partes[1]) ?? 0;
         titulo = partes[2];
         cuerpo = partes[3];
-        iconoCode = int.tryParse(partes[4]) ?? 0; 
+        iconoCode = int.tryParse(partes[4]) ?? 0;
+        rutinaIdTemporizador = partes[6];
+      } else if (partes.length >= 5) {
+        id = int.tryParse(partes[1]) ?? 0;
+        titulo = partes[2];
+        cuerpo = partes[3];
+        iconoCode = int.tryParse(partes[4]) ?? 0;
       } else if (partes.length == 4) {
         id = int.tryParse(partes[1]) ?? 0;
         titulo = partes[2];
@@ -116,7 +129,13 @@ class NotificacionesService {
       SchedulerBinding.instance.addPostFrameCallback((_) {
         _navigatorKey.currentState?.push(
           MaterialPageRoute(
-            builder: (_) => PantallaAlarma(idAlarma: id, titulo: titulo, cuerpo: cuerpo, iconoCode: iconoCode),
+            builder: (_) => PantallaAlarma(
+              idAlarma: id,
+              titulo: titulo,
+              cuerpo: cuerpo,
+              iconoCode: iconoCode,
+              rutinaIdTemporizador: rutinaIdTemporizador,
+            ),
           ),
         );
       });
@@ -400,6 +419,75 @@ class NotificacionesService {
   Future<void> cancelarNotificacionOngoingTemporizador() async {
     try {
       await _plugin.cancel(idOngoingTemporizadorRutina);
+    } catch (_) {
+      // Ignorar: si ya no existía, no es un error real.
+    }
+  }
+
+  // ============================================================
+  // Alarma de vencimiento del temporizador de rutina
+  // ------------------------------------------------------------
+  // Alarma de UNA SOLA ocurrencia (AndroidScheduleMode.alarmClock, mismo
+  // esquema que programarAlertaRutina) programada en el instante en que el
+  // temporizador arranca, para el instante exacto en que vence: así
+  // sobrevive al cierre de la app -- la cuenta la lleva Android, no un
+  // Timer de Dart. ID fijo 999998 (ver idOngoingTemporizadorRutina arriba
+  // sobre por qué un ID fijo alcanza y por qué no colisiona con nada más).
+  //
+  // Payload con rama propia ('temporizador'): a diferencia de
+  // programarAlertaRutina, PantallaAlarma necesita el rutinaId para poder
+  // llamar a toggleCompletada al confirmar (ver _manejarNavegacionAlarma) --
+  // ninguna otra alarma de este archivo completa nada por sí sola.
+  // ============================================================
+  Future<void> programarAlarmaVencimientoTemporizador({
+    required String rutinaId,
+    required String rutinaTitulo,
+    required int iconoCode,
+    required DateTime venceEn,
+  }) async {
+    final tz.TZDateTime fechaSistema = tz.TZDateTime.from(venceEn, tz.local);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sonidoAlarma = prefs.getString('sonido_alarma') ?? 'default_alarma';
+      final canalDinamicoId = '${canalAlarmasId}_$sonidoAlarma';
+
+      const String titulo = 'Temporizador terminado';
+      final String cuerpo = 'Confirma que terminaste "$rutinaTitulo"';
+
+      // Prefijo 'alarma|' también leído por MainActivity.kt (nativo).
+      final String payload =
+          'alarma|$idAlarmaVencimientoTemporizadorRutina|$titulo|$cuerpo|$iconoCode|temporizador|$rutinaId';
+
+      await _plugin.zonedSchedule(
+        idAlarmaVencimientoTemporizadorRutina,
+        titulo,
+        cuerpo,
+        fechaSistema,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            canalDinamicoId,
+            'Alarmas Urgentes',
+            importance: Importance.max,
+            priority: Priority.max,
+            color: const Color(0xFF276749),
+            fullScreenIntent: true,
+            playSound: true,
+            sound: RawResourceAndroidNotificationSound(sonidoAlarma),
+            additionalFlags: Int32List.fromList(<int>[4]),
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.alarmClock,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        payload: payload,
+      );
+    } catch (e) {
+      _logErrorAlarma('programarAlarmaVencimientoTemporizador (rutina=$rutinaId)', e);
+    }
+  }
+
+  Future<void> cancelarAlarmaVencimientoTemporizador() async {
+    try {
+      await _plugin.cancel(idAlarmaVencimientoTemporizadorRutina);
     } catch (_) {
       // Ignorar: si ya no existía, no es un error real.
     }
