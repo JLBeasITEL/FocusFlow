@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import '../../providers/tema_provider.dart'; 
+import '../../providers/tema_provider.dart';
+import '../../providers/rutina_provider.dart';
+import '../../providers/temporizador_rutina_provider.dart';
 import '../../services/notificaciones_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../screens/home_screen.dart';
@@ -15,12 +17,33 @@ class PantallaAlarma extends ConsumerStatefulWidget {
   final String cuerpo;
   final int iconoCode;
 
+  // Presente SOLO para la alarma de vencimiento del temporizador de rutina
+  // (ver notificaciones_service.dart, rama 'temporizador' de
+  // _manejarNavegacionAlarma). null para cualquier otra alarma (tareas,
+  // rutinas por horario): esas nunca completan nada por sí solas, solo
+  // apagan el sonido y vuelven a HomeScreen. Con un valor no-null,
+  // "Entendido" además cancela el temporizador y llama a toggleCompletada
+  // -- la única forma en que una rutina con temporizador queda completada
+  // -- y no se ofrece "Posponer" (no tiene sentido posponer una
+  // confirmación de vencimiento).
+  final String? rutinaIdTemporizador;
+
+  // Solo true cuando esta pantalla la empuja el reconciliador de arranque
+  // (ver reconciliador_temporizador_rutina.dart), NUNCA cuando la empuja la
+  // alarma nativa en vivo (diseño acordado: "solo el reconciliador pasa
+  // true"). Se lo pasa tal cual a toggleCompletada -- ver ese parámetro
+  // para el porqué: el reconciliador puede correr mientras el loop de
+  // arranque de rutina_provider.dart todavía tiene esta rutina tomada.
+  final bool esperarGuardLibreAlConfirmar;
+
   const PantallaAlarma({
     super.key,
     required this.idAlarma,
     required this.titulo,
     required this.cuerpo,
     required this.iconoCode,
+    this.rutinaIdTemporizador,
+    this.esperarGuardLibreAlConfirmar = false,
   });
 
   @override
@@ -54,6 +77,25 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
     WakelockPlus.disable();
     // Restaura el comportamiento normal: la app vuelve a respetar el bloqueo
     _canalAlarma.invokeMethod('hideOverLockscreen').catchError((_) {});
+    // Red de seguridad: si esta pantalla se desmonta por cualquier vía que no
+    // sea "Entendido" (para la rama del temporizador, el PopScope de abajo ya
+    // bloquea la única vía conocida -- el atrás -- pero esto cubre cualquier
+    // otra forma de desmontaje presente o futura), la notificación de alarma
+    // no debe quedar sonando sin nadie que la apague.
+    FlutterLocalNotificationsPlugin().cancel(widget.idAlarma).catchError((_) {});
+    // Libera el guard anti-duplicado del vencimiento del temporizador (ver
+    // NotificacionesService.marcarVencimientoTemporizadorSiNuevo) de forma
+    // INCONDICIONAL, no solo al confirmar: dispose() corre pase lo que pase
+    // (confirmar, o cualquier otra vía de desmontaje presente o futura), así
+    // que es el único lugar donde puede garantizarse que este vencimiento
+    // concreto vuelva a poder ofrecerse si hiciera falta. No necesita
+    // comparar identidad (a diferencia de quien lo marca): solo puede haber
+    // una PantallaAlarma-de-temporizador montada a la vez (para eso existe
+    // el guard), así que si esta se desmonta, lo que sea que esté marcado ya
+    // no es válido.
+    if (widget.rutinaIdTemporizador != null) {
+      NotificacionesService().liberarVencimientoTemporizadorEnPantalla();
+    }
     super.dispose();
   }
 
@@ -82,7 +124,17 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
     const double alturaCompacta = 380.0;
     const double alturaCompleta = 600.0;
 
-    return Scaffold(
+    // Bloquea el atrás SOLO en la alarma de vencimiento del temporizador de
+    // rutina: "Entendido" es la única salida (diseño acordado, ver el
+    // bloque de arriba), así que dejar salir por atrás sin pasar por ahí es
+    // exactamente el estado colgado que este PopScope existe para evitar
+    // (persistido en disco intacto, sin confirmar, y sin nada que vuelva a
+    // ofrecer la confirmación hasta el próximo arranque de la app). Las
+    // demás alarmas (tareas, rutinas por horario) no tienen nada pendiente
+    // de confirmar, así que ahí el atrás se deja funcionar como siempre.
+    return PopScope(
+      canPop: widget.rutinaIdTemporizador == null,
+      child: Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
         child: Padding(
@@ -100,7 +152,7 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
                   child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('TAREA PENDIENTE',
+              Text(widget.rutinaIdTemporizador != null ? 'TEMPORIZADOR TERMINADO' : 'TAREA PENDIENTE',
                 style: TextStyle(color: textColor.withValues(alpha: 0.6), letterSpacing: 3, fontWeight: FontWeight.bold)
               ),
               SizedBox(height: espacioTrasLabel),
@@ -150,16 +202,53 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
                     } catch (e) {
                       if (kDebugMode) debugPrint('Error al detener la alarma: $e');
                     }
-                    
-                    // 2. REEMPLAZO: En lugar de cerrar la app, forzamos abrir el HomeScreen
-                    // Esto además evita que el usuario pueda volver a la alarma presionando "Atrás"
+
+                    // 1b. Alarma de vencimiento del temporizador de rutina:
+                    // esta es la ÚNICA confirmación que existe para este
+                    // flujo (nunca se completa sola, ver diseño acordado),
+                    // así que acá es donde toggleCompletada finalmente se
+                    // llama. fechaEfectiva usa el venceEn persistido (leído
+                    // ANTES de cancelar, que lo borra) para que la rutina
+                    // cuente para el día en que venció el temporizador, no
+                    // el día en que el usuario llegó a tocar "Entendido".
+                    final String? rutinaId = widget.rutinaIdTemporizador;
+                    if (rutinaId != null) {
+                      final activo = ref.read(temporizadorRutinaProvider);
+                      final DateTime fechaEfectiva = (activo != null && activo.rutinaId == rutinaId)
+                          ? activo.venceEn
+                          : ref.read(relojProvider)();
+                      await ref.read(temporizadorRutinaProvider.notifier).cancelar();
+                      await ref.read(rutinaProvider.notifier).toggleCompletada(
+                            rutinaId,
+                            fechaEfectiva: fechaEfectiva,
+                            esperarGuardLibre: widget.esperarGuardLibreAlConfirmar,
+                          );
+                    }
+
+                    // 2. Cerrar esta pantalla. La rama del temporizador hace
+                    // un pop normal (decisión acordada): a diferencia de
+                    // tareas/rutinas por horario, esta puede interrumpir
+                    // CUALQUIER pantalla de la app (formulario de rutina,
+                    // ajustes, otra pestaña -- ver listener en vivo), así
+                    // que pushAndRemoveUntil a un HomeScreen fresco le haría
+                    // perder al usuario el lugar exacto donde estaba. Con
+                    // pop(), PantallaAlarma se apila y se retira sin más,
+                    // dejando exactamente esa pantalla debajo intacta.
+                    // Tareas/rutinas por horario NO cambian: conservan el
+                    // pushAndRemoveUntil de siempre (no era parte de este
+                    // bug y no hay guard/listener que las interrumpa fuera
+                    // de tocar su propia notificación).
                     if (context.mounted) {
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(
-                          builder: (context) => const HomeScreen(),
-                        ),
-                        (Route<dynamic> route) => false, // Elimina pantallas previas
-                      );
+                      if (rutinaId != null) {
+                        Navigator.of(context).pop();
+                      } else {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (context) => const HomeScreen(),
+                          ),
+                          (Route<dynamic> route) => false, // Elimina pantallas previas
+                        );
+                      }
                     }
                   },
                   child: const Text(
@@ -169,6 +258,12 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
                 ),
               ),
               
+              // Posponer no aplica a la alarma de vencimiento del
+              // temporizador de rutina (diseño acordado: la única acción
+              // ahí es confirmar). Se omite el bloque entero, no solo se
+              // deshabilita, para no dejarle al usuario un control que no
+              // hace nada.
+              if (widget.rutinaIdTemporizador == null) ...[
               const SizedBox(height: 16),
 
               // --- NUEVO BOTÓN/SLIDER DE POSPONER CON COLORES DE TEMA ---
@@ -278,6 +373,7 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
                         },
                       ),
               ),
+              ],
               const SizedBox(height: 40),
             ],
                   ),
@@ -286,6 +382,7 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
             },
           ),
         ),
+      ),
       ),
     );
   }

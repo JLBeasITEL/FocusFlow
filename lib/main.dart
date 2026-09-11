@@ -15,6 +15,9 @@ import 'services/widget_notas_service.dart';
 import 'services/widget_progreso_service.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'core/app_messenger.dart';
+import 'providers/temporizador_rutina_provider.dart';
+import 'core/reconciliador_temporizador_rutina.dart';
+import 'core/temporizador_rutina_listener.dart';
 
 // 1. Creamos una llave global para navegar desde cualquier parte (incluso en segundo plano)
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -43,6 +46,13 @@ void main() {
 
     await AndroidAlarmManager.initialize();
     await initializeDateFormatting('es', null);
+
+    // Registrado lo antes posible: un container.listen no reacciona a
+    // cambios de estado que ocurrieron ANTES de registrarse, así que cuanto
+    // antes se registre, menos ventana de pérdida hay contra la carga async
+    // del propio temporizador (ver temporizador_rutina_listener.dart para
+    // qué huecos cubre esto que el reconciliador de más abajo no cubre).
+    iniciarListenerTemporizadorRutina(container: container, navigatorKey: navigatorKey);
 
     // Es vital pasar la llave aquí
     await NotificacionesService().init(navigatorKey);
@@ -78,6 +88,15 @@ void main() {
         _manejarClickWidget(uriDeLanzamiento);
       });
     }
+
+    // Red de seguridad de arranque: si el temporizador de una rutina venció
+    // con la app cerrada y nadie lo confirmó, lo detecta y muestra la
+    // confirmación acá (nunca se completa sola, ver diseño acordado).
+    // Deferido al primer frame por lo mismo que el bloque de arriba:
+    // necesita navigatorKey ya montado para poder empujar una pantalla.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      reconciliarTemporizadorRutinaAlArrancar(container: container, navigatorKey: navigatorKey);
+    });
   }, (error, stackTrace) {
     debugPrint('Error no capturado fuera del árbol de widgets: $error\n$stackTrace');
   });
@@ -193,6 +212,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
       _sincronizarWidgetsAlPasarASegundoPlano();
+      // El tick del temporizador de rutinas no debe seguir corriendo con la
+      // app invisible: la cuenta real la lleva la alarma nativa (Android),
+      // no este Timer.periodic en memoria — ver temporizador_rutina_provider.dart.
+      container.read(temporizadorRutinaProvider.notifier).detenerTick();
+    } else if (state == AppLifecycleState.resumed) {
+      // iniciarTick() recalcula por diferencia contra venceEn ANTES de
+      // reanudar el Timer.periodic, así que el primer valor mostrado tras
+      // volver de segundo plano ya es el correcto (nunca continúa desde el
+      // valor viejo con el que se pausó).
+      container.read(temporizadorRutinaProvider.notifier).iniciarTick();
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/rutina.dart';
@@ -18,11 +19,24 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
   final _tituloController = TextEditingController();
   final _descripcionController = TextEditingController();
   
-  bool _esFlexible = false; 
-  Map<int, TimeOfDay> _horarios = {}; 
-  
+  bool _esFlexible = false;
+  Map<int, TimeOfDay> _horarios = {};
+
   TimeOfDay _horaFija = const TimeOfDay(hour: 8, minute: 0);
   final List<bool> _diasFijos = [false, false, false, false, false, false, false];
+
+  // Duración del temporizador opcional, en paralelo a _horaFija/_horarios
+  // (ver duraciones en rutina.dart). 0 = sin temporizador ese día. La
+  // invariante real (mismas claves que _horarios) se recalcula recién al
+  // guardar (ver _guardarRutina); mientras se edita el formulario, este mapa
+  // solo existe para recordar lo que el usuario ya eligió por día.
+  int _duracionFija = 0;
+  Map<int, int> _duraciones = {};
+
+  // Tope de la rueda de duración (además de "Sin temporizador" en 0): 180
+  // minutos (3 horas) cubre cualquier hábito largo razonable sin dejar
+  // pasar un typo que termine en una cuenta de días.
+  static const int _duracionCustomMax = 180;
 
   int _iconoSeleccionado = Icons.fitness_center.codePoint;
 
@@ -54,9 +68,14 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
       _iconoSeleccionado = r.iconoCode;
       _esFlexible = r.esFlexible;
       _horarios = Map.from(r.horarios);
+      _duraciones = Map.from(r.duraciones);
 
       if (!_esFlexible && r.horarios.isNotEmpty) {
         _horaFija = r.horarios.values.first;
+        // Modo no-flexible: todas las claves comparten el mismo valor (así
+        // es como este formulario siempre las escribe), así que basta con
+        // tomar la primera para precargar el control general.
+        _duracionFija = r.duraciones.values.first;
         for (var day in r.horarios.keys) {
           _diasFijos[day] = true;
         }
@@ -89,6 +108,15 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
     return;
   }
 
+  // Se recalcula siempre a partir de las claves DEFINITIVAS de _horarios (no
+  // se confía en el estado intermedio de _duraciones, que puede haber
+  // quedado con claves de más o de menos según cómo el usuario fue tocando
+  // días) para sostener la invariante de duraciones (mismas claves que
+  // horarios, ver rutina.dart) pase lo que pase con el orden de los toques.
+  final Map<int, int> duracionesFinal = !_esFlexible
+      ? {for (final dia in _horarios.keys) dia: _duracionFija}
+      : {for (final dia in _horarios.keys) dia: _duraciones[dia] ?? 0};
+
   final String descripcionIngresada = _descripcionController.text.trim();
   final Rutina? rutinaAEditar = widget.rutinaAEditar;
 
@@ -109,6 +137,9 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
           iconoCode: _iconoSeleccionado,
           descripcion: descripcionIngresada.isEmpty ? null : descripcionIngresada,
           limpiarDescripcion: descripcionIngresada.isEmpty,
+          // copyWith NO deriva duraciones de horarios (ver rutina.dart):
+          // este formulario es quien debe pasarla ya alineada.
+          duraciones: duracionesFinal,
         )
       // CREACIÓN: sin cambios respecto al comportamiento anterior.
       : Rutina(
@@ -118,6 +149,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
           horarios: _horarios,
           esFlexible: _esFlexible,
           iconoCode: _iconoSeleccionado,
+          duraciones: duracionesFinal,
         );
 
   setState(() => _guardando = true);
@@ -146,6 +178,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
     'Horario personalizado por día: Actívalo para elegir una hora distinta cada día; desactívalo para usar siempre la misma hora.',
     'Hora general / Días de repetición: Hora fija y los días en que se repetirá (modo simple, sin horario personalizado).',
     'Horarios específicos: Hora individual para cada día que actives (modo horario personalizado).',
+    'Duración del temporizador: Opcional. Si la activas, al marcar la rutina como hecha se inicia una cuenta atrás en vez de completarla directo.',
     'Ícono: Imagen que identifica al hábito en la lista.',
   ];
 
@@ -249,6 +282,17 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                   label: Text(_horaFija.format(context)),
                 ),
               ),
+              ListTile(
+                title: const Text('Duración del temporizador (opcional)'),
+                trailing: ElevatedButton.icon(
+                  icon: const Icon(Icons.timer_outlined, size: 18),
+                  onPressed: () async {
+                    final elegida = await _elegirDuracion(_duracionFija);
+                    if (elegida != null) setState(() => _duracionFija = elegida);
+                  },
+                  label: Text(_etiquetaDuracion(_duracionFija)),
+                ),
+              ),
               const SizedBox(height: 10),
               const Text('Días de repetición', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 15),
@@ -270,30 +314,89 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
             ] else ...[
               const Text('Horarios específicos', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
+              // Fila armada a mano (antes era un CheckboxListTile): con hora
+              // Y duración a la vez son 4 elementos (checkbox, nombre, hora,
+              // duración) que ya no entran en el molde leading/trailing de
+              // ListTile. Con el controlAffinity por default de esta app,
+              // CheckboxListTile resuelve `secondary` como el LEADING y el
+              // checkbox como el TRAILING (ver checkbox_list_tile.dart) —
+              // por eso antes el checkbox quedaba a la derecha. Pero
+              // ListTile le impone a leading/trailing una altura máxima fija
+              // de 56dp sin importar el contenido (list_tile.dart,
+              // maxIconHeightConstraint): un solo botón entraba ahí, pero el
+              // Column de hora+duración apilados necesita ~90dp y desbordaba
+              // esa caja, solapándose con el título y con el propio
+              // checkbox. Con la fila armada a mano no hay ningún ListTile
+              // de por medio imponiendo ese techo.
               ...['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].asMap().entries.map((entry) {
                 int idx = entry.key;
                 bool activo = _horarios.containsKey(idx);
-                return CheckboxListTile(
-                  title: Text(entry.value, style: TextStyle(fontWeight: activo ? FontWeight.bold : FontWeight.normal)),
-                  value: activo,
-                  activeColor: Colors.deepPurple,
-                  secondary: activo ? TextButton.icon(
-                    icon: const Icon(Icons.access_time, size: 18),
-                    onPressed: () async {
-                      final select = await showTimePicker(context: context, initialTime: _horarios[idx]!);
-                      if (select != null) setState(() => _horarios[idx] = select);
-                    },
-                    label: Text(_horarios[idx]!.format(context)),
-                  ) : null,
-                  onChanged: (val) {
-                    setState(() {
-                      if (val!) {
-                        _horarios[idx] = const TimeOfDay(hour: 8, minute: 0);
-                      } else {
-                        _horarios.remove(idx);
-                      }
-                    });
-                  },
+                void alternar() {
+                  setState(() {
+                    if (activo) {
+                      _horarios.remove(idx);
+                      _duraciones.remove(idx);
+                    } else {
+                      _horarios[idx] = const TimeOfDay(hour: 8, minute: 0);
+                      _duraciones[idx] = 0;
+                    }
+                  });
+                }
+                return InkWell(
+                  onTap: alternar,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.value,
+                            style: TextStyle(fontWeight: activo ? FontWeight.bold : FontWeight.normal),
+                          ),
+                        ),
+                        if (activo) ...[
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                icon: const Icon(Icons.access_time, size: 16),
+                                onPressed: () async {
+                                  final select = await showTimePicker(context: context, initialTime: _horarios[idx]!);
+                                  if (select != null) setState(() => _horarios[idx] = select);
+                                },
+                                label: Text(_horarios[idx]!.format(context), style: const TextStyle(fontSize: 13)),
+                              ),
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                icon: const Icon(Icons.timer_outlined, size: 16),
+                                onPressed: () => _elegirDuracionDia(idx),
+                                label: Text(_etiquetaDuracion(_duraciones[idx] ?? 0), style: const TextStyle(fontSize: 13)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        // Checkbox tal cual (sin encoger su tapTargetSize):
+                        // misma zona táctil ~48dp que ya daba CheckboxListTile
+                        // por default, y en la misma posición (derecha).
+                        Checkbox(
+                          value: activo,
+                          activeColor: Colors.deepPurple,
+                          onChanged: (_) => alternar(),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               }),
             ],
@@ -408,8 +511,10 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
       if (_esFlexible) {
         if (_horarios.containsKey(idx)) {
           _horarios.remove(idx);
+          _duraciones.remove(idx);
         } else {
           _horarios[idx] = const TimeOfDay(hour: 8, minute: 0);
+          _duraciones[idx] = 0;
         }
       } else {
         _diasFijos[idx] = !_diasFijos[idx];
@@ -421,6 +526,50 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
     final actual = _horarios[idx] ?? const TimeOfDay(hour: 8, minute: 0);
     final elegida = await showTimePicker(context: context, initialTime: actual);
     if (elegida != null) setState(() => _horarios[idx] = elegida);
+  }
+
+  String _etiquetaDuracion(int minutos) => minutos == 0 ? 'Sin temporizador' : '$minutos min';
+
+  // Diálogo compartido por el control general y por cada día en modo
+  // flexible (portrait y landscape): una rueda vertical con TODOS los
+  // minutos entre 0 (Sin temporizador) y _duracionCustomMax.
+  Future<int?> _elegirDuracion(int actual) async {
+    final int inicial = actual.clamp(0, _duracionCustomMax);
+    final FixedExtentScrollController controlRueda = FixedExtentScrollController(initialItem: inicial);
+    int seleccionado = inicial;
+
+    final int? resultado = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Duración del temporizador'),
+            content: _RuedaMinutos(
+              controlador: controlRueda,
+              maximo: _duracionCustomMax,
+              valorActual: seleccionado,
+              onCambio: (minutos) => setDialogState(() => seleccionado = minutos),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dialogContext, seleccionado),
+                child: const Text('Aceptar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    controlRueda.dispose();
+    return resultado;
+  }
+
+  Future<void> _elegirDuracionDia(int idx) async {
+    final actual = _duraciones[idx] ?? 0;
+    final elegida = await _elegirDuracion(actual);
+    if (elegida != null) setState(() => _duraciones[idx] = elegida);
   }
 
   // Mismo Wrap de 24 íconos que ya vive dentro del ExpansionTile de
@@ -554,6 +703,15 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                                 },
                                 label: Text('Hora general: ${_horaFija.format(context)}'),
                               ),
+                              const SizedBox(width: 12),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.timer_outlined, size: 18),
+                                onPressed: () async {
+                                  final elegida = await _elegirDuracion(_duracionFija);
+                                  if (elegida != null) setState(() => _duracionFija = elegida);
+                                },
+                                label: Text(_etiquetaDuracion(_duracionFija)),
+                              ),
                               const SizedBox(width: 16),
                             ],
                             const Text('Horario personalizado por día'),
@@ -595,6 +753,19 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                                             style: const TextStyle(
                                               fontSize: 13,
                                               color: Colors.deepPurple,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        GestureDetector(
+                                          onTap: () => _elegirDuracionDia(idx),
+                                          child: Text(
+                                            _etiquetaDuracion(_duraciones[idx] ?? 0),
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.deepPurple.shade300,
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
@@ -674,6 +845,112 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// _RuedaMinutos — rueda vertical de un solo valor (0 a [maximo] minutos)
+// para el diálogo de duración del temporizador. El resaltado central es
+// solo visual (dos líneas horizontales, sin fondo): la fila que queda ahí
+// al soltar es la seleccionada, vía FixedExtentScrollPhysics.
+// ------------------------------------------------------------
+// La etiqueta "minutos" vive FUERA de la rueda (no gira con los números,
+// como en un selector de hora) y a la derecha, a la altura de la fila
+// resaltada — que ya cae en el centro vertical de este widget porque así
+// funciona FixedExtentScrollPhysics. Se reserva el mismo ancho como
+// espaciador invisible a la izquierda para que la columna de números
+// quede centrada en el diálogo (si no, la rueda se vería corrida hacia la
+// izquierda por el espacio que le come la etiqueta a la derecha). En la
+// fila 0 ("Sin temporizador") la etiqueta se oculta, no tiene sentido
+// pegada a esa fila — pero el espaciador se mantiene, así el resto de la
+// rueda no se corre al pasar por ahí.
+// ============================================================
+class _RuedaMinutos extends StatelessWidget {
+  final FixedExtentScrollController controlador;
+  final int maximo;
+  final int valorActual;
+  final ValueChanged<int> onCambio;
+
+  const _RuedaMinutos({
+    required this.controlador,
+    required this.maximo,
+    required this.valorActual,
+    required this.onCambio,
+  });
+
+  static const double _alturaFila = 36;
+  static const int _filasVisibles = 5;
+  static const double _anchoEtiqueta = 60;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: _alturaFila * _filasVisibles,
+      width: double.infinity,
+      child: Row(
+        children: [
+          const SizedBox(width: _anchoEtiqueta),
+          Expanded(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                ListWheelScrollView.useDelegate(
+                  controller: controlador,
+                  itemExtent: _alturaFila,
+                  diameterRatio: 1.8,
+                  physics: const FixedExtentScrollPhysics(),
+                  onSelectedItemChanged: (indice) {
+                    HapticFeedback.selectionClick();
+                    onCambio(indice);
+                  },
+                  childDelegate: ListWheelChildBuilderDelegate(
+                    childCount: maximo + 1,
+                    builder: (context, indice) => Center(
+                      child: Text(
+                        indice == 0 ? 'Sin temporizador' : '$indice',
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: indice == 0 ? 13 : 16,
+                          color: Colors.deepPurple.shade700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                IgnorePointer(
+                  child: Container(
+                    height: _alturaFila,
+                    decoration: BoxDecoration(
+                      border: Border.symmetric(
+                        horizontal: BorderSide(color: Colors.deepPurple.withValues(alpha: 0.4)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: _anchoEtiqueta,
+            height: _alturaFila,
+            child: valorActual == 0
+                ? null
+                : Center(
+                    child: Text(
+                      'minutos',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.deepPurple.shade300,
+                      ),
+                    ),
+                  ),
+          ),
         ],
       ),
     );

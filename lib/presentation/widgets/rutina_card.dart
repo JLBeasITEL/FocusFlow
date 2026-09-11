@@ -10,10 +10,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/rutina_provider.dart'; // Acceso al provider que maneja el estado global de rutinas
 import '../../providers/monedas_provider.dart'; // Saldo de monedas de racha, para el botón de omitir
+import '../../providers/temporizador_rutina_provider.dart';
 import '../../models/rutina.dart';             // El modelo de datos "Rutina"
 import '../../core/colores_estado_rutina.dart';
 import '../../core/app_messenger.dart';
-import '../../core/celebracion_racha.dart';
+import '../../core/temporizador_rutina_dialogo.dart';
+import 'anillo_temporizador_rutina.dart';
 
 // ConsumerWidget: es un widget "sin estado propio" (stateless) pero que SÍ puede
 // leer/escuchar el provider de Riverpod a través del parámetro `ref`.
@@ -25,6 +27,13 @@ class RutinaCard extends ConsumerWidget {
   // hoy") queda con espacio muerto de sobra por encima y por debajo, ya que
   // ninguno de los dos necesita 48dp para verse bien.
   static const double _alturaTactilBotonOmitir = 48;
+
+  // Ancho (y alto) fijo de la "zona izquierda" (checkbox / botón de deshacer
+  // omisión / anillo de temporizador), igual al tap target por defecto de
+  // Checkbox/IconButton en Material (materialTapTargetSize.padded): así el
+  // anillo, que puede ser más chico visualmente (tamano), no corre el ícono
+  // de la rutina al arrancar o cancelar un temporizador.
+  static const double _anchoZonaIzquierda = 48;
 
   // Datos que este widget recibe desde afuera (desde la lista que lo construye).
   final Rutina rutina;     // La rutina específica que esta tarjeta va a mostrar
@@ -62,6 +71,21 @@ class RutinaCard extends ConsumerWidget {
     // Si la rutina está activa, usamos su color de tema; si está desactivada, todo se ve gris.
     final Color colorFuerte = activa ? colorTema : Colors.grey;
 
+    // .select en vez de watch directo: esta tarjeta solo debe repintarse
+    // cuando el temporizador que cambia es EL DE ESTA rutina (arranca, corre
+    // su tick de 1s, o termina) — el tick de la tarjeta de otra rutina no
+    // debe reconstruir esta. null si no hay temporizador activo para
+    // rutina.id (incluye "no hay ninguno corriendo en absoluto"). El record
+    // agrupa segundosRestantes (para el texto) y fraccionCompletada (para
+    // el anillo) en una sola suscripción — sigue siendo un solo .select.
+    final (int, double)? temporizadorPropio = ref.watch(
+      temporizadorRutinaProvider.select(
+        (t) => (t != null && t.rutinaId == rutina.id) ? (t.segundosRestantes, t.fraccionCompletada) : null,
+      ),
+    );
+    final int? segundosRestantes = temporizadorPropio?.$1;
+    final double? fraccionTemporizador = temporizadorPropio?.$2;
+
     // Cambio de UI independiente del temporizador: la hora de hoy deja de
     // tener sentido una vez que la ocurrencia de hoy ya se resolvió.
     // "Omitida hoy" se mantiene (es su propia etiqueta de estado, no la
@@ -74,8 +98,9 @@ class RutinaCard extends ConsumerWidget {
     // Si no queda hora, ni racha, ni botón de omitir, la fila entera no
     // tiene nada que mostrar: se colapsa por completo (sin el minHeight de
     // 48 fijo) en vez de dejar una franja vacía del alto de la zona táctil
-    // del botón de omitir.
-    final bool filaInferiorVacia = ocultarHora && !hayRacha && !hayBotonOmitir;
+    // del botón de omitir. Con un temporizador activo siempre hay algo que
+    // mostrar ahí (el contador), así que nunca se colapsa en ese caso.
+    final bool filaInferiorVacia = segundosRestantes == null && ocultarHora && !hayRacha && !hayBotonOmitir;
 
     // Modo compacto: una vez que la ocurrencia de hoy ya se resolvió
     // (completada U omitida), no hay botón de omitir en ningún caso
@@ -85,7 +110,15 @@ class RutinaCard extends ConsumerWidget {
     // completa. Aplica a los dos estados por igual (no solo completada) para
     // que el criterio sea consistente: que unas tarjetas colapsen y otras no
     // según el estado se vería arbitrario.
-    final bool modoCompacto = rutina.completada || omitida;
+    //
+    // Precedencia acordada: temporizador activo > completada/omitida > hora.
+    // El modo compacto no tiene ningún hueco para el contador (fusiona todo
+    // en la línea del título), así que si hay un temporizador corriendo para
+    // esta rutina se fuerza el modo normal, que sí lo tiene. En el flujo
+    // normal esta combinación no debería darse nunca (completada/omitida
+    // excluyen tener un temporizador activo, y viceversa), pero la
+    // precedencia se sostiene igual si algo dejara ambas cosas true a la vez.
+    final bool modoCompacto = (rutina.completada || omitida) && segundosRestantes == null;
 
     return Card(
       // Espacio debajo de cada tarjeta, para separarla de la siguiente.
@@ -126,44 +159,72 @@ class RutinaCard extends ConsumerWidget {
             children: [
 
               // ================================================================
-              // 1. ZONA IZQUIERDA: estado del día (Checkbox, u omitida) + ícono
+              // 1. ZONA IZQUIERDA: estado del día (Checkbox, omitida, o
+              // temporizador en curso) + ícono
               // ================================================================
-              // Si la ocurrencia de hoy fue omitida, no tiene sentido mostrar el
-              // checkbox normal (no se puede "completar" algo que se saltó sin
-              // deshacer la omisión primero): en su lugar mostramos un botón
-              // para deshacer, que reembolsa exactamente lo que costó.
-              if (omitida)
-                IconButton(
-                  tooltip: 'Deshacer omisión (te devuelve las monedas)',
-                  icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina),
-                  onPressed: !activa
-                      ? null
-                      : () async {
-                          await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
-                        },
-                )
-              else
-              Checkbox(
-                // El checkbox refleja si la rutina ya está marcada como completa hoy.
-                value: rutina.completada,
+              // Temporizador activo para ESTA rutina: reemplaza al checkbox por
+              // su propio estado visual (adición A), mismo patrón que "omitida"
+              // ya usa más abajo. Precedencia acordada (temporizador > completada/
+              // omitida > hora) sostenida acá también: va primero, antes del
+              // chequeo de omitida.
+              // Ancho fijo reservado para esta zona en los TRES estados
+              // (temporizador, omitida, pendiente): antes cada control
+              // aportaba su propio ancho natural (Checkbox/IconButton ~48
+              // por el tap target de Material, el anillo el que fuera su
+              // `tamano`), así que arrancar o cancelar un temporizador
+              // corría el ícono de la rutina al cambiar de ancho la zona
+              // izquierda. Con este SizedBox+Center, el anillo puede seguir
+              // encogiendo visualmente (tamano) sin mover nada más a su
+              // alrededor.
+              SizedBox(
+                width: _anchoZonaIzquierda,
+                height: _anchoZonaIzquierda,
+                child: Center(
+                  child: segundosRestantes != null
+                      ? AnilloTemporizadorRutina(
+                          fraccion: fraccionTemporizador!,
+                          tamano: 24, // 60% de los 40 originales (antes de la reducción al 80%), a pedido del usuario
+                          color: colorTema,
+                          onTap: () => manejarToqueAnilloTemporizador(context: context, ref: ref, rutina: rutina),
+                        )
+                      // Si la ocurrencia de hoy fue omitida, no tiene sentido
+                      // mostrar el checkbox normal (no se puede "completar"
+                      // algo que se saltó sin deshacer la omisión primero):
+                      // en su lugar mostramos un botón para deshacer, que
+                      // reembolsa exactamente lo que costó.
+                      : omitida
+                          ? IconButton(
+                              tooltip: 'Deshacer omisión (te devuelve las monedas)',
+                              icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina),
+                              onPressed: !activa
+                                  ? null
+                                  : () async {
+                                      await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
+                                    },
+                            )
+                          : Checkbox(
+                              // El checkbox refleja si la rutina ya está marcada como completa hoy.
+                              value: rutina.completada,
 
-                // Color que toma el checkbox cuando está marcado (usa el color del tema).
-                activeColor: colorTema,
+                              // Color que toma el checkbox cuando está marcado (usa el color del tema).
+                              activeColor: colorTema,
 
-                // onChanged define qué pasa cuando el usuario toca el checkbox.
-                // Si la rutina NO está activa, el checkbox se deshabilita (null = inactivo, no se puede tocar).
-                onChanged: !activa
-                  ? null
-                  // Si SÍ está activa, definimos la función que se ejecuta al tocarlo.
-                  // Es "async" porque adentro vamos a usar "await" para esperar
-                  // a que termine el proceso de cancelar/reprogramar notificaciones
-                  // ANTES de continuar con el resto de la lógica (evita condiciones de carrera).
-                  : (bool? valor) => alternarCompletadaConCelebracion(
-                      context: context,
-                      ref: ref,
-                      rutina: rutina,
-                      marcarCompleta: valor == true,
-                    ),
+                              // onChanged define qué pasa cuando el usuario toca el checkbox.
+                              // Si la rutina NO está activa, el checkbox se deshabilita (null = inactivo, no se puede tocar).
+                              onChanged: !activa
+                                ? null
+                                // Si SÍ está activa, definimos la función que se ejecuta al tocarlo.
+                                // Es "async" porque adentro vamos a usar "await" para esperar
+                                // a que termine el proceso de cancelar/reprogramar notificaciones
+                                // ANTES de continuar con el resto de la lógica (evita condiciones de carrera).
+                                : (bool? valor) => manejarToqueCheckboxRutina(
+                                    context: context,
+                                    ref: ref,
+                                    rutina: rutina,
+                                    valor: valor,
+                                  ),
+                            ),
+                ),
               ),
 
               // Ícono de la rutina, con una pista discreta en la esquina si
@@ -232,6 +293,7 @@ class RutinaCard extends ConsumerWidget {
                         hayBotonOmitir: hayBotonOmitir,
                         ocultarHora: ocultarHora,
                         filaInferiorVacia: filaInferiorVacia,
+                        segundosRestantes: segundosRestantes,
                       ),
               ),
             ],
@@ -263,6 +325,7 @@ class RutinaCard extends ConsumerWidget {
     required bool hayBotonOmitir,
     required bool ocultarHora,
     required bool filaInferiorVacia,
+    required int? segundosRestantes,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start, // Alinea el texto a la izquierda
@@ -346,23 +409,35 @@ class RutinaCard extends ConsumerWidget {
                   // con racha de 2+ dígitos y pastilla de omitir a la
                   // vez, la hora cede ancho (con ellipsis) en vez de
                   // desbordar la fila — racha y omitir nunca se
-                  // recortan, solo la hora si hace falta.
+                  // recortan, solo la hora si hace falta. flex:3 (contra
+                  // el flex:1 por defecto del Spacer de abajo) le da a
+                  // esta zona 3/4 del espacio que sobra tras racha/omitir,
+                  // no la mitad -- el Spacer solo empuja, no necesita más
+                  // que el resto para seguir cumpliendo su función.
                   Flexible(
+                    flex: 3,
                     child: Center(
-                      child: ocultarHora
-                          ? const SizedBox.shrink()
-                          : Text(
-                              omitida
-                                  ? 'Omitida hoy'
-                                  : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
+                      child: segundosRestantes != null
+                          ? Text(
+                              formatoCuentaRegresiva(segundosRestantes),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: omitida ? colorOmitidaRutina : colorFuerte,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                              style: TextStyle(fontSize: 14, color: colorFuerte, fontWeight: FontWeight.w600),
+                            )
+                          : ocultarHora
+                              ? const SizedBox.shrink()
+                              : Text(
+                                  omitida
+                                      ? 'Omitida hoy'
+                                      : _horaConDuracion(context),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: omitida ? colorOmitidaRutina : colorFuerte,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                     ),
                   ),
                   // Empuja racha y botón de omitir al extremo derecho,
@@ -466,6 +541,21 @@ class RutinaCard extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  // Hora de hoy + duración del temporizador de hoy, si hay una configurada
+  // ("8:00 AM · 15m") — mismo índice de día que ya usa horarios
+  // (DateTime.now().weekday - 1). Si hoy la rutina no tiene duración (0,
+  // incluye rutinas sin temporizador en absoluto), se muestra solo la hora,
+  // igual que antes de esto: la duración es por día, no una propiedad fija
+  // de la rutina completa. Abreviado a "m" (no "min"): esta fila compite por
+  // ancho con racha y el botón de omitir (ver flex:3 del Flexible que la
+  // envuelve) -- cuanto más corto, menos chance de terminar en ellipsis.
+  String _horaConDuracion(BuildContext context) {
+    final int hoyIndex = DateTime.now().weekday - 1;
+    final String hora = rutina.horarios[hoyIndex]?.format(context) ?? '--:--';
+    final int duracionHoy = rutina.duraciones[hoyIndex] ?? 0;
+    return duracionHoy > 0 ? '$hora · ${duracionHoy}m' : hora;
   }
 }
 

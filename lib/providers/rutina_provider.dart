@@ -7,6 +7,7 @@ import '../services/notificaciones_service.dart';
 import '../services/widget_rutinas_service.dart';
 import '../services/widget_progreso_service.dart';
 import 'monedas_provider.dart';
+import 'temporizador_rutina_provider.dart';
 
 // ============================================================
 // rachaPorMoneda — unidad fija del hito de racha que otorga moneda
@@ -41,11 +42,34 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
 
   DateTime get _ahora => ref.read(relojProvider)();
 
+  // Editar, desactivar, borrar u omitir la rutina dueña de un temporizador
+  // activo lo cancela (diseño acordado): sin esto, el temporizador seguiría
+  // corriendo (persistido, con su alarma nativa) para una rutina que ya
+  // cambió de horario, se desactivó, se borró o se saltó hoy. No-op si el
+  // temporizador activo (si hay alguno) pertenece a otra rutina.
+  Future<void> _cancelarTemporizadorSiPerteneceA(String rutinaId) async {
+    final activo = ref.read(temporizadorRutinaProvider);
+    if (activo != null && activo.rutinaId == rutinaId) {
+      await ref.read(temporizadorRutinaProvider.notifier).cancelar();
+    }
+  }
+
+  // Resuelve cuando _cargarRutinasInterno terminó del todo, incluido su loop
+  // de arranque (el for que rellena el colchón de cada rutina activa, ver
+  // más abajo). El reconciliador de temporizador lo espera ANTES de leer el
+  // temporizador persistido (diseño acordado): sin esto, podría leer una
+  // lista de rutinas todavía a medio cargar, o pisarse con ese mismo loop
+  // (ver _idsEnProceso) si intentara confirmar sobre una rutina que el loop
+  // todavía tiene tomada.
+  late final Future<void> _cargaInicial;
+
   @override
   List<Rutina> build() {
-    _cargarRutinas();
+    _cargaInicial = _cargarRutinas();
     return [];
   }
+
+  Future<void> esperarCargaInicial() => _cargaInicial;
 
   // --- CALCULADORA DE PROGRESO DIARIO ---
   double get progresoDiario {
@@ -617,6 +641,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     if (_idsEnProceso.contains(rutinaEditada.id)) return;
     _idsEnProceso.add(rutinaEditada.id);
     try {
+      await _cancelarTemporizadorSiPerteneceA(rutinaEditada.id);
       final rutinaAnterior = state.firstWhere((r) => r.id == rutinaEditada.id, orElse: () => rutinaEditada);
       final rutinaConHistorial = rutinaEditada.copyWith(
         notificacionesActivas: rutinaAnterior.notificacionesActivas,
@@ -639,6 +664,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     if (_idsEnProceso.contains(id)) return;
     _idsEnProceso.add(id);
     try {
+      await _cancelarTemporizadorSiPerteneceA(id);
       state = [
         for (final r in state)
           if (r.id == id) r.copyWith(activa: !r.activa) else r,
@@ -679,12 +705,36 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   // primera vez que se completaban. Ver [[idsPorOcurrencia]] en el
   // modelo Rutina.
   // ============================================================
-  Future<void> toggleCompletada(String id) async {
-    if (_idsEnProceso.contains(id)) return;
+  // fechaEfectiva (opt-in, default null = usa _ahora como siempre): el
+  // temporizador de rutina la pasa como el instante en que VENCIÓ, no en el
+  // que el usuario confirma en PantallaAlarma — pueden diferir (p. ej. si
+  // el usuario tarda en tocar "Entendido" y eso cruza la medianoche), y el
+  // diseño acordado exige que la rutina cuente para el día del vencimiento,
+  // no el de la confirmación. Ningún otro llamador (el checkbox normal, el
+  // botón del panel de detalle) pasa este parámetro.
+  // esperarGuardLibre (opt-in, default false): por defecto, comportamiento
+  // ACTUAL sin cambios -- return silencioso si el guard está tomado, que
+  // protege del doble tap. Con true, en cambio, ESPERA (sondeo de 100ms,
+  // tope de 100 intentos = 10s) a que el guard se libere y procede igual,
+  // mismo patrón que ya usa eliminarRutina. Solo lo pasa el reconciliador
+  // de arranque (ver CARRERA CONOCIDA): si llamara con el default y el
+  // loop de arranque de _cargarRutinasInterno todavía tuviera esta rutina
+  // tomada, la confirmación del usuario se perdería en un return silencioso
+  // sin ningún error.
+  Future<void> toggleCompletada(String id, {DateTime? fechaEfectiva, bool esperarGuardLibre = false}) async {
+    if (esperarGuardLibre) {
+      int intentos = 0;
+      while (_idsEnProceso.contains(id) && intentos < 100) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        intentos++;
+      }
+    } else if (_idsEnProceso.contains(id)) {
+      return;
+    }
     _idsEnProceso.add(id);
     try {
       final rutinaAntes = state.firstWhere((r) => r.id == id);
-      final hoy = _ahora.toIso8601String().split('T')[0];
+      final hoy = (fechaEfectiva ?? _ahora).toIso8601String().split('T')[0];
 
       // Cancelación inmediata y prioritaria, solo al MARCAR como completa
       // (no al desmarcar), y solo de los IDs que corresponden EXACTAMENTE
@@ -812,6 +862,13 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     if (_idsEnProceso.contains(id)) return false;
     _idsEnProceso.add(id);
     try {
+      // Cancela el temporizador de esta rutina si lo hay, sin importar si
+      // esta llamada está marcando la omisión o deshaciéndola (diseño
+      // acordado: "omitir cancela el temporizador"; deshacer una omisión no
+      // debería nunca encontrar uno activo en el flujo normal, ya que el
+      // diálogo del checkbox no se abre mientras la rutina está omitida,
+      // pero cancelar acá también es inofensivo si no hay ninguno).
+      await _cancelarTemporizadorSiPerteneceA(id);
       final rutinaAntes = state.firstWhere((r) => r.id == id);
       final hoy = _ahora.toIso8601String().split('T')[0];
 
@@ -961,6 +1018,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       if (index == -1) return;
       final rutina = state[index];
 
+      await _cancelarTemporizadorSiPerteneceA(id);
       state = state.where((r) => r.id != id).toList();
       await _guardarRutinas();
 

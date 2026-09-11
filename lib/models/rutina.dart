@@ -138,6 +138,24 @@ class Rutina {
   // ============================================================
   final int omisionesSeguidasAntesDeMarcar;
 
+  // ============================================================
+  // duraciones — temporizador opcional por día programado
+  // ------------------------------------------------------------
+  // Map<int, int>: mismas claves (día de la semana) que `horarios`,
+  // valor en minutos. INVARIANTE: siempre las mismas claves que
+  // horarios — un día programado SIEMPRE tiene entrada acá, aunque
+  // sea 0 (0 = sin temporizador ese día). Nunca debe faltar una
+  // clave ni sobrar una que horarios no tenga.
+  //
+  // El constructor deriva este mapa automáticamente en 0 a partir de
+  // las claves de `horarios` cuando no se pasa explícitamente, para
+  // que la invariante se sostenga sola en cualquier construcción
+  // directa (tests, migraciones) sin tener que acordarse de pasarlo.
+  // copyWith, en cambio, NO hace esta derivación (ver ahí): al editar
+  // horarios, quien llama es responsable de pasar duraciones acorde.
+  // ============================================================
+  final Map<int, int> duraciones;
+
   Rutina({
     required this.id,
     required this.titulo,
@@ -158,7 +176,8 @@ class Rutina {
     this.historialOmisiones = const [],
     this.rachaPagadaHasta = 0,
     this.omisionesSeguidasAntesDeMarcar = -1,
-  });
+    Map<int, int>? duraciones,
+  }) : duraciones = duraciones ?? {for (final dia in horarios.keys) dia: 0};
 
   Rutina copyWith({
     String? id,
@@ -180,6 +199,7 @@ class Rutina {
     List<String>? historialOmisiones,
     int? rachaPagadaHasta,
     int? omisionesSeguidasAntesDeMarcar,
+    Map<int, int>? duraciones,
     // Excepción al patrón "parámetro null = sin cambios" de este copyWith:
     // descripcion es el único campo editable desde el formulario que es a la
     // vez nullable y limpiable por el usuario (borrar el texto = guardar
@@ -208,6 +228,11 @@ class Rutina {
       historialOmisiones: historialOmisiones ?? this.historialOmisiones,
       rachaPagadaHasta: rachaPagadaHasta ?? this.rachaPagadaHasta,
       omisionesSeguidasAntesDeMarcar: omisionesSeguidasAntesDeMarcar ?? this.omisionesSeguidasAntesDeMarcar,
+      // Null = sin cambios, IGUAL que horarios arriba: a propósito NO se
+      // deriva de horarios acá (a diferencia del constructor). Si horarios
+      // cambia, quien llama (el formulario) es quien debe pasar duraciones
+      // ya alineado a las nuevas claves — ver comentario junto al campo.
+      duraciones: duraciones ?? this.duraciones,
     );
   }
 
@@ -235,6 +260,7 @@ class Rutina {
       'historialOmisiones': historialOmisiones,
       'rachaPagadaHasta': rachaPagadaHasta,
       'omisionesSeguidasAntesDeMarcar': omisionesSeguidasAntesDeMarcar,
+      'duraciones': duraciones.map((key, value) => MapEntry(key.toString(), value)),
     };
   }
 
@@ -246,13 +272,24 @@ class Rutina {
       hMap.forEach((k, v) {
         horariosParsados[int.parse(k)] = TimeOfDay(hour: v['hour'], minute: v['minute']);
       });
-    } 
+    }
     else if (json.containsKey('diasSemana')) {
       List<bool> viejosDias = List<bool>.from(json['diasSemana']);
       TimeOfDay viejaHora = TimeOfDay(hour: json['hora'] as int, minute: json['minuto'] as int);
       for(int i=0; i<viejosDias.length; i++) {
         if (viejosDias[i]) horariosParsados[i] = viejaHora;
       }
+    }
+
+    // Solo se parsea si el backup trae la clave: si falta (backup viejo, de
+    // antes del temporizador), se deja null y el constructor de Rutina la
+    // deriva solo en 0 a partir de horariosParsadas (mismo criterio que
+    // "NUNCA un mapa vacío" de más abajo, pero centralizado ahí para no
+    // duplicar la lógica de derivación en dos lugares).
+    Map<int, int>? duracionesParsadas;
+    if (json.containsKey('duraciones') && json['duraciones'] != null) {
+      final Map<String, dynamic> dMap = json['duraciones'];
+      duracionesParsadas = dMap.map((k, v) => MapEntry(int.parse(k), v as int));
     }
 
     return Rutina(
@@ -310,6 +347,7 @@ class Rutina {
       // Rutinas guardadas ANTES de este campo: -1 (sin valor guardado) es
       // el mismo default que una rutina nueva, seguro sin migración especial.
       omisionesSeguidasAntesDeMarcar: json['omisionesSeguidasAntesDeMarcar'] as int? ?? -1,
+      duraciones: duracionesParsadas,
     );
   }
 }
