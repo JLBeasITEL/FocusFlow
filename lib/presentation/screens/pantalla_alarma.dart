@@ -28,6 +28,14 @@ class PantallaAlarma extends ConsumerStatefulWidget {
   // confirmación de vencimiento).
   final String? rutinaIdTemporizador;
 
+  // Solo true cuando esta pantalla la empuja el reconciliador de arranque
+  // (ver reconciliador_temporizador_rutina.dart), NUNCA cuando la empuja la
+  // alarma nativa en vivo (diseño acordado: "solo el reconciliador pasa
+  // true"). Se lo pasa tal cual a toggleCompletada -- ver ese parámetro
+  // para el porqué: el reconciliador puede correr mientras el loop de
+  // arranque de rutina_provider.dart todavía tiene esta rutina tomada.
+  final bool esperarGuardLibreAlConfirmar;
+
   const PantallaAlarma({
     super.key,
     required this.idAlarma,
@@ -35,6 +43,7 @@ class PantallaAlarma extends ConsumerStatefulWidget {
     required this.cuerpo,
     required this.iconoCode,
     this.rutinaIdTemporizador,
+    this.esperarGuardLibreAlConfirmar = false,
   });
 
   @override
@@ -180,7 +189,11 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
                           ? activo.venceEn
                           : ref.read(relojProvider)();
                       await ref.read(temporizadorRutinaProvider.notifier).cancelar();
-                      await ref.read(rutinaProvider.notifier).toggleCompletada(rutinaId, fechaEfectiva: fechaEfectiva);
+                      await ref.read(rutinaProvider.notifier).toggleCompletada(
+                            rutinaId,
+                            fechaEfectiva: fechaEfectiva,
+                            esperarGuardLibre: widget.esperarGuardLibreAlConfirmar,
+                          );
                     }
 
                     // 2. REEMPLAZO: En lugar de cerrar la app, forzamos abrir el HomeScreen

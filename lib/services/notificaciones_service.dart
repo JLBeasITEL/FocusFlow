@@ -52,6 +52,14 @@ class NotificacionesService {
   static const int idAlarmaVencimientoTemporizadorRutina = 999998;
   static const String _canalTemporizadorRutinaId = 'canal_temporizador_rutina_v1';
 
+  // true si ESTE arranque en frío de la app fue causado por tocar la
+  // notificación de vencimiento del temporizador (fullScreenIntent incluido).
+  // El reconciliador de arranque (ver reconciliador_temporizador_rutina.dart)
+  // lo consulta para no empujar una SEGUNDA PantallaAlarma encima de la que
+  // ya empuja este init() más abajo para el mismo evento -- son dos caminos
+  // independientes que, sin este chequeo, competirían por el mismo caso.
+  bool huboNavegacionTemporizadorAlIniciar = false;
+
   Future<void> init(GlobalKey<NavigatorState> key) async {
     _navigatorKey = key;
     tz.initializeTimeZones();
@@ -77,8 +85,13 @@ class NotificacionesService {
 
     final NotificationAppLaunchDetails? details = await _plugin.getNotificationAppLaunchDetails();
     if (details != null && details.didNotificationLaunchApp) {
-      if (details.notificationResponse?.payload != null) {
-        _manejarNavegacionAlarma(details.notificationResponse!.payload!);
+      final String? payload = details.notificationResponse?.payload;
+      if (payload != null) {
+        final partes = payload.split('|');
+        if (payload.startsWith('alarma|') && partes.length >= 7 && partes[5] == 'temporizador') {
+          huboNavegacionTemporizadorAlIniciar = true;
+        }
+        _manejarNavegacionAlarma(payload);
       }
     }
 

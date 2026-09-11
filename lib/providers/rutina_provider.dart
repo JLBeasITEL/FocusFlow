@@ -54,11 +54,22 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     }
   }
 
+  // Resuelve cuando _cargarRutinasInterno terminó del todo, incluido su loop
+  // de arranque (el for que rellena el colchón de cada rutina activa, ver
+  // más abajo). El reconciliador de temporizador lo espera ANTES de leer el
+  // temporizador persistido (diseño acordado): sin esto, podría leer una
+  // lista de rutinas todavía a medio cargar, o pisarse con ese mismo loop
+  // (ver _idsEnProceso) si intentara confirmar sobre una rutina que el loop
+  // todavía tiene tomada.
+  late final Future<void> _cargaInicial;
+
   @override
   List<Rutina> build() {
-    _cargarRutinas();
+    _cargaInicial = _cargarRutinas();
     return [];
   }
+
+  Future<void> esperarCargaInicial() => _cargaInicial;
 
   // --- CALCULADORA DE PROGRESO DIARIO ---
   double get progresoDiario {
@@ -701,8 +712,25 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
   // diseño acordado exige que la rutina cuente para el día del vencimiento,
   // no el de la confirmación. Ningún otro llamador (el checkbox normal, el
   // botón del panel de detalle) pasa este parámetro.
-  Future<void> toggleCompletada(String id, {DateTime? fechaEfectiva}) async {
-    if (_idsEnProceso.contains(id)) return;
+  // esperarGuardLibre (opt-in, default false): por defecto, comportamiento
+  // ACTUAL sin cambios -- return silencioso si el guard está tomado, que
+  // protege del doble tap. Con true, en cambio, ESPERA (sondeo de 100ms,
+  // tope de 100 intentos = 10s) a que el guard se libere y procede igual,
+  // mismo patrón que ya usa eliminarRutina. Solo lo pasa el reconciliador
+  // de arranque (ver CARRERA CONOCIDA): si llamara con el default y el
+  // loop de arranque de _cargarRutinasInterno todavía tuviera esta rutina
+  // tomada, la confirmación del usuario se perdería en un return silencioso
+  // sin ningún error.
+  Future<void> toggleCompletada(String id, {DateTime? fechaEfectiva, bool esperarGuardLibre = false}) async {
+    if (esperarGuardLibre) {
+      int intentos = 0;
+      while (_idsEnProceso.contains(id) && intentos < 100) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        intentos++;
+      }
+    } else if (_idsEnProceso.contains(id)) {
+      return;
+    }
     _idsEnProceso.add(id);
     try {
       final rutinaAntes = state.firstWhere((r) => r.id == id);

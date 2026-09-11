@@ -16,6 +16,7 @@ import 'services/widget_progreso_service.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'core/app_messenger.dart';
 import 'providers/temporizador_rutina_provider.dart';
+import 'core/reconciliador_temporizador_rutina.dart';
 
 // 1. Creamos una llave global para navegar desde cualquier parte (incluso en segundo plano)
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -79,6 +80,15 @@ void main() {
         _manejarClickWidget(uriDeLanzamiento);
       });
     }
+
+    // Red de seguridad de arranque: si el temporizador de una rutina venció
+    // con la app cerrada y nadie lo confirmó, lo detecta y muestra la
+    // confirmación acá (nunca se completa sola, ver diseño acordado).
+    // Deferido al primer frame por lo mismo que el bloque de arriba:
+    // necesita navigatorKey ya montado para poder empujar una pantalla.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      reconciliarTemporizadorRutinaAlArrancar(container: container, navigatorKey: navigatorKey);
+    });
   }, (error, stackTrace) {
     debugPrint('Error no capturado fuera del árbol de widgets: $error\n$stackTrace');
   });
