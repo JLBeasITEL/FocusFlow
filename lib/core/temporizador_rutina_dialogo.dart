@@ -79,6 +79,46 @@ Future<void> manejarToqueCheckboxRutina({
   );
 }
 
+// ============================================================
+// manejarToqueAnilloTemporizador — único punto de entrada del anillo de
+// progreso (adición A) que reemplaza al checkbox mientras el
+// temporizador de esa rutina cuenta. Confirma antes de cancelar (no
+// cancela directo al primer toque, para no perder una cuenta larga por
+// un toque accidental): si el usuario confirma, es una cancelación más,
+// igual que editar/desactivar/borrar/omitir la rutina.
+// ============================================================
+Future<void> manejarToqueAnilloTemporizador({
+  required BuildContext context,
+  required WidgetRef ref,
+  required Rutina rutina,
+}) async {
+  final bool? confirmar = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('¿Cancelar el temporizador?'),
+      content: Text(
+        'Se cancelará el temporizador de "${rutina.titulo}". '
+        'La rutina queda pendiente, sin ninguna cuenta corriendo.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Seguir contando'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: Text('Cancelar temporizador', style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold)),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmar == true) {
+    await ref.read(temporizadorRutinaProvider.notifier).cancelar();
+  }
+}
+
 Future<void> _mostrarDialogoTemporizador({
   required BuildContext context,
   required WidgetRef ref,

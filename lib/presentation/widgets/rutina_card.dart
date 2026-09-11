@@ -15,6 +15,7 @@ import '../../models/rutina.dart';             // El modelo de datos "Rutina"
 import '../../core/colores_estado_rutina.dart';
 import '../../core/app_messenger.dart';
 import '../../core/temporizador_rutina_dialogo.dart';
+import 'anillo_temporizador_rutina.dart';
 
 // ConsumerWidget: es un widget "sin estado propio" (stateless) pero que SÍ puede
 // leer/escuchar el provider de Riverpod a través del parámetro `ref`.
@@ -67,10 +68,16 @@ class RutinaCard extends ConsumerWidget {
     // cuando el temporizador que cambia es EL DE ESTA rutina (arranca, corre
     // su tick de 1s, o termina) — el tick de la tarjeta de otra rutina no
     // debe reconstruir esta. null si no hay temporizador activo para
-    // rutina.id (incluye "no hay ninguno corriendo en absoluto").
-    final int? segundosRestantes = ref.watch(
-      temporizadorRutinaProvider.select((t) => (t != null && t.rutinaId == rutina.id) ? t.segundosRestantes : null),
+    // rutina.id (incluye "no hay ninguno corriendo en absoluto"). El record
+    // agrupa segundosRestantes (para el texto) y fraccionCompletada (para
+    // el anillo) en una sola suscripción — sigue siendo un solo .select.
+    final (int, double)? temporizadorPropio = ref.watch(
+      temporizadorRutinaProvider.select(
+        (t) => (t != null && t.rutinaId == rutina.id) ? (t.segundosRestantes, t.fraccionCompletada) : null,
+      ),
     );
+    final int? segundosRestantes = temporizadorPropio?.$1;
+    final double? fraccionTemporizador = temporizadorPropio?.$2;
 
     // Cambio de UI independiente del temporizador: la hora de hoy deja de
     // tener sentido una vez que la ocurrencia de hoy ya se resolvió.
@@ -145,13 +152,26 @@ class RutinaCard extends ConsumerWidget {
             children: [
 
               // ================================================================
-              // 1. ZONA IZQUIERDA: estado del día (Checkbox, u omitida) + ícono
+              // 1. ZONA IZQUIERDA: estado del día (Checkbox, omitida, o
+              // temporizador en curso) + ícono
               // ================================================================
+              // Temporizador activo para ESTA rutina: reemplaza al checkbox por
+              // su propio estado visual (adición A), mismo patrón que "omitida"
+              // ya usa más abajo. Precedencia acordada (temporizador > completada/
+              // omitida > hora) sostenida acá también: va primero, antes del
+              // chequeo de omitida.
+              if (segundosRestantes != null)
+                AnilloTemporizadorRutina(
+                  fraccion: fraccionTemporizador!,
+                  tamano: 40,
+                  color: colorTema,
+                  onTap: () => manejarToqueAnilloTemporizador(context: context, ref: ref, rutina: rutina),
+                )
               // Si la ocurrencia de hoy fue omitida, no tiene sentido mostrar el
               // checkbox normal (no se puede "completar" algo que se saltó sin
               // deshacer la omisión primero): en su lugar mostramos un botón
               // para deshacer, que reembolsa exactamente lo que costó.
-              if (omitida)
+              else if (omitida)
                 IconButton(
                   tooltip: 'Deshacer omisión (te devuelve las monedas)',
                   icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina),

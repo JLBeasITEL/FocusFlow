@@ -27,10 +27,17 @@ class TemporizadorRutina {
   final DateTime venceEn;
   final int segundosRestantes;
 
+  // Duración total con la que arrancó, en segundos (calculada una sola vez
+  // al iniciar, ver TemporizadorRutinaNotifier.iniciar). Necesaria para
+  // fraccionCompletada -- segundosRestantes solo no alcanza para saber qué
+  // proporción ya transcurrió sin saber también contra qué total.
+  final int duracionTotalSegundos;
+
   const TemporizadorRutina({
     required this.rutinaId,
     required this.venceEn,
     required this.segundosRestantes,
+    required this.duracionTotalSegundos,
   });
 
   TemporizadorRutina copyWith({int? segundosRestantes}) {
@@ -38,7 +45,18 @@ class TemporizadorRutina {
       rutinaId: rutinaId,
       venceEn: venceEn,
       segundosRestantes: segundosRestantes ?? this.segundosRestantes,
+      duracionTotalSegundos: duracionTotalSegundos,
     );
+  }
+
+  // 0.0 recién iniciado, 1.0 al vencer. Es el valor que pinta el anillo de
+  // progreso de RutinaCard/RutinaLandscapeCard en el hueco del checkbox --
+  // el tick en sí (ver _tick más abajo) nunca mira este getter, solo
+  // segundosRestantes.
+  double get fraccionCompletada {
+    if (duracionTotalSegundos <= 0) return 1.0;
+    final double fraccion = 1 - (segundosRestantes / duracionTotalSegundos);
+    return fraccion.clamp(0.0, 1.0);
   }
 }
 
@@ -81,11 +99,17 @@ class TemporizadorRutinaNotifier extends Notifier<TemporizadorRutina?> {
         await prefs.remove(_storageKey);
         return;
       }
+      final int segundosRestantes = _calcularSegundosRestantes(venceEn);
+      // Respaldo defensivo si faltara (no debería, todo temporizador nuevo
+      // lo persiste desde que existe este campo): sin el total real, se
+      // asume "recién iniciado" (fraccionCompletada = 0) en vez de crashear.
+      final int duracionTotalSegundos = (mapa['duracionTotalSegundos'] as int?) ?? segundosRestantes;
 
       state = TemporizadorRutina(
         rutinaId: rutinaId,
         venceEn: venceEn,
-        segundosRestantes: _calcularSegundosRestantes(venceEn),
+        segundosRestantes: segundosRestantes,
+        duracionTotalSegundos: duracionTotalSegundos,
       );
       // El cold start de la app es, en los hechos, un "resumed": si había un
       // temporizador persistido, el tick debe estar corriendo ya, sin
@@ -120,15 +144,21 @@ class TemporizadorRutinaNotifier extends Notifier<TemporizadorRutina?> {
     required String titulo,
     required int iconoCode,
   }) async {
+    final int duracionTotalSegundos = venceEn.difference(_ahora).inSeconds;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _storageKey,
-      jsonEncode({'rutinaId': rutinaId, 'venceEn': venceEn.toIso8601String()}),
+      jsonEncode({
+        'rutinaId': rutinaId,
+        'venceEn': venceEn.toIso8601String(),
+        'duracionTotalSegundos': duracionTotalSegundos,
+      }),
     );
     state = TemporizadorRutina(
       rutinaId: rutinaId,
       venceEn: venceEn,
       segundosRestantes: _calcularSegundosRestantes(venceEn),
+      duracionTotalSegundos: duracionTotalSegundos,
     );
     iniciarTick();
     await NotificacionesService().mostrarNotificacionOngoingTemporizador(titulo: titulo, venceEn: venceEn);

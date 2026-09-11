@@ -8,6 +8,7 @@ import '../../providers/temporizador_rutina_provider.dart';
 import '../../core/colores_estado_rutina.dart';
 import '../../core/app_messenger.dart';
 import '../../core/temporizador_rutina_dialogo.dart';
+import 'anillo_temporizador_rutina.dart';
 
 // Versión compacta de RutinaCard (widgets/rutina_card.dart) para la grilla
 // de 3 columnas del layout horizontal: mismas acciones (marcar completada,
@@ -29,10 +30,16 @@ class RutinaLandscapeCard extends ConsumerWidget {
     final bool omitida = rutina.omitida;
     final Color colorFuerte = activa ? tema.colorPrincipal : Colors.grey;
     // Mismo .select que rutina_card.dart (portrait): esta tarjeta solo se
-    // repinta cuando el temporizador que cambia es el de ESTA rutina.
-    final int? segundosRestantes = ref.watch(
-      temporizadorRutinaProvider.select((t) => (t != null && t.rutinaId == rutina.id) ? t.segundosRestantes : null),
+    // repinta cuando el temporizador que cambia es el de ESTA rutina. El
+    // record agrupa segundosRestantes (texto) y fraccionCompletada (anillo)
+    // en una sola suscripción.
+    final (int, double)? temporizadorPropio = ref.watch(
+      temporizadorRutinaProvider.select(
+        (t) => (t != null && t.rutinaId == rutina.id) ? (t.segundosRestantes, t.fraccionCompletada) : null,
+      ),
     );
+    final int? segundosRestantes = temporizadorPropio?.$1;
+    final double? fraccionTemporizador = temporizadorPropio?.$2;
     // Mismo criterio que en rutina_card.dart (portrait): "Omitida hoy" es su
     // propia etiqueta de estado y se mantiene; al completar sin omitir no
     // queda ninguna etiqueta de hora (checkbox marcado + título tachado ya
@@ -72,7 +79,18 @@ class RutinaLandscapeCard extends ConsumerWidget {
           children: [
             Row(
               children: [
-                if (omitida)
+                // Temporizador activo para ESTA rutina: reemplaza al checkbox
+                // (misma precedencia que en RutinaCard/portrait). Tamaño
+                // igual al SizedBox de 24x24 que ya usaba el checkbox, para
+                // no correr el resto de la fila.
+                if (segundosRestantes != null)
+                  AnilloTemporizadorRutina(
+                    fraccion: fraccionTemporizador!,
+                    tamano: 24,
+                    color: tema.colorPrincipal,
+                    onTap: () => manejarToqueAnilloTemporizador(context: context, ref: ref, rutina: rutina),
+                  )
+                else if (omitida)
                   IconButton(
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
