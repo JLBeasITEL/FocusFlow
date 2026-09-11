@@ -1,3 +1,4 @@
+import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,7 +34,7 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
   int _duracionFija = 0;
   Map<int, int> _duraciones = {};
 
-  static const List<int> _opcionesDuracion = [0, 5, 10, 15, 20, 30, 45, 60];
+  static const List<int> _opcionesDuracion = [0, 5, 10, 15, 20, 30, 45, 60, 90];
 
   // Límites del campo "Otro" (duración personalizada, fuera de los chips
   // frecuentes): 1 minuto de mínimo a propósito, para poder probar el
@@ -579,7 +580,19 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
                       ..._opcionesDuracion.map((minutos) {
                         final bool seleccionado = !mostrandoCampoCustom && actual == minutos;
                         return ChoiceChip(
-                          label: Text(_etiquetaDuracion(minutos)),
+                          // "Sin temporizador" (0) no tiene una porción que
+                          // dibujar: se queda como chip de texto plano, igual
+                          // que "Otro" (no representa un valor fijo).
+                          label: minutos == 0
+                              ? Text(_etiquetaDuracion(minutos))
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _IconoRelojDuracion(minutos: minutos),
+                                    const SizedBox(width: 6),
+                                    Text(_etiquetaDuracion(minutos)),
+                                  ],
+                                ),
                           selected: seleccionado,
                           selectedColor: Colors.deepPurple.withValues(alpha: 0.2),
                           onSelected: (_) => Navigator.pop(dialogContext, minutos),
@@ -905,4 +918,86 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
       ),
     );
   }
+}
+
+// ============================================================
+// _IconoRelojDuracion — ícono estático tipo reloj para los chips de
+// duración: una porción rellena proporcional a los minutos, NO progreso
+// (no cambia con el tiempo, es la representación de la duración elegida).
+// ------------------------------------------------------------
+// Escala COMPARTIDA (sobre _escalaMaximaMinutos) para que los íconos sean
+// comparables entre sí (más relleno = más minutos, siempre) — dibujar cada
+// uno sobre su propia vuelta de 60 min haría que 90 y 30 minutos se vieran
+// idénticos (90 mod 60 = 30), engañoso para los dos valores más largos.
+// _fraccionMinimaVisible evita que el valor más chico (5 min ≈ 5.6% de 90)
+// se vea prácticamente vacío: nunca se dibuja con menos relleno que ese
+// piso, aunque proporcionalmente le tocaría menos.
+// ============================================================
+class _IconoRelojDuracion extends StatelessWidget {
+  final int minutos;
+
+  const _IconoRelojDuracion({required this.minutos});
+
+  static const double _escalaMaximaMinutos = 90;
+  static const double _fraccionMinimaVisible = 0.08;
+
+  @override
+  Widget build(BuildContext context) {
+    final double fraccionProporcional = (minutos / _escalaMaximaMinutos).clamp(0.0, 1.0);
+    final double fraccion = fraccionProporcional < _fraccionMinimaVisible ? _fraccionMinimaVisible : fraccionProporcional;
+    return SizedBox(
+      width: 22,
+      height: 22,
+      child: CustomPaint(
+        painter: _PintorIconoReloj(fraccion: fraccion),
+      ),
+    );
+  }
+}
+
+class _PintorIconoReloj extends CustomPainter {
+  final double fraccion;
+
+  _PintorIconoReloj({required this.fraccion});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Offset centro = size.center(Offset.zero);
+    final double radio = size.shortestSide / 2 - 1;
+    final Rect rect = Rect.fromCircle(center: centro, radius: radio);
+
+    canvas.drawCircle(
+      centro,
+      radio,
+      Paint()
+        ..color = Colors.orange.shade100
+        ..style = PaintingStyle.fill,
+    );
+
+    if (fraccion > 0) {
+      // -pi/2 = las 12: la porción arranca ahí y avanza en sentido
+      // horario, como pide el diseño.
+      canvas.drawArc(
+        rect,
+        -pi / 2,
+        2 * pi * fraccion,
+        true,
+        Paint()
+          ..color = Colors.orange
+          ..style = PaintingStyle.fill,
+      );
+    }
+
+    canvas.drawCircle(
+      centro,
+      radio,
+      Paint()
+        ..color = Colors.black87
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PintorIconoReloj oldDelegate) => oldDelegate.fraccion != fraccion;
 }
