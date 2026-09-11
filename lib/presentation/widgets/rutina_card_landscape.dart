@@ -86,7 +86,7 @@ class RutinaLandscapeCard extends ConsumerWidget {
                 if (segundosRestantes != null)
                   AnilloTemporizadorRutina(
                     fraccion: fraccionTemporizador!,
-                    tamano: 24,
+                    tamano: 19.2, // 80% de los 24 originales, a pedido del usuario
                     color: tema.colorPrincipal,
                     onTap: () => manejarToqueAnilloTemporizador(context: context, ref: ref, rutina: rutina),
                   )
@@ -140,7 +140,7 @@ class RutinaLandscapeCard extends ConsumerWidget {
               Text(
                 segundosRestantes != null
                     ? formatoCuentaRegresiva(segundosRestantes)
-                    : (omitida ? 'Omitida hoy' : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--')),
+                    : (omitida ? 'Omitida hoy' : _horaConDuracion(context)),
                 style: TextStyle(
                   fontSize: 11,
                   color: (omitida && segundosRestantes == null) ? colorOmitidaRutina : colorFuerte,
@@ -166,6 +166,16 @@ class RutinaLandscapeCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  // Mismo criterio que RutinaCard._horaConDuracion (portrait), abreviado a
+  // "m" en vez de "min" -- esta línea vive a 11px en una tarjeta cuadrada
+  // ya apretada (ícono + checkbox + título + hora + racha + omitir).
+  String _horaConDuracion(BuildContext context) {
+    final int hoyIndex = DateTime.now().weekday - 1;
+    final String hora = rutina.horarios[hoyIndex]?.format(context) ?? '--:--';
+    final int duracionHoy = rutina.duraciones[hoyIndex] ?? 0;
+    return duracionHoy > 0 ? '$hora · ${duracionHoy}m' : hora;
   }
 }
 

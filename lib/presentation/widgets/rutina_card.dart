@@ -163,7 +163,7 @@ class RutinaCard extends ConsumerWidget {
               if (segundosRestantes != null)
                 AnilloTemporizadorRutina(
                   fraccion: fraccionTemporizador!,
-                  tamano: 40,
+                  tamano: 32, // 80% de los 40 originales, a pedido del usuario
                   color: colorTema,
                   onTap: () => manejarToqueAnilloTemporizador(context: context, ref: ref, rutina: rutina),
                 )
@@ -402,7 +402,7 @@ class RutinaCard extends ConsumerWidget {
                               : Text(
                                   omitida
                                       ? 'Omitida hoy'
-                                      : (rutina.horarios[DateTime.now().weekday - 1]?.format(context) ?? '--:--'),
+                                      : _horaConDuracion(context),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
@@ -514,6 +514,19 @@ class RutinaCard extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  // Hora de hoy + duración del temporizador de hoy, si hay una configurada
+  // ("8:00 AM · 15 min") — mismo índice de día que ya usa horarios
+  // (DateTime.now().weekday - 1). Si hoy la rutina no tiene duración (0,
+  // incluye rutinas sin temporizador en absoluto), se muestra solo la hora,
+  // igual que antes de esto: la duración es por día, no una propiedad fija
+  // de la rutina completa.
+  String _horaConDuracion(BuildContext context) {
+    final int hoyIndex = DateTime.now().weekday - 1;
+    final String hora = rutina.horarios[hoyIndex]?.format(context) ?? '--:--';
+    final int duracionHoy = rutina.duraciones[hoyIndex] ?? 0;
+    return duracionHoy > 0 ? '$hora · $duracionHoy min' : hora;
   }
 }
 
