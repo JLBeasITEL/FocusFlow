@@ -80,41 +80,47 @@ class RutinaLandscapeCard extends ConsumerWidget {
             Row(
               children: [
                 // Temporizador activo para ESTA rutina: reemplaza al checkbox
-                // (misma precedencia que en RutinaCard/portrait). Tamaño
-                // igual al SizedBox de 24x24 que ya usaba el checkbox, para
-                // no correr el resto de la fila.
-                if (segundosRestantes != null)
-                  AnilloTemporizadorRutina(
-                    fraccion: fraccionTemporizador!,
-                    tamano: 19.2, // 80% de los 24 originales, a pedido del usuario
-                    color: tema.colorPrincipal,
-                    onTap: () => manejarToqueAnilloTemporizador(context: context, ref: ref, rutina: rutina),
-                  )
-                else if (omitida)
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    tooltip: 'Deshacer omisión (te devuelve las monedas)',
-                    icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina, size: 20),
-                    onPressed: !activa ? null : () => ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id),
-                  )
-                else
-                  SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: Checkbox(
-                      value: rutina.completada,
-                      activeColor: tema.colorPrincipal,
-                      onChanged: !activa
-                          ? null
-                          : (valor) => manejarToqueCheckboxRutina(
-                                context: context,
-                                ref: ref,
-                                rutina: rutina,
-                                valor: valor,
+                // (misma precedencia que en RutinaCard/portrait). Ancho fijo
+                // reservado en los TRES estados (temporizador, omitida,
+                // pendiente) igual al SizedBox de 24x24 que ya usaba el
+                // checkbox: antes el anillo aportaba su propio `tamano` como
+                // ancho de fila, así que encogerlo (60% del original, a
+                // pedido del usuario) corría el ícono de la rutina. Con
+                // SizedBox+Center, el anillo encoge visualmente sin mover
+                // nada más de la fila.
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Center(
+                    child: segundosRestantes != null
+                        ? AnilloTemporizadorRutina(
+                            fraccion: fraccionTemporizador!,
+                            tamano: 14.4, // 60% de los 24 originales (antes de la reducción al 80%)
+                            color: tema.colorPrincipal,
+                            onTap: () => manejarToqueAnilloTemporizador(context: context, ref: ref, rutina: rutina),
+                          )
+                        : omitida
+                            ? IconButton(
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                tooltip: 'Deshacer omisión (te devuelve las monedas)',
+                                icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina, size: 20),
+                                onPressed: !activa ? null : () => ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id),
+                              )
+                            : Checkbox(
+                                value: rutina.completada,
+                                activeColor: tema.colorPrincipal,
+                                onChanged: !activa
+                                    ? null
+                                    : (valor) => manejarToqueCheckboxRutina(
+                                          context: context,
+                                          ref: ref,
+                                          rutina: rutina,
+                                          valor: valor,
+                                        ),
                               ),
-                    ),
                   ),
+                ),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.all(8),
@@ -141,6 +147,14 @@ class RutinaLandscapeCard extends ConsumerWidget {
                 segundosRestantes != null
                     ? formatoCuentaRegresiva(segundosRestantes)
                     : (omitida ? 'Omitida hoy' : _horaConDuracion(context)),
+                // maxLines/overflow: red de seguridad para cuando se suma la
+                // duración ("· 90m") -- sin esto, un texto que no entra en el
+                // ancho de la celda envuelve a una segunda línea por
+                // default, y esta tarjeta vive en una grilla de alto FIJO
+                // (mainAxisExtent en home_screen.dart) que no tiene margen
+                // para una línea extra.
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 11,
                   color: (omitida && segundosRestantes == null) ? colorOmitidaRutina : colorFuerte,

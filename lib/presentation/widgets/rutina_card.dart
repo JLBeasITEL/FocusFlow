@@ -28,6 +28,13 @@ class RutinaCard extends ConsumerWidget {
   // ninguno de los dos necesita 48dp para verse bien.
   static const double _alturaTactilBotonOmitir = 48;
 
+  // Ancho (y alto) fijo de la "zona izquierda" (checkbox / botón de deshacer
+  // omisión / anillo de temporizador), igual al tap target por defecto de
+  // Checkbox/IconButton en Material (materialTapTargetSize.padded): así el
+  // anillo, que puede ser más chico visualmente (tamano), no corre el ícono
+  // de la rutina al arrancar o cancelar un temporizador.
+  static const double _anchoZonaIzquierda = 48;
+
   // Datos que este widget recibe desde afuera (desde la lista que lo construye).
   final Rutina rutina;     // La rutina específica que esta tarjeta va a mostrar
   final Color colorTema;   // Color del tema visual de esta rutina (para íconos, texto, etc.)
@@ -160,49 +167,64 @@ class RutinaCard extends ConsumerWidget {
               // ya usa más abajo. Precedencia acordada (temporizador > completada/
               // omitida > hora) sostenida acá también: va primero, antes del
               // chequeo de omitida.
-              if (segundosRestantes != null)
-                AnilloTemporizadorRutina(
-                  fraccion: fraccionTemporizador!,
-                  tamano: 32, // 80% de los 40 originales, a pedido del usuario
-                  color: colorTema,
-                  onTap: () => manejarToqueAnilloTemporizador(context: context, ref: ref, rutina: rutina),
-                )
-              // Si la ocurrencia de hoy fue omitida, no tiene sentido mostrar el
-              // checkbox normal (no se puede "completar" algo que se saltó sin
-              // deshacer la omisión primero): en su lugar mostramos un botón
-              // para deshacer, que reembolsa exactamente lo que costó.
-              else if (omitida)
-                IconButton(
-                  tooltip: 'Deshacer omisión (te devuelve las monedas)',
-                  icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina),
-                  onPressed: !activa
-                      ? null
-                      : () async {
-                          await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
-                        },
-                )
-              else
-              Checkbox(
-                // El checkbox refleja si la rutina ya está marcada como completa hoy.
-                value: rutina.completada,
+              // Ancho fijo reservado para esta zona en los TRES estados
+              // (temporizador, omitida, pendiente): antes cada control
+              // aportaba su propio ancho natural (Checkbox/IconButton ~48
+              // por el tap target de Material, el anillo el que fuera su
+              // `tamano`), así que arrancar o cancelar un temporizador
+              // corría el ícono de la rutina al cambiar de ancho la zona
+              // izquierda. Con este SizedBox+Center, el anillo puede seguir
+              // encogiendo visualmente (tamano) sin mover nada más a su
+              // alrededor.
+              SizedBox(
+                width: _anchoZonaIzquierda,
+                height: _anchoZonaIzquierda,
+                child: Center(
+                  child: segundosRestantes != null
+                      ? AnilloTemporizadorRutina(
+                          fraccion: fraccionTemporizador!,
+                          tamano: 24, // 60% de los 40 originales (antes de la reducción al 80%), a pedido del usuario
+                          color: colorTema,
+                          onTap: () => manejarToqueAnilloTemporizador(context: context, ref: ref, rutina: rutina),
+                        )
+                      // Si la ocurrencia de hoy fue omitida, no tiene sentido
+                      // mostrar el checkbox normal (no se puede "completar"
+                      // algo que se saltó sin deshacer la omisión primero):
+                      // en su lugar mostramos un botón para deshacer, que
+                      // reembolsa exactamente lo que costó.
+                      : omitida
+                          ? IconButton(
+                              tooltip: 'Deshacer omisión (te devuelve las monedas)',
+                              icon: Icon(Icons.settings_backup_restore_rounded, color: colorOmitidaRutina),
+                              onPressed: !activa
+                                  ? null
+                                  : () async {
+                                      await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
+                                    },
+                            )
+                          : Checkbox(
+                              // El checkbox refleja si la rutina ya está marcada como completa hoy.
+                              value: rutina.completada,
 
-                // Color que toma el checkbox cuando está marcado (usa el color del tema).
-                activeColor: colorTema,
+                              // Color que toma el checkbox cuando está marcado (usa el color del tema).
+                              activeColor: colorTema,
 
-                // onChanged define qué pasa cuando el usuario toca el checkbox.
-                // Si la rutina NO está activa, el checkbox se deshabilita (null = inactivo, no se puede tocar).
-                onChanged: !activa
-                  ? null
-                  // Si SÍ está activa, definimos la función que se ejecuta al tocarlo.
-                  // Es "async" porque adentro vamos a usar "await" para esperar
-                  // a que termine el proceso de cancelar/reprogramar notificaciones
-                  // ANTES de continuar con el resto de la lógica (evita condiciones de carrera).
-                  : (bool? valor) => manejarToqueCheckboxRutina(
-                      context: context,
-                      ref: ref,
-                      rutina: rutina,
-                      valor: valor,
-                    ),
+                              // onChanged define qué pasa cuando el usuario toca el checkbox.
+                              // Si la rutina NO está activa, el checkbox se deshabilita (null = inactivo, no se puede tocar).
+                              onChanged: !activa
+                                ? null
+                                // Si SÍ está activa, definimos la función que se ejecuta al tocarlo.
+                                // Es "async" porque adentro vamos a usar "await" para esperar
+                                // a que termine el proceso de cancelar/reprogramar notificaciones
+                                // ANTES de continuar con el resto de la lógica (evita condiciones de carrera).
+                                : (bool? valor) => manejarToqueCheckboxRutina(
+                                    context: context,
+                                    ref: ref,
+                                    rutina: rutina,
+                                    valor: valor,
+                                  ),
+                            ),
+                ),
               ),
 
               // Ícono de la rutina, con una pista discreta en la esquina si
@@ -387,8 +409,13 @@ class RutinaCard extends ConsumerWidget {
                   // con racha de 2+ dígitos y pastilla de omitir a la
                   // vez, la hora cede ancho (con ellipsis) en vez de
                   // desbordar la fila — racha y omitir nunca se
-                  // recortan, solo la hora si hace falta.
+                  // recortan, solo la hora si hace falta. flex:3 (contra
+                  // el flex:1 por defecto del Spacer de abajo) le da a
+                  // esta zona 3/4 del espacio que sobra tras racha/omitir,
+                  // no la mitad -- el Spacer solo empuja, no necesita más
+                  // que el resto para seguir cumpliendo su función.
                   Flexible(
+                    flex: 3,
                     child: Center(
                       child: segundosRestantes != null
                           ? Text(
@@ -517,16 +544,18 @@ class RutinaCard extends ConsumerWidget {
   }
 
   // Hora de hoy + duración del temporizador de hoy, si hay una configurada
-  // ("8:00 AM · 15 min") — mismo índice de día que ya usa horarios
+  // ("8:00 AM · 15m") — mismo índice de día que ya usa horarios
   // (DateTime.now().weekday - 1). Si hoy la rutina no tiene duración (0,
   // incluye rutinas sin temporizador en absoluto), se muestra solo la hora,
   // igual que antes de esto: la duración es por día, no una propiedad fija
-  // de la rutina completa.
+  // de la rutina completa. Abreviado a "m" (no "min"): esta fila compite por
+  // ancho con racha y el botón de omitir (ver flex:3 del Flexible que la
+  // envuelve) -- cuanto más corto, menos chance de terminar en ellipsis.
   String _horaConDuracion(BuildContext context) {
     final int hoyIndex = DateTime.now().weekday - 1;
     final String hora = rutina.horarios[hoyIndex]?.format(context) ?? '--:--';
     final int duracionHoy = rutina.duraciones[hoyIndex] ?? 0;
-    return duracionHoy > 0 ? '$hora · $duracionHoy min' : hora;
+    return duracionHoy > 0 ? '$hora · ${duracionHoy}m' : hora;
   }
 }
 
