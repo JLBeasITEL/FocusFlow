@@ -77,6 +77,12 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
     WakelockPlus.disable();
     // Restaura el comportamiento normal: la app vuelve a respetar el bloqueo
     _canalAlarma.invokeMethod('hideOverLockscreen').catchError((_) {});
+    // Red de seguridad: si esta pantalla se desmonta por cualquier vía que no
+    // sea "Entendido" (para la rama del temporizador, el PopScope de abajo ya
+    // bloquea la única vía conocida -- el atrás -- pero esto cubre cualquier
+    // otra forma de desmontaje presente o futura), la notificación de alarma
+    // no debe quedar sonando sin nadie que la apague.
+    FlutterLocalNotificationsPlugin().cancel(widget.idAlarma).catchError((_) {});
     super.dispose();
   }
 
@@ -105,7 +111,17 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
     const double alturaCompacta = 380.0;
     const double alturaCompleta = 600.0;
 
-    return Scaffold(
+    // Bloquea el atrás SOLO en la alarma de vencimiento del temporizador de
+    // rutina: "Entendido" es la única salida (diseño acordado, ver el
+    // bloque de arriba), así que dejar salir por atrás sin pasar por ahí es
+    // exactamente el estado colgado que este PopScope existe para evitar
+    // (persistido en disco intacto, sin confirmar, y sin nada que vuelva a
+    // ofrecer la confirmación hasta el próximo arranque de la app). Las
+    // demás alarmas (tareas, rutinas por horario) no tienen nada pendiente
+    // de confirmar, así que ahí el atrás se deja funcionar como siempre.
+    return PopScope(
+      canPop: widget.rutinaIdTemporizador == null,
+      child: Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
         child: Padding(
@@ -338,6 +354,7 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
             },
           ),
         ),
+      ),
       ),
     );
   }

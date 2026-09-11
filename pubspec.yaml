@@ -64,6 +64,12 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  # Usado SOLO en test/pantalla_alarma_test.dart para reemplazar
+  # WakelockPlus por un fake (ver wakelockPlusPlatformInstance,
+  # @visibleForTesting) sin cruzar su canal pigeon real. Ya es una
+  # dependencia transitiva de wakelock_plus; se declara acá explícita
+  # para no disparar depend_on_referenced_packages en flutter analyze.
+  wakelock_plus_platform_interface: ^1.5.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
