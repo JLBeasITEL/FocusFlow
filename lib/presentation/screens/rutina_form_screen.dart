@@ -1,6 +1,5 @@
-import 'dart:math' show pi;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/rutina.dart';
@@ -34,15 +33,9 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
   int _duracionFija = 0;
   Map<int, int> _duraciones = {};
 
-  static const List<int> _opcionesDuracion = [0, 5, 10, 15, 20, 30, 45, 60, 90];
-
-  // Límites del campo "Otro" (duración personalizada, fuera de los chips
-  // frecuentes): 1 minuto de mínimo a propósito, para poder probar el
-  // temporizador (y su reconciliador de vencimiento) sin esperar 5 minutos
-  // reales por corrida. 180 (3 horas) de máximo: cubre cualquier hábito
-  // largo razonable sin dejar pasar un typo (p. ej. "600" pensando en
-  // segundos) que termine en una cuenta de días.
-  static const int _duracionCustomMin = 1;
+  // Tope de la rueda de duración (además de "Sin temporizador" en 0): 180
+  // minutos (3 horas) cubre cualquier hábito largo razonable sin dejar
+  // pasar un typo que termine en una cuenta de días.
   static const int _duracionCustomMax = 180;
 
   int _iconoSeleccionado = Icons.fitness_center.codePoint;
@@ -538,101 +531,39 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
   String _etiquetaDuracion(int minutos) => minutos == 0 ? 'Sin temporizador' : '$minutos min';
 
   // Diálogo compartido por el control general y por cada día en modo
-  // flexible (portrait y landscape): chips de valores frecuentes en vez de
-  // un campo numérico, para elegir en un solo toque sin abrir el teclado —
-  // más el chip "Otro", que revela un campo para cualquier valor entre
-  // _duracionCustomMin y _duracionCustomMax que no esté entre los frecuentes.
-  Future<int?> _elegirDuracion(int actual) {
-    final bool actualEsFrecuente = _opcionesDuracion.contains(actual);
-    final TextEditingController controladorCustom = TextEditingController(
-      text: actualEsFrecuente ? '' : '$actual',
-    );
-    bool mostrandoCampoCustom = !actualEsFrecuente;
-    String? errorCustom;
+  // flexible (portrait y landscape): una rueda vertical con TODOS los
+  // minutos entre 0 (Sin temporizador) y _duracionCustomMax.
+  Future<int?> _elegirDuracion(int actual) async {
+    final int inicial = actual.clamp(0, _duracionCustomMax);
+    final FixedExtentScrollController controlRueda = FixedExtentScrollController(initialItem: inicial);
+    int seleccionado = inicial;
 
-    return showDialog<int>(
+    final int? resultado = await showDialog<int>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
-          void confirmarCustom() {
-            final int? valor = int.tryParse(controladorCustom.text.trim());
-            if (valor == null || valor < _duracionCustomMin || valor > _duracionCustomMax) {
-              setDialogState(() {
-                errorCustom = 'Ingresa un número entre $_duracionCustomMin y $_duracionCustomMax';
-              });
-              return;
-            }
-            Navigator.pop(dialogContext, valor);
-          }
-
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text('Duración del temporizador'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      ..._opcionesDuracion.map((minutos) {
-                        final bool seleccionado = !mostrandoCampoCustom && actual == minutos;
-                        return ChoiceChip(
-                          // "Sin temporizador" (0) no tiene una porción que
-                          // dibujar: se queda como chip de texto plano, igual
-                          // que "Otro" (no representa un valor fijo).
-                          label: minutos == 0
-                              ? Text(_etiquetaDuracion(minutos))
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _IconoRelojDuracion(minutos: minutos),
-                                    const SizedBox(width: 6),
-                                    Text(_etiquetaDuracion(minutos)),
-                                  ],
-                                ),
-                          selected: seleccionado,
-                          selectedColor: Colors.deepPurple.withValues(alpha: 0.2),
-                          onSelected: (_) => Navigator.pop(dialogContext, minutos),
-                        );
-                      }),
-                      ChoiceChip(
-                        label: const Text('Otro'),
-                        selected: mostrandoCampoCustom,
-                        selectedColor: Colors.deepPurple.withValues(alpha: 0.2),
-                        onSelected: (_) => setDialogState(() => mostrandoCampoCustom = true),
-                      ),
-                    ],
-                  ),
-                  if (mostrandoCampoCustom) ...[
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: controladorCustom,
-                      autofocus: true,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: InputDecoration(
-                        labelText: 'Minutos ($_duracionCustomMin-$_duracionCustomMax)',
-                        border: const OutlineInputBorder(),
-                        errorText: errorCustom,
-                      ),
-                      onSubmitted: (_) => confirmarCustom(),
-                    ),
-                  ],
-                ],
-              ),
+            content: _RuedaMinutos(
+              controlador: controlRueda,
+              maximo: _duracionCustomMax,
+              valorActual: seleccionado,
+              onCambio: (minutos) => setDialogState(() => seleccionado = minutos),
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
-              if (mostrandoCampoCustom)
-                ElevatedButton(onPressed: confirmarCustom, child: const Text('Aceptar')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dialogContext, seleccionado),
+                child: const Text('Aceptar'),
+              ),
             ],
           );
         },
       ),
     );
+    controlRueda.dispose();
+    return resultado;
   }
 
   Future<void> _elegirDuracionDia(int idx) async {
@@ -921,83 +852,107 @@ class _RutinaFormScreenState extends ConsumerState<RutinaFormScreen> {
 }
 
 // ============================================================
-// _IconoRelojDuracion — ícono estático tipo reloj para los chips de
-// duración: una porción rellena proporcional a los minutos, NO progreso
-// (no cambia con el tiempo, es la representación de la duración elegida).
+// _RuedaMinutos — rueda vertical de un solo valor (0 a [maximo] minutos)
+// para el diálogo de duración del temporizador. El resaltado central es
+// solo visual (dos líneas horizontales, sin fondo): la fila que queda ahí
+// al soltar es la seleccionada, vía FixedExtentScrollPhysics.
 // ------------------------------------------------------------
-// Escala COMPARTIDA (sobre _escalaMaximaMinutos) para que los íconos sean
-// comparables entre sí (más relleno = más minutos, siempre) — dibujar cada
-// uno sobre su propia vuelta de 60 min haría que 90 y 30 minutos se vieran
-// idénticos (90 mod 60 = 30), engañoso para los dos valores más largos.
-// _fraccionMinimaVisible evita que el valor más chico (5 min ≈ 5.6% de 90)
-// se vea prácticamente vacío: nunca se dibuja con menos relleno que ese
-// piso, aunque proporcionalmente le tocaría menos.
+// La etiqueta "minutos" vive FUERA de la rueda (no gira con los números,
+// como en un selector de hora) y a la derecha, a la altura de la fila
+// resaltada — que ya cae en el centro vertical de este widget porque así
+// funciona FixedExtentScrollPhysics. Se reserva el mismo ancho como
+// espaciador invisible a la izquierda para que la columna de números
+// quede centrada en el diálogo (si no, la rueda se vería corrida hacia la
+// izquierda por el espacio que le come la etiqueta a la derecha). En la
+// fila 0 ("Sin temporizador") la etiqueta se oculta, no tiene sentido
+// pegada a esa fila — pero el espaciador se mantiene, así el resto de la
+// rueda no se corre al pasar por ahí.
 // ============================================================
-class _IconoRelojDuracion extends StatelessWidget {
-  final int minutos;
+class _RuedaMinutos extends StatelessWidget {
+  final FixedExtentScrollController controlador;
+  final int maximo;
+  final int valorActual;
+  final ValueChanged<int> onCambio;
 
-  const _IconoRelojDuracion({required this.minutos});
+  const _RuedaMinutos({
+    required this.controlador,
+    required this.maximo,
+    required this.valorActual,
+    required this.onCambio,
+  });
 
-  static const double _escalaMaximaMinutos = 90;
-  static const double _fraccionMinimaVisible = 0.08;
+  static const double _alturaFila = 36;
+  static const int _filasVisibles = 5;
+  static const double _anchoEtiqueta = 60;
 
   @override
   Widget build(BuildContext context) {
-    final double fraccionProporcional = (minutos / _escalaMaximaMinutos).clamp(0.0, 1.0);
-    final double fraccion = fraccionProporcional < _fraccionMinimaVisible ? _fraccionMinimaVisible : fraccionProporcional;
     return SizedBox(
-      width: 22,
-      height: 22,
-      child: CustomPaint(
-        painter: _PintorIconoReloj(fraccion: fraccion),
+      height: _alturaFila * _filasVisibles,
+      width: double.infinity,
+      child: Row(
+        children: [
+          const SizedBox(width: _anchoEtiqueta),
+          Expanded(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                ListWheelScrollView.useDelegate(
+                  controller: controlador,
+                  itemExtent: _alturaFila,
+                  diameterRatio: 1.8,
+                  physics: const FixedExtentScrollPhysics(),
+                  onSelectedItemChanged: (indice) {
+                    HapticFeedback.selectionClick();
+                    onCambio(indice);
+                  },
+                  childDelegate: ListWheelChildBuilderDelegate(
+                    childCount: maximo + 1,
+                    builder: (context, indice) => Center(
+                      child: Text(
+                        indice == 0 ? 'Sin temporizador' : '$indice',
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: indice == 0 ? 13 : 16,
+                          color: Colors.deepPurple.shade700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                IgnorePointer(
+                  child: Container(
+                    height: _alturaFila,
+                    decoration: BoxDecoration(
+                      border: Border.symmetric(
+                        horizontal: BorderSide(color: Colors.deepPurple.withValues(alpha: 0.4)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: _anchoEtiqueta,
+            height: _alturaFila,
+            child: valorActual == 0
+                ? null
+                : Center(
+                    child: Text(
+                      'minutos',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.deepPurple.shade300,
+                      ),
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
   }
-}
-
-class _PintorIconoReloj extends CustomPainter {
-  final double fraccion;
-
-  _PintorIconoReloj({required this.fraccion});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Offset centro = size.center(Offset.zero);
-    final double radio = size.shortestSide / 2 - 1;
-    final Rect rect = Rect.fromCircle(center: centro, radius: radio);
-
-    canvas.drawCircle(
-      centro,
-      radio,
-      Paint()
-        ..color = Colors.orange.shade100
-        ..style = PaintingStyle.fill,
-    );
-
-    if (fraccion > 0) {
-      // -pi/2 = las 12: la porción arranca ahí y avanza en sentido
-      // horario, como pide el diseño.
-      canvas.drawArc(
-        rect,
-        -pi / 2,
-        2 * pi * fraccion,
-        true,
-        Paint()
-          ..color = Colors.orange
-          ..style = PaintingStyle.fill,
-      );
-    }
-
-    canvas.drawCircle(
-      centro,
-      radio,
-      Paint()
-        ..color = Colors.black87
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _PintorIconoReloj oldDelegate) => oldDelegate.fraccion != fraccion;
 }
