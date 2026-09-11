@@ -83,6 +83,19 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
     // otra forma de desmontaje presente o futura), la notificación de alarma
     // no debe quedar sonando sin nadie que la apague.
     FlutterLocalNotificationsPlugin().cancel(widget.idAlarma).catchError((_) {});
+    // Libera el guard anti-duplicado del vencimiento del temporizador (ver
+    // NotificacionesService.marcarVencimientoTemporizadorSiNuevo) de forma
+    // INCONDICIONAL, no solo al confirmar: dispose() corre pase lo que pase
+    // (confirmar, o cualquier otra vía de desmontaje presente o futura), así
+    // que es el único lugar donde puede garantizarse que este vencimiento
+    // concreto vuelva a poder ofrecerse si hiciera falta. No necesita
+    // comparar identidad (a diferencia de quien lo marca): solo puede haber
+    // una PantallaAlarma-de-temporizador montada a la vez (para eso existe
+    // el guard), así que si esta se desmonta, lo que sea que esté marcado ya
+    // no es válido.
+    if (widget.rutinaIdTemporizador != null) {
+      NotificacionesService().liberarVencimientoTemporizadorEnPantalla();
+    }
     super.dispose();
   }
 
@@ -212,15 +225,30 @@ class _PantallaAlarmaState extends ConsumerState<PantallaAlarma> {
                           );
                     }
 
-                    // 2. REEMPLAZO: En lugar de cerrar la app, forzamos abrir el HomeScreen
-                    // Esto además evita que el usuario pueda volver a la alarma presionando "Atrás"
+                    // 2. Cerrar esta pantalla. La rama del temporizador hace
+                    // un pop normal (decisión acordada): a diferencia de
+                    // tareas/rutinas por horario, esta puede interrumpir
+                    // CUALQUIER pantalla de la app (formulario de rutina,
+                    // ajustes, otra pestaña -- ver listener en vivo), así
+                    // que pushAndRemoveUntil a un HomeScreen fresco le haría
+                    // perder al usuario el lugar exacto donde estaba. Con
+                    // pop(), PantallaAlarma se apila y se retira sin más,
+                    // dejando exactamente esa pantalla debajo intacta.
+                    // Tareas/rutinas por horario NO cambian: conservan el
+                    // pushAndRemoveUntil de siempre (no era parte de este
+                    // bug y no hay guard/listener que las interrumpa fuera
+                    // de tocar su propia notificación).
                     if (context.mounted) {
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(
-                          builder: (context) => const HomeScreen(),
-                        ),
-                        (Route<dynamic> route) => false, // Elimina pantallas previas
-                      );
+                      if (rutinaId != null) {
+                        Navigator.of(context).pop();
+                      } else {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (context) => const HomeScreen(),
+                          ),
+                          (Route<dynamic> route) => false, // Elimina pantallas previas
+                        );
+                      }
                     }
                   },
                   child: const Text(

@@ -65,6 +65,16 @@ Future<void> reconciliarTemporizadorRutinaAlArrancar({
   }
   final Rutina rutina = rutinaEncontrada;
 
+  // Guard anti-duplicado: si el toque de la notificación (arriba,
+  // huboNavegacionTemporizadorAlIniciar) ya cubrió este arranque, ese check
+  // ya cortó antes de llegar acá. Este segundo guard cubre al listener en
+  // vivo (temporizador_rutina_listener.dart), que reacciona al MISMO
+  // vencimiento apenas se carga desde disco (ver TemporizadorRutinaNotifier.
+  // _cargarDesdeDisco) y podría ganarle la carrera a este reconciliador.
+  if (!NotificacionesService().marcarVencimientoTemporizadorSiNuevo(rutina.id, activo.venceEn)) {
+    return;
+  }
+
   navigatorKey.currentState?.push(
     MaterialPageRoute(
       builder: (_) => PantallaAlarma(

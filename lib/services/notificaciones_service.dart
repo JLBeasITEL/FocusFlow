@@ -60,6 +60,46 @@ class NotificacionesService {
   // independientes que, sin este chequeo, competirían por el mismo caso.
   bool huboNavegacionTemporizadorAlIniciar = false;
 
+  // ============================================================
+  // Guard anti-duplicado: qué VENCIMIENTO concreto de temporizador (no un
+  // bool suelto) ya tiene una PantallaAlarma en curso o mostrada
+  // ------------------------------------------------------------
+  // Hoy compiten TRES caminos independientes por ofrecer la misma
+  // confirmación: tocar la notificación (_manejarNavegacionAlarma, más
+  // abajo), el reconciliador de arranque (reconciliador_temporizador_rutina.dart)
+  // y el listener en vivo (temporizador_rutina_listener.dart, que cubre
+  // primer plano y volver de segundo plano). Sin coordinación, dos de ellos
+  // podrían disparar casi al mismo tiempo para el MISMO vencimiento (p. ej.
+  // tocar la notificación justo cuando la app también dispara `resumed`) y
+  // apilar dos PantallaAlarma.
+  //
+  // Se identifica por {rutinaId, venceEn} en vez de un bool global a
+  // propósito: si alguna vía de salida no lo liberara correctamente (bug),
+  // un bool suelto seguiría bloqueando para SIEMPRE cualquier temporizador
+  // futuro, incluso uno completamente distinto. Con la identidad completa,
+  // un guard que quedara pegado por error nunca bloquea un vencimiento
+  // distinto (rutina u horario distintos) -- se autolimita al caso
+  // exacto. La liberación real (para poder volver a ofrecer ESE MISMO
+  // vencimiento si hiciera falta) la hace PantallaAlarma.dispose(), que
+  // corre pase lo que pase: confirmar, o cualquier otra vía de desmontaje.
+  ({String rutinaId, DateTime venceEn})? _vencimientoTemporizadorEnPantalla;
+
+  // true si este vencimiento gana la carrera y debe proceder a mostrar
+  // PantallaAlarma; false si otro camino ya se está ocupando de este MISMO
+  // vencimiento (rutinaId + venceEn exactos).
+  bool marcarVencimientoTemporizadorSiNuevo(String rutinaId, DateTime venceEn) {
+    final actual = _vencimientoTemporizadorEnPantalla;
+    if (actual != null && actual.rutinaId == rutinaId && actual.venceEn == venceEn) {
+      return false;
+    }
+    _vencimientoTemporizadorEnPantalla = (rutinaId: rutinaId, venceEn: venceEn);
+    return true;
+  }
+
+  void liberarVencimientoTemporizadorEnPantalla() {
+    _vencimientoTemporizadorEnPantalla = null;
+  }
+
   Future<void> init(GlobalKey<NavigatorState> key) async {
     _navigatorKey = key;
     tz.initializeTimeZones();
@@ -88,7 +128,7 @@ class NotificacionesService {
       final String? payload = details.notificationResponse?.payload;
       if (payload != null) {
         final partes = payload.split('|');
-        if (payload.startsWith('alarma|') && partes.length >= 7 && partes[5] == 'temporizador') {
+        if (payload.startsWith('alarma|') && partes.length >= 8 && partes[5] == 'temporizador') {
           huboNavegacionTemporizadorAlIniciar = true;
         }
         _manejarNavegacionAlarma(payload);
@@ -113,18 +153,25 @@ class NotificacionesService {
       String cuerpo = '';
       int iconoCode = 0;
       String? rutinaIdTemporizador;
+      DateTime? venceEnTemporizador;
 
       // Rama del temporizador de rutina: va ANTES del catch-all genérico de
-      // partes.length >= 5 porque esta también lo cumple (siempre trae 7
-      // partes), pero necesita el rutinaId extra para que PantallaAlarma
-      // pueda llamar a toggleCompletada al confirmar — ninguna otra alarma
-      // (tareas, rutinas por horario) completa nada por sí sola.
-      if (partes.length >= 7 && partes[5] == 'temporizador') {
+      // partes.length >= 5 porque esta también lo cumple (siempre trae 8
+      // partes), pero necesita el rutinaId y el venceEn extra: el rutinaId
+      // para que PantallaAlarma pueda llamar a toggleCompletada al
+      // confirmar (ninguna otra alarma completa nada por sí sola), y
+      // venceEn para identificar el vencimiento CONCRETO ante el guard
+      // anti-duplicado (ver marcarVencimientoTemporizadorSiNuevo) que
+      // también consultan el reconciliador de arranque y el listener en
+      // vivo -- sin él, este camino no podría coordinarse con esos otros
+      // dos para el mismo vencimiento.
+      if (partes.length >= 8 && partes[5] == 'temporizador') {
         id = int.tryParse(partes[1]) ?? 0;
         titulo = partes[2];
         cuerpo = partes[3];
         iconoCode = int.tryParse(partes[4]) ?? 0;
         rutinaIdTemporizador = partes[6];
+        venceEnTemporizador = DateTime.tryParse(partes[7]);
       } else if (partes.length >= 5) {
         id = int.tryParse(partes[1]) ?? 0;
         titulo = partes[2];
@@ -138,6 +185,18 @@ class NotificacionesService {
         titulo = partes[1];
         cuerpo = partes[2];
       }
+
+      // Guard anti-duplicado: si el reconciliador de arranque o el listener
+      // en vivo ya se están ocupando de este MISMO vencimiento (rutinaId +
+      // venceEn exactos), no apilar una segunda PantallaAlarma encima. Si
+      // venceEnTemporizador no pudo parsearse (payload corrupto o de una
+      // versión anterior sin este campo), se deja pasar sin guard: peor
+      // caso, una PantallaAlarma duplicada, nunca perder la única
+      // confirmación disponible.
+      final bool bloqueadoPorOtroCamino = rutinaIdTemporizador != null &&
+          venceEnTemporizador != null &&
+          !marcarVencimientoTemporizadorSiNuevo(rutinaIdTemporizador, venceEnTemporizador);
+      if (bloqueadoPorOtroCamino) return;
 
       SchedulerBinding.instance.addPostFrameCallback((_) {
         _navigatorKey.currentState?.push(
@@ -467,9 +526,15 @@ class NotificacionesService {
       const String titulo = 'Temporizador terminado';
       final String cuerpo = 'Confirma que terminaste "$rutinaTitulo"';
 
-      // Prefijo 'alarma|' también leído por MainActivity.kt (nativo).
+      // Prefijo 'alarma|' también leído por MainActivity.kt (nativo), que
+      // solo mira ese prefijo y no cuenta partes, así que agregar venceEn
+      // al final es seguro. Va acá (y no solo en el estado persistido) para
+      // que _manejarNavegacionAlarma pueda identificar el vencimiento
+      // CONCRETO ante el guard anti-duplicado sin depender de leer
+      // temporizadorRutinaProvider (esta clase no tiene acceso al
+      // ProviderContainer, ver notas de la sección del guard más arriba).
       final String payload =
-          'alarma|$idAlarmaVencimientoTemporizadorRutina|$titulo|$cuerpo|$iconoCode|temporizador|$rutinaId';
+          'alarma|$idAlarmaVencimientoTemporizadorRutina|$titulo|$cuerpo|$iconoCode|temporizador|$rutinaId|${venceEn.toIso8601String()}';
 
       await _plugin.zonedSchedule(
         idAlarmaVencimientoTemporizadorRutina,

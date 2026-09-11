@@ -17,6 +17,7 @@ import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'core/app_messenger.dart';
 import 'providers/temporizador_rutina_provider.dart';
 import 'core/reconciliador_temporizador_rutina.dart';
+import 'core/temporizador_rutina_listener.dart';
 
 // 1. Creamos una llave global para navegar desde cualquier parte (incluso en segundo plano)
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -45,6 +46,13 @@ void main() {
 
     await AndroidAlarmManager.initialize();
     await initializeDateFormatting('es', null);
+
+    // Registrado lo antes posible: un container.listen no reacciona a
+    // cambios de estado que ocurrieron ANTES de registrarse, así que cuanto
+    // antes se registre, menos ventana de pérdida hay contra la carga async
+    // del propio temporizador (ver temporizador_rutina_listener.dart para
+    // qué huecos cubre esto que el reconciliador de más abajo no cubre).
+    iniciarListenerTemporizadorRutina(container: container, navigatorKey: navigatorKey);
 
     // Es vital pasar la llave aquí
     await NotificacionesService().init(navigatorKey);
