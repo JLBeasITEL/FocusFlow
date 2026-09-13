@@ -6,6 +6,7 @@ import '../models/tarea.dart';
 import '../services/notificaciones_service.dart';
 import '../services/widget_tareas_service.dart';
 import '../services/widget_progreso_service.dart';
+import 'tarea_archivada_provider.dart';
 
 // 1. Usamos la sintaxis moderna 'Notifier' de Riverpod 2.0
 class TareaNotifier extends Notifier<List<Tarea>> {
@@ -122,21 +123,33 @@ class TareaNotifier extends Notifier<List<Tarea>> {
   }
 
   // Tareas recurrentes: al completarlas (false -> true) NUNCA se persiste
-  // esCompletada = true. En su lugar, en el MISMO copyWith se recalcula
-  // fechaLimite con siguienteFecha() y esCompletada vuelve a false —
-  // atómicamente, para que una tarea recurrente jamás quede guardada en
-  // estado "completada" y termine borrada por la limpieza diaria de
-  // _cargarTareasInterno (ver comentario ahí). fechaLimiteAnterior guarda
-  // la fecha vieja para poder deshacer (ver deshacerRecurrente) y para que
-  // WidgetProgresoService cuente el día como completado.
+  // esCompletada = true mientras sigan activas. En su lugar, en el MISMO
+  // copyWith se recalcula fechaLimite con siguienteFecha() y esCompletada
+  // vuelve a false — atómicamente, para que una tarea recurrente que sigue
+  // viva jamás quede guardada en estado "completada" y termine borrada por
+  // la limpieza diaria de _cargarTareasInterno (ver comentario ahí).
+  // fechaLimiteAnterior guarda la fecha vieja para poder deshacer (ver
+  // deshacerRecurrente) y para que WidgetProgresoService cuente el día como
+  // completado. ocurrenciasCompletadas sube en CUALQUIER completación de una
+  // recurrente (siga o se archive): es histórico real (ver Tarea, comentario
+  // del campo), no una cuenta que solo importe si hay límite puesto.
   //
-  // Si la tarea NO es recurrente (o está recurrente pero se está
-  // "des-completando", lo cual no debería ocurrir en el flujo normal ya
-  // que una recurrente nunca llega a esCompletada = true), el toggle
-  // simétrico de siempre queda intacto.
+  // Hay un tercer caso, además de "sigue" y "no recurrente / des-completando":
+  // la ocurrencia que se completa agota el límite de la recurrencia (ver
+  // Tarea.completarAgotaLimite). Ahí no hay "siguiente fecha" que valga: la
+  // tarea se archiva (_archivarPorLimiteAgotado) y esta función corta antes
+  // de tocar `state` con el resto de la lógica de abajo.
   void toggleTarea(String id) {
     final tareaActual = state.firstWhere((t) => t.id == id);
-    final DateTime? nuevaFecha = !tareaActual.esCompletada ? tareaActual.siguienteFecha() : null;
+    final bool completando = !tareaActual.esCompletada;
+    final bool esRecurrente = tareaActual.tipoRecurrencia != TipoRecurrencia.ninguna;
+
+    if (completando && esRecurrente && tareaActual.completarAgotaLimite) {
+      _archivarPorLimiteAgotado(tareaActual);
+      return;
+    }
+
+    final DateTime? nuevaFecha = completando && esRecurrente ? tareaActual.siguienteFecha() : null;
     final bool completandoRecurrente = nuevaFecha != null;
 
     state = [
@@ -147,6 +160,7 @@ class TareaNotifier extends Notifier<List<Tarea>> {
                   fechaLimite: nuevaFecha,
                   fechaLimiteAnterior: tarea.fechaLimite,
                   esCompletada: false,
+                  ocurrenciasCompletadas: tarea.ocurrenciasCompletadas + 1,
                   // Respalda el checklist marcado antes de resetearlo, para que
                   // deshacerRecurrente pueda devolverlo. null (no []) cuando la
                   // tarea no tiene subtareas, para no dejar un respaldo vacío
@@ -173,34 +187,79 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     }
   }
 
-  // Deshace la última completación de una tarea recurrente: restaura
-  // fechaLimite = fechaLimiteAnterior y limpia fechaLimiteAnterior (con el
-  // patrón sentinel de copyWith, para poder llevarlo a null explícito). No
-  // aplica a tareas no recurrentes (usa toggleTarea para esas).
-  //
-  // También restaura el checklist de subtareas desde subtareasAnterior, con
-  // el mismo patrón. Si subtareasAnterior es null (tarea sin subtareas, o ya
-  // deshecha antes) deja subtareas tal como está: no hay nada que restaurar.
+  // Archiva una tarea recurrente que acaba de agotar su límite: suma la
+  // completación de hoy al histórico, respalda fechaLimite/subtareas
+  // vigentes (mismo propósito que en el caso "sigue": permitir deshacer, ver
+  // restaurarDesdeArchivo) y la saca de la lista activa hacia el archivo. A
+  // propósito NO llama a programarAlertaDefinitiva: no hay una próxima
+  // ocurrencia que vaya a necesitar una alarma, así que solo se cancela la
+  // que ya existía.
+  void _archivarPorLimiteAgotado(Tarea tarea) {
+    final archivada = tarea.copyWith(
+      ocurrenciasCompletadas: tarea.ocurrenciasCompletadas + 1,
+      fechaLimiteAnterior: tarea.fechaLimite,
+      subtareasAnterior: tarea.subtareas.isEmpty ? null : tarea.subtareas,
+      esCompletada: true,
+    );
+    state = state.where((t) => t.id != tarea.id).toList();
+    _guardarTareas();
+    ref.read(archivoTareasProvider.notifier).archivar(archivada);
+    NotificacionesService().cancelarAlerta(tarea.id);
+  }
+
+  // Reconstruye una tarea recurrente a como estaba justo antes de su última
+  // completación, deshaciendo también el contador histórico. Lógica
+  // compartida por deshacerRecurrente y restaurarDesdeArchivo: cada uno
+  // decide DÓNDE buscar la tarea de origen y DÓNDE deja el resultado (ver
+  // comentario de cada uno para por qué están separados en vez de fundirse
+  // en un solo método que decida según dónde encuentra la tarea).
+  Tarea _reconstruirTrasDeshacer(Tarea tarea) {
+    return tarea.copyWith(
+      fechaLimite: tarea.fechaLimiteAnterior,
+      fechaLimiteAnterior: null,
+      subtareas: tarea.subtareasAnterior ?? tarea.subtareas,
+      subtareasAnterior: null,
+      esCompletada: false,
+      ocurrenciasCompletadas: tarea.ocurrenciasCompletadas - 1,
+    );
+  }
+
+  // Deshace la última completación de una tarea recurrente QUE SIGUE
+  // ACTIVA (todavía en `state`): el botón de deshacer de la tarjeta
+  // (RutinaCard/TareaCardLandscape), que nunca sale de la lista activa. NO
+  // busca en el archivo — para eso está restaurarDesdeArchivo, invocado
+  // desde un contexto distinto (la pantalla de archivo) con una expectativa
+  // distinta (traer de vuelta algo que ya no está en la lista). Buscar en
+  // los dos lugares y decidir según dónde aparece sería más corto, pero
+  // frágil: cada contexto sabe de antemano dónde tiene que estar la tarea, y
+  // mezclar los dos vuelve invisible un id equivocado o un estado a medio
+  // archivar en cualquiera de los dos flujos.
   void deshacerRecurrente(String id) {
     final tarea = state.firstWhere((t) => t.id == id);
     if (tarea.fechaLimiteAnterior == null) return;
 
+    final restaurada = _reconstruirTrasDeshacer(tarea);
     state = [
       for (final t in state)
-        if (t.id == id)
-          t.copyWith(
-            fechaLimite: t.fechaLimiteAnterior,
-            fechaLimiteAnterior: null,
-            subtareas: t.subtareasAnterior ?? t.subtareas,
-            subtareasAnterior: null,
-          )
-        else
-          t,
+        if (t.id == id) restaurada else t,
     ];
     _guardarTareas();
+    NotificacionesService().programarAlertaDefinitiva(restaurada);
+  }
 
-    final tareaRestaurada = state.firstWhere((t) => t.id == id);
-    NotificacionesService().programarAlertaDefinitiva(tareaRestaurada);
+  // Restaura desde el archivo una tarea que agotó su límite (o que
+  // archivarDirectamente archivó al editar el tope por debajo de lo ya
+  // completado): la invoca la pantalla de tareas archivadas. Ver el
+  // comentario de deshacerRecurrente para por qué esto es un método
+  // separado en vez de una rama de esa misma función.
+  Future<void> restaurarDesdeArchivo(String id) async {
+    final tarea = await ref.read(archivoTareasProvider.notifier).restaurar(id);
+    if (tarea == null || tarea.fechaLimiteAnterior == null) return;
+
+    final restaurada = _reconstruirTrasDeshacer(tarea);
+    state = [...state, restaurada];
+    _guardarTareas();
+    NotificacionesService().programarAlertaDefinitiva(restaurada);
   }
 
   void updateTarea(Tarea tareaActualizada) {
