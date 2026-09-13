@@ -12,6 +12,12 @@ const _sinCambio = Object();
 // alguna vez, un string no.
 enum TipoRecurrencia { ninguna, dias, meses }
 
+// Cómo se limita una recurrencia (caso de uso: una compra a crédito a 12
+// meses, frecuencia mensual y periodo "12 repeticiones"). Mutuamente
+// excluyente con la fecha: el usuario elige UN modo o ninguno, nunca ambos a
+// la vez. Mismo patrón de persistencia por nombre que TipoRecurrencia.
+enum ModoLimiteRecurrencia { ninguno, repeticiones, fecha }
+
 // Mismo patrón que ItemLista en models/nota.dart (texto + completado marcable),
 // pero con id propio y estable: las operaciones de subtareas (toggle, eliminar,
 // reordenar) necesitan identificar un ítem sin depender de su posición en la lista.
@@ -75,6 +81,21 @@ class Tarea {
   // cuando no hay nada que deshacer (tarea sin subtareas, o ya deshecha).
   final List<ItemSubtarea>? subtareasAnterior;
 
+  // --- LÍMITE DE RECURRENCIA ---
+  // Sin límite (modoLimiteRecurrencia == ninguno) es el comportamiento de
+  // siempre: la tarea se repite para siempre. Con límite, la tarea deja de
+  // recalcular su próxima fecha al agotarse y en su lugar se archiva (ver
+  // TareaNotifier.toggleTarea) — ese archivado vive fuera de este modelo.
+  final ModoLimiteRecurrencia modoLimiteRecurrencia;
+  final int? repeticionesMaximas; // solo con modo == repeticiones
+  final DateTime? fechaLimiteRecurrencia; // solo con modo == fecha
+  // Cuenta CADA completación de una ocurrencia, incluso sin límite puesto:
+  // es histórico real (nunca se resetea al editar), así que si el usuario le
+  // agrega un límite más adelante a una tarea que ya venía repitiéndose, el
+  // progreso mostrado ("4 de 12") refleja el historial verdadero en vez de
+  // arrancar mintiendo desde 0.
+  final int ocurrenciasCompletadas;
+
   Tarea({
     String? id,
     required this.titulo,
@@ -90,6 +111,10 @@ class Tarea {
     this.diaAncla,
     this.fechaLimiteAnterior,
     this.subtareasAnterior,
+    this.modoLimiteRecurrencia = ModoLimiteRecurrencia.ninguno,
+    this.repeticionesMaximas,
+    this.fechaLimiteRecurrencia,
+    this.ocurrenciasCompletadas = 0,
   }) : id = id ?? _uuid.v4(),
        subtareas = subtareas ?? [];
 
@@ -193,6 +218,48 @@ class Tarea {
     return DateTime(anioDestino, mesDestino, diaFinal, base.hour, base.minute);
   }
 
+  // ¿Completar la ocurrencia ACTUAL agota el límite de la recurrencia? Se
+  // consulta ANTES de sumar la completación de hoy, por eso compara contra
+  // ocurrenciasCompletadas + 1 (repeticiones) o contra la fecha que tendría
+  // la ocurrencia siguiente (fecha): si esa próxima fecha ya no cabe dentro
+  // del límite, la de hoy fue la última. TareaNotifier.toggleTarea usa esto
+  // para decidir entre "recalcular y seguir" o "archivar".
+  bool get completarAgotaLimite {
+    if (tipoRecurrencia == TipoRecurrencia.ninguna) return false;
+    switch (modoLimiteRecurrencia) {
+      case ModoLimiteRecurrencia.ninguno:
+        return false;
+      case ModoLimiteRecurrencia.repeticiones:
+        if (repeticionesMaximas == null) return false;
+        return ocurrenciasCompletadas + 1 >= repeticionesMaximas!;
+      case ModoLimiteRecurrencia.fecha:
+        if (fechaLimiteRecurrencia == null) return false;
+        final proxima = siguienteFecha();
+        // Sin próxima fecha calculable (falta intervalo, etc.) no hay más
+        // ocurrencias posibles de todos modos: se considera agotado.
+        return proxima == null || proxima.isAfter(fechaLimiteRecurrencia!);
+    }
+  }
+
+  // ¿El estado YA GUARDADO supera el límite actual? A diferencia de
+  // completarAgotaLimite (que mira hacia adelante, al completar), este mira
+  // hacia atrás: se usa al EDITAR una tarea recurrente para detectar que el
+  // usuario bajó el tope por debajo de lo ya completado (ej. tenía 12 cuotas,
+  // lleva 8, y lo cambia a 6) o adelantó la fecha límite antes de la
+  // ocurrencia vigente. En ese caso la tarea ya terminó y debe archivarse al
+  // guardar, sin esperar a una próxima completación que no va a llegar.
+  bool get yaAgotoLimite {
+    if (tipoRecurrencia == TipoRecurrencia.ninguna) return false;
+    switch (modoLimiteRecurrencia) {
+      case ModoLimiteRecurrencia.ninguno:
+        return false;
+      case ModoLimiteRecurrencia.repeticiones:
+        return repeticionesMaximas != null && ocurrenciasCompletadas >= repeticionesMaximas!;
+      case ModoLimiteRecurrencia.fecha:
+        return fechaLimiteRecurrencia != null && fechaLimite != null && fechaLimite!.isAfter(fechaLimiteRecurrencia!);
+    }
+  }
+
   Tarea copyWith({
     String? id,
     String? titulo,
@@ -208,6 +275,10 @@ class Tarea {
     Object? diaAncla = _sinCambio,
     Object? fechaLimiteAnterior = _sinCambio,
     Object? subtareasAnterior = _sinCambio,
+    ModoLimiteRecurrencia? modoLimiteRecurrencia,
+    Object? repeticionesMaximas = _sinCambio,
+    Object? fechaLimiteRecurrencia = _sinCambio,
+    int? ocurrenciasCompletadas,
   }) {
     return Tarea(
       id: id ?? this.id,
@@ -224,6 +295,10 @@ class Tarea {
       diaAncla: identical(diaAncla, _sinCambio) ? this.diaAncla : diaAncla as int?,
       fechaLimiteAnterior: identical(fechaLimiteAnterior, _sinCambio) ? this.fechaLimiteAnterior : fechaLimiteAnterior as DateTime?,
       subtareasAnterior: identical(subtareasAnterior, _sinCambio) ? this.subtareasAnterior : subtareasAnterior as List<ItemSubtarea>?,
+      modoLimiteRecurrencia: modoLimiteRecurrencia ?? this.modoLimiteRecurrencia,
+      repeticionesMaximas: identical(repeticionesMaximas, _sinCambio) ? this.repeticionesMaximas : repeticionesMaximas as int?,
+      fechaLimiteRecurrencia: identical(fechaLimiteRecurrencia, _sinCambio) ? this.fechaLimiteRecurrencia : fechaLimiteRecurrencia as DateTime?,
+      ocurrenciasCompletadas: ocurrenciasCompletadas ?? this.ocurrenciasCompletadas,
     );
   }
 
@@ -243,6 +318,10 @@ class Tarea {
       'diaAncla': diaAncla,
       'fechaLimiteAnterior': fechaLimiteAnterior?.toIso8601String(),
       'subtareasAnterior': subtareasAnterior?.map((s) => s.toJson()).toList(),
+      'modoLimiteRecurrencia': modoLimiteRecurrencia.name,
+      'repeticionesMaximas': repeticionesMaximas,
+      'fechaLimiteRecurrencia': fechaLimiteRecurrencia?.toIso8601String(),
+      'ocurrenciasCompletadas': ocurrenciasCompletadas,
     };
   }
 
@@ -272,6 +351,13 @@ class Tarea {
       // Ausente en tareas guardadas antes de este campo: cae en null, igual
       // que fechaLimiteAnterior.
       subtareasAnterior: (json['subtareasAnterior'] as List?)?.map((s) => ItemSubtarea.fromJson(s as Map<String, dynamic>)).toList(),
+      // Backups/tareas de antes de esta feature no traen estos campos: caen
+      // en "sin límite" (mismo comportamiento infinito que ya tenían) y
+      // contador en 0, nunca en un estado que luzca como ya agotado.
+      modoLimiteRecurrencia: ModoLimiteRecurrencia.values.asNameMap()[json['modoLimiteRecurrencia'] as String?] ?? ModoLimiteRecurrencia.ninguno,
+      repeticionesMaximas: json['repeticionesMaximas'] as int?,
+      fechaLimiteRecurrencia: json['fechaLimiteRecurrencia'] != null ? DateTime.tryParse(json['fechaLimiteRecurrencia'] as String) : null,
+      ocurrenciasCompletadas: json['ocurrenciasCompletadas'] as int? ?? 0,
     );
   }
 }
