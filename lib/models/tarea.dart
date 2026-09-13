@@ -132,6 +132,23 @@ class Tarea {
     return completadas / total;
   }
 
+  // Texto neutro para mostrar el progreso de una recurrencia con límite (ej.
+  // "4 de 12" para cuotas, pero sirve para cualquier cosa, no solo pagos).
+  // En modo fecha se muestra sin denominador ("4 completadas"): no hay un
+  // total real conocido, y una fracción estimada mentiría más de lo que
+  // informa apenas la tarea se completa tarde o temprano. null sin límite
+  // puesto: no hay nada que mostrar.
+  String? get textoProgresoRecurrencia {
+    switch (modoLimiteRecurrencia) {
+      case ModoLimiteRecurrencia.ninguno:
+        return null;
+      case ModoLimiteRecurrencia.repeticiones:
+        return '$ocurrenciasCompletadas de ${repeticionesMaximas ?? '?'}';
+      case ModoLimiteRecurrencia.fecha:
+        return '$ocurrenciasCompletadas completadas';
+    }
+  }
+
   // --- MOTOR DE URGENCIA INTELIGENTE ---
   // Al usar 'get', la urgencia se recalcula automáticamente cada vez que la pantalla la lee
   int get urgencia {

@@ -13,6 +13,7 @@ import '../../services/backup_service.dart';
 import '../../services/notificaciones_service.dart';
 import '../../providers/rutina_provider.dart';
 import '../../providers/tarea_provider.dart';
+import 'tareas_archivadas_screen.dart';
 
 /// Expone la versión y el build number leídos directamente del build
 /// actual (lo que Flutter generó a partir de `version:` en pubspec.yaml),
@@ -105,6 +106,20 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: Text('Restaura tus datos desde un archivo de respaldo', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.7))),
             trailing: Icon(Icons.chevron_right, color: colorPrincipal.withValues(alpha: 0.5)),
             onTap: () => _confirmarImportarRespaldo(context, ref, colorPrincipal, estiloTitulo),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+            child: Divider(color: colorPrincipal.withValues(alpha: 0.2)),
+          ),
+
+          _SectionHeader(title: 'Tareas', color: colorPrincipal),
+          ListTile(
+            leading: Icon(Icons.inventory_2_outlined, color: colorPrincipal),
+            title: Text('Tareas archivadas', style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.w600)),
+            subtitle: Text('Recurrentes que agotaron su límite de repeticiones o de fecha', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.7))),
+            trailing: Icon(Icons.chevron_right, color: colorPrincipal.withValues(alpha: 0.5)),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TareasArchivadasScreen())),
           ),
 
           // === NUEVA SECCIÓN DE SOPORTE ===
