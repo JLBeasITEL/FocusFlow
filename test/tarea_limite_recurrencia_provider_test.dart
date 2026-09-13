@@ -190,4 +190,52 @@ void main() {
     expect(container.read(tareaProvider), isEmpty);
     expect(container.read(archivoTareasProvider), isEmpty);
   });
+
+  // --- C6: editar un tope ya superado archiva directamente ---
+
+  test('archivarDirectamente mueve la tarea al archivo sin tocar el contador', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await Future<void>.delayed(Duration.zero);
+
+    // Tenía tope 12 y lleva 8; el usuario la editó bajando el tope a 6 (ya
+    // superado) — así llegaría desde add_tarea_modal.dart tras confirmar.
+    final tareaEditada = tareaAlBordeDelLimite().copyWith(repeticionesMaximas: 6, ocurrenciasCompletadas: 8);
+    container.read(tareaProvider.notifier).state = [tareaEditada];
+    zonedScheduleCalls.clear();
+
+    container.read(tareaProvider.notifier).archivarDirectamente(tareaEditada);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(container.read(tareaProvider), isEmpty);
+    final archivadas = container.read(archivoTareasProvider);
+    expect(archivadas, hasLength(1));
+    // El contador NO sube: nada se completó, solo se reconoció que ya
+    // había terminado.
+    expect(archivadas.first.ocurrenciasCompletadas, 8);
+    expect(archivadas.first.esCompletada, isTrue);
+    expect(cancelCalls, isNotEmpty);
+    expect(zonedScheduleCalls, isEmpty); // tampoco reprograma, igual que _archivarPorLimiteAgotado
+  });
+
+  test('restaurar una tarea archivada por archivarDirectamente devuelve el contador intacto (no resta 1)', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await Future<void>.delayed(Duration.zero);
+
+    final tareaEditada = tareaAlBordeDelLimite().copyWith(repeticionesMaximas: 6, ocurrenciasCompletadas: 8);
+    container.read(tareaProvider.notifier).state = [tareaEditada];
+    container.read(tareaProvider.notifier).archivarDirectamente(tareaEditada);
+    await Future<void>.delayed(Duration.zero);
+
+    await container.read(tareaProvider.notifier).restaurarDesdeArchivo('cuota-1');
+    await Future<void>.delayed(Duration.zero);
+
+    final restaurada = container.read(tareaProvider).first;
+    // Antes del fix de ocurrenciasCompletadasAnterior, _reconstruirTrasDeshacer
+    // restaba 1 sin importar el origen del archivado, lo que habría dejado
+    // esto en 7 (incorrecto: acá no hubo ninguna completación que deshacer).
+    expect(restaurada.ocurrenciasCompletadas, 8);
+    expect(restaurada.esCompletada, isFalse);
+  });
 }

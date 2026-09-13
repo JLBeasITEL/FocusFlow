@@ -903,7 +903,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     return tareaTemporal.urgencia;
   }
 
-  void _guardarTarea() {
+  Future<void> _guardarTarea() async {
     final titulo = _tituloController.text.trim();
 
     if (titulo.isEmpty || _horasSinFecha || _recurrenciaSinIntervalo || _limiteRepeticionesInvalido || _limiteFechaInvalido) return;
@@ -951,6 +951,37 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
         repeticionesMaximas: repeticionesMaximasFinal,
         fechaLimiteRecurrencia: fechaLimiteRecurrenciaFinal,
       );
+
+      // El nuevo tope ya quedó por debajo (o en la fecha) de lo que esta
+      // tarea ya había completado (ver Tarea.yaAgotoLimite: ej. tenía 12
+      // cuotas, lleva 8, y se cambia a 6): confirmar con el usuario ANTES de
+      // archivar, en vez de hacerlo en silencio. Cancelar aborta TODO el
+      // guardado completo (el resto de los cambios del formulario tampoco
+      // se persiste) y deja el formulario abierto, para no dejar a medias
+      // una edición que el usuario no llegó a confirmar.
+      if (tareaModificada.yaAgotoLimite) {
+        final confirmar = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('¿Archivar esta tarea?'),
+            content: const Text(
+              'Con este cambio, la tarea ya cumplió su límite de recurrencia y no va a tener más repeticiones. '
+              'Se archivará en vez de guardarse como activa. Podrás restaurarla después desde '
+              '"Configuraciones > Tareas archivadas" si fue un error.',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+              TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Archivar')),
+            ],
+          ),
+        );
+        if (confirmar != true) return;
+        if (!mounted) return;
+        ref.read(tareaProvider.notifier).archivarDirectamente(tareaModificada);
+        Navigator.pop(context);
+        return;
+      }
+
       ref.read(tareaProvider.notifier).updateTarea(tareaModificada);
     } else {
       final nuevaTarea = Tarea(

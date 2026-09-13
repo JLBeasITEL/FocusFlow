@@ -37,6 +37,9 @@ Tarea _tareaArchivada({
     repeticionesMaximas: repeticionesMaximas,
     fechaLimiteRecurrencia: modo == ModoLimiteRecurrencia.fecha ? DateTime(2026, 12, 15) : null,
     ocurrenciasCompletadas: ocurrenciasCompletadas,
+    // Como si la hubiera archivado toggleTarea al completar una ocurrencia
+    // (no archivarDirectamente): el valor previo a esa completación.
+    ocurrenciasCompletadasAnterior: ocurrenciasCompletadas - 1,
     esCompletada: true,
   );
 }

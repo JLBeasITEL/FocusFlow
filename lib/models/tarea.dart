@@ -80,6 +80,16 @@ class Tarea {
   // TareaNotifier.deshacerRecurrente pueda devolverlas a ese estado. null
   // cuando no hay nada que deshacer (tarea sin subtareas, o ya deshecha).
   final List<ItemSubtarea>? subtareasAnterior;
+  // Mismo propósito que fechaLimiteAnterior/subtareasAnterior, pero para el
+  // contador histórico: guarda ocurrenciasCompletadas tal como estaba justo
+  // antes del evento que se podría deshacer. Necesario porque no todo evento
+  // que archiva/avanza una recurrente incrementa el contador de la misma
+  // manera: completar una ocurrencia SÍ lo sube en 1 (toggleTarea), pero
+  // archivar al editar un tope ya superado (TareaNotifier.archivarDirectamente)
+  // NO completa nada, así que no debe tocarlo. Sin este respaldo explícito,
+  // TareaNotifier._reconstruirTrasDeshacer tendría que adivinar cuánto restar
+  // según de dónde vino el archivado — fuente de bugs sutiles en el contador.
+  final int? ocurrenciasCompletadasAnterior;
 
   // --- LÍMITE DE RECURRENCIA ---
   // Sin límite (modoLimiteRecurrencia == ninguno) es el comportamiento de
@@ -111,6 +121,7 @@ class Tarea {
     this.diaAncla,
     this.fechaLimiteAnterior,
     this.subtareasAnterior,
+    this.ocurrenciasCompletadasAnterior,
     this.modoLimiteRecurrencia = ModoLimiteRecurrencia.ninguno,
     this.repeticionesMaximas,
     this.fechaLimiteRecurrencia,
@@ -292,6 +303,7 @@ class Tarea {
     Object? diaAncla = _sinCambio,
     Object? fechaLimiteAnterior = _sinCambio,
     Object? subtareasAnterior = _sinCambio,
+    Object? ocurrenciasCompletadasAnterior = _sinCambio,
     ModoLimiteRecurrencia? modoLimiteRecurrencia,
     Object? repeticionesMaximas = _sinCambio,
     Object? fechaLimiteRecurrencia = _sinCambio,
@@ -312,6 +324,7 @@ class Tarea {
       diaAncla: identical(diaAncla, _sinCambio) ? this.diaAncla : diaAncla as int?,
       fechaLimiteAnterior: identical(fechaLimiteAnterior, _sinCambio) ? this.fechaLimiteAnterior : fechaLimiteAnterior as DateTime?,
       subtareasAnterior: identical(subtareasAnterior, _sinCambio) ? this.subtareasAnterior : subtareasAnterior as List<ItemSubtarea>?,
+      ocurrenciasCompletadasAnterior: identical(ocurrenciasCompletadasAnterior, _sinCambio) ? this.ocurrenciasCompletadasAnterior : ocurrenciasCompletadasAnterior as int?,
       modoLimiteRecurrencia: modoLimiteRecurrencia ?? this.modoLimiteRecurrencia,
       repeticionesMaximas: identical(repeticionesMaximas, _sinCambio) ? this.repeticionesMaximas : repeticionesMaximas as int?,
       fechaLimiteRecurrencia: identical(fechaLimiteRecurrencia, _sinCambio) ? this.fechaLimiteRecurrencia : fechaLimiteRecurrencia as DateTime?,
@@ -339,6 +352,7 @@ class Tarea {
       'repeticionesMaximas': repeticionesMaximas,
       'fechaLimiteRecurrencia': fechaLimiteRecurrencia?.toIso8601String(),
       'ocurrenciasCompletadas': ocurrenciasCompletadas,
+      'ocurrenciasCompletadasAnterior': ocurrenciasCompletadasAnterior,
     };
   }
 
@@ -368,6 +382,8 @@ class Tarea {
       // Ausente en tareas guardadas antes de este campo: cae en null, igual
       // que fechaLimiteAnterior.
       subtareasAnterior: (json['subtareasAnterior'] as List?)?.map((s) => ItemSubtarea.fromJson(s as Map<String, dynamic>)).toList(),
+      // Ausente igual que los otros "Anterior": null, nada que restaurar.
+      ocurrenciasCompletadasAnterior: json['ocurrenciasCompletadasAnterior'] as int?,
       // Backups/tareas de antes de esta feature no traen estos campos: caen
       // en "sin límite" (mismo comportamiento infinito que ya tenían) y
       // contador en 0, nunca en un estado que luzca como ya agotado.

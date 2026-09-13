@@ -161,6 +161,11 @@ class TareaNotifier extends Notifier<List<Tarea>> {
                   fechaLimiteAnterior: tarea.fechaLimite,
                   esCompletada: false,
                   ocurrenciasCompletadas: tarea.ocurrenciasCompletadas + 1,
+                  // Respalda el contador ANTES de subirlo, para que
+                  // _reconstruirTrasDeshacer sepa exactamente a qué valor
+                  // volver (ver comentario del campo en Tarea) en vez de
+                  // asumir "restar 1".
+                  ocurrenciasCompletadasAnterior: tarea.ocurrenciasCompletadas,
                   // Respalda el checklist marcado antes de resetearlo, para que
                   // deshacerRecurrente pueda devolverlo. null (no []) cuando la
                   // tarea no tiene subtareas, para no dejar un respaldo vacío
@@ -197,6 +202,7 @@ class TareaNotifier extends Notifier<List<Tarea>> {
   void _archivarPorLimiteAgotado(Tarea tarea) {
     final archivada = tarea.copyWith(
       ocurrenciasCompletadas: tarea.ocurrenciasCompletadas + 1,
+      ocurrenciasCompletadasAnterior: tarea.ocurrenciasCompletadas,
       fechaLimiteAnterior: tarea.fechaLimite,
       subtareasAnterior: tarea.subtareas.isEmpty ? null : tarea.subtareas,
       esCompletada: true,
@@ -207,12 +213,38 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     NotificacionesService().cancelarAlerta(tarea.id);
   }
 
-  // Reconstruye una tarea recurrente a como estaba justo antes de su última
-  // completación, deshaciendo también el contador histórico. Lógica
-  // compartida por deshacerRecurrente y restaurarDesdeArchivo: cada uno
-  // decide DÓNDE buscar la tarea de origen y DÓNDE deja el resultado (ver
-  // comentario de cada uno para por qué están separados en vez de fundirse
-  // en un solo método que decida según dónde encuentra la tarea).
+  // Archiva una tarea recurrente al EDITARLA cuando el nuevo tope ya quedó
+  // por debajo de lo que ya se había completado (ver Tarea.yaAgotoLimite:
+  // ej. tenía 12 cuotas, lleva 8, y el usuario lo cambia a 6). A diferencia
+  // de _archivarPorLimiteAgotado, acá NO se está completando ninguna
+  // ocurrencia — el histórico (ocurrenciasCompletadas) se queda tal cual
+  // quedó editado, nunca sube. El formulario (add_tarea_modal.dart) es
+  // responsable de confirmar esto con el usuario ANTES de llamar acá.
+  void archivarDirectamente(Tarea tareaEditada) {
+    final archivada = tareaEditada.copyWith(
+      // Sin incremento: ocurrenciasCompletadasAnterior == ocurrenciasCompletadas
+      // a propósito, para que restaurar esta tarea sea un no-op sobre el
+      // contador (ver _reconstruirTrasDeshacer) — nada que "deshacer" ahí,
+      // ya que nada se completó.
+      ocurrenciasCompletadasAnterior: tareaEditada.ocurrenciasCompletadas,
+      fechaLimiteAnterior: tareaEditada.fechaLimite,
+      esCompletada: true,
+    );
+    state = state.where((t) => t.id != tareaEditada.id).toList();
+    _guardarTareas();
+    ref.read(archivoTareasProvider.notifier).archivar(archivada);
+    NotificacionesService().cancelarAlerta(tareaEditada.id);
+  }
+
+  // Reconstruye una tarea recurrente a como estaba justo antes del evento
+  // que se deshace (completar una ocurrencia, o el archivado directo de
+  // archivarDirectamente), usando los respaldos "Anterior" en vez de asumir
+  // matemática fija (ver comentario de ocurrenciasCompletadasAnterior en
+  // Tarea: no todo evento que archiva sube el contador de la misma forma).
+  // Lógica compartida por deshacerRecurrente y restaurarDesdeArchivo: cada
+  // uno decide DÓNDE buscar la tarea de origen y DÓNDE deja el resultado
+  // (ver comentario de cada uno para por qué están separados en vez de
+  // fundirse en un solo método que decida según dónde encuentra la tarea).
   Tarea _reconstruirTrasDeshacer(Tarea tarea) {
     return tarea.copyWith(
       fechaLimite: tarea.fechaLimiteAnterior,
@@ -220,7 +252,8 @@ class TareaNotifier extends Notifier<List<Tarea>> {
       subtareas: tarea.subtareasAnterior ?? tarea.subtareas,
       subtareasAnterior: null,
       esCompletada: false,
-      ocurrenciasCompletadas: tarea.ocurrenciasCompletadas - 1,
+      ocurrenciasCompletadas: tarea.ocurrenciasCompletadasAnterior ?? tarea.ocurrenciasCompletadas,
+      ocurrenciasCompletadasAnterior: null,
     );
   }
 
