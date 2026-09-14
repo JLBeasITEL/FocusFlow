@@ -730,79 +730,81 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   // sin _tipoRecurrencia ya elegido.
   Widget _buildSelectorLimiteRecurrencia() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<ModoLimiteRecurrencia>(
-          initialValue: _modoLimiteRecurrencia,
-          isExpanded: true,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black54),
-          style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
-          decoration: InputDecoration(
-            labelText: 'Terminar',
-            prefixIcon: const Icon(Icons.flag_outlined, size: 20),
-            filled: true, fillColor: Colors.grey.shade50,
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
-          ),
-          items: const [
-            DropdownMenuItem(value: ModoLimiteRecurrencia.ninguno, child: Text('Nunca (sin límite)')),
-            DropdownMenuItem(value: ModoLimiteRecurrencia.repeticiones, child: Text('Después de N veces')),
-            DropdownMenuItem(value: ModoLimiteRecurrencia.fecha, child: Text('En una fecha')),
-          ],
-          onChanged: (valor) {
-            if (valor != null) setState(() => _modoLimiteRecurrencia = valor);
-          },
-        ),
-        if (_modoLimiteRecurrencia == ModoLimiteRecurrencia.repeticiones) ...[
-          const SizedBox(height: 8),
-          TextField(
-            controller: _repeticionesMaximasController,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              labelText: 'Cantidad de veces',
-              errorText: _limiteRepeticionesInvalido ? 'Mínimo 1' : null,
-              filled: true, fillColor: Colors.grey.shade50,
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
-            ),
-          ),
-        ],
-        if (_modoLimiteRecurrencia == ModoLimiteRecurrencia.fecha) ...[
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _elegirFechaLimiteRecurrencia,
-                  icon: const Icon(Icons.event_busy, size: 18),
-                  label: Text(
-                    _fechaLimiteRecurrenciaSeleccionada == null
-                        ? 'Hasta cuándo'
-                        : DateFormat('dd MMM yyyy').format(_fechaLimiteRecurrenciaSeleccionada!),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                    visualDensity: VisualDensity.compact,
-                  ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: DropdownButtonFormField<ModoLimiteRecurrencia>(
+                initialValue: _modoLimiteRecurrencia,
+                isExpanded: true,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black54),
+                style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
+                decoration: InputDecoration(
+                  labelText: 'Terminar',
+                  prefixIcon: const Icon(Icons.flag_outlined, size: 20),
+                  filled: true, fillColor: Colors.grey.shade50,
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
                 ),
+                items: const [
+                  DropdownMenuItem(value: ModoLimiteRecurrencia.ninguno, child: Text('Nunca')),
+                  DropdownMenuItem(value: ModoLimiteRecurrencia.repeticiones, child: Text('N veces')),
+                  DropdownMenuItem(value: ModoLimiteRecurrencia.fecha, child: Text('Una fecha')),
+                ],
+                onChanged: (valor) {
+                  if (valor != null) setState(() => _modoLimiteRecurrencia = valor);
+                },
               ),
-              if (_fechaLimiteRecurrenciaSeleccionada != null)
-                IconButton(
-                  onPressed: () => setState(() => _fechaLimiteRecurrenciaSeleccionada = null),
-                  icon: const Icon(Icons.close, size: 18),
-                  tooltip: 'Quitar fecha límite',
-                  visualDensity: VisualDensity.compact,
-                ),
-            ],
-          ),
-          if (_limiteFechaInvalido)
-            const Padding(
-              padding: EdgeInsets.only(top: 4, left: 4),
-              child: Text('Debe ser igual o posterior a la fecha elegida', style: TextStyle(color: Colors.red, fontSize: 12)),
             ),
-        ],
+            if (_modoLimiteRecurrencia != ModoLimiteRecurrencia.ninguno) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: _modoLimiteRecurrencia == ModoLimiteRecurrencia.repeticiones
+                    ? TextField(
+                        controller: _repeticionesMaximasController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          labelText: 'Veces',
+                          errorText: _limiteRepeticionesInvalido ? 'Mínimo 1' : null,
+                          filled: true, fillColor: Colors.grey.shade50,
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+                        ),
+                      )
+                    // Mismo lugar/tamaño que el TextField de "Veces" (arriba),
+                    // pero como botón (abre el date picker) en vez de campo de
+                    // texto: mismo esquema de bordes/relleno que el resto del
+                    // formulario para que las dos ramas de "Terminar" luzcan
+                    // como una sola familia de controles, igual que "Repetir".
+                    : OutlinedButton.icon(
+                        onPressed: _elegirFechaLimiteRecurrencia,
+                        icon: const Icon(Icons.event_busy, size: 16),
+                        label: Text(
+                          _fechaLimiteRecurrenciaSeleccionada == null ? 'Fecha' : DateFormat('dd MMM').format(_fechaLimiteRecurrenciaSeleccionada!),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                          backgroundColor: Colors.grey.shade50,
+                          side: BorderSide(color: _limiteFechaInvalido ? Colors.red.shade300 : Colors.grey.shade300),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+              ),
+            ],
+          ],
+        ),
+        if (_modoLimiteRecurrencia == ModoLimiteRecurrencia.fecha && _limiteFechaInvalido)
+          const Padding(
+            padding: EdgeInsets.only(top: 4, left: 4),
+            child: Text('Debe ser igual o posterior a la fecha elegida', style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
       ],
     );
   }

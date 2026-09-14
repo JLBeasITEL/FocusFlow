@@ -96,8 +96,8 @@ void main() {
   testWidgets('bajar el tope por debajo de lo completado pide confirmación antes de guardar', (tester) async {
     await _abrirEdicion(tester, _tareaTope12Con8Completadas());
 
-    expect(find.text('Cantidad de veces'), findsOneWidget);
-    await tester.enterText(find.widgetWithText(TextField, 'Cantidad de veces'), '6');
+    expect(find.text('Veces'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'Veces'), '6');
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(ElevatedButton, 'Guardar'));
@@ -109,7 +109,7 @@ void main() {
   testWidgets('cancelar el diálogo aborta todo el guardado: nada se persiste, el formulario sigue abierto', (tester) async {
     final container = await _abrirEdicion(tester, _tareaTope12Con8Completadas());
 
-    await tester.enterText(find.widgetWithText(TextField, 'Cantidad de veces'), '6');
+    await tester.enterText(find.widgetWithText(TextField, 'Veces'), '6');
     await tester.pumpAndSettle();
     // Cambiamos también el título, para confirmar que ESE cambio tampoco se
     // guarda al cancelar (el guardado se aborta completo, no solo el tope).
@@ -137,7 +137,7 @@ void main() {
   testWidgets('confirmar archiva la tarea sin subir el contador histórico', (tester) async {
     final container = await _abrirEdicion(tester, _tareaTope12Con8Completadas());
 
-    await tester.enterText(find.widgetWithText(TextField, 'Cantidad de veces'), '6');
+    await tester.enterText(find.widgetWithText(TextField, 'Veces'), '6');
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(ElevatedButton, 'Guardar'));
