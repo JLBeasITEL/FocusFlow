@@ -1880,9 +1880,17 @@ class TareaCard extends ConsumerStatefulWidget {
 }
 
 class _TareaCardState extends ConsumerState<TareaCard> {
-  bool _isExpanded = false; 
+  bool _isExpanded = false;
   bool _showOverlayMenu = false;
-  Timer? _timerAtraso; 
+  Timer? _timerAtraso;
+  // Completar la ÚLTIMA ocurrencia de una recurrente con límite archiva la
+  // tarea de inmediato (TareaNotifier.toggleTarea), sacándola de `state` en
+  // el mismo frame: sin esto, la tarjeta desaparece de la lista antes de que
+  // el usuario llegue a ver el check o el tachado, como si no hubiera pasado
+  // nada. Con este flag en true se simula el estado completado localmente
+  // (ver build(), donde sobreescribe tarea.esCompletada) durante un instante
+  // antes de disparar el archivado real.
+  bool _mostrandoCompletadaFinal = false;
 
   @override
   void initState() {
@@ -1914,7 +1922,11 @@ class _TareaCardState extends ConsumerState<TareaCard> {
 
   @override
   Widget build(BuildContext context) {
-    final tarea = widget.tarea;
+    // _mostrandoCompletadaFinal sobreescribe esCompletada para que el resto
+    // completo de este build (checkbox, tachado, color de tarjeta, badge de
+    // urgencia, etc.) reaccione igual que ante una completación real, sin
+    // duplicar esa lógica en cada punto que ya la usa.
+    final tarea = _mostrandoCompletadaFinal ? widget.tarea.copyWith(esCompletada: true) : widget.tarea;
     final colorBase = _getColorUrgencia(tarea.urgencia, widget.tema);
     // Las tarjetas completadas siempre quedan claras (blanco @0.7) en los 5
     // temas, así que su texto oscuro sigue legible sin cambios. Solo las NO
@@ -1951,7 +1963,7 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ListTile(
-                    leading: Checkbox(value: tarea.esCompletada, activeColor: colorBase, shape: const CircleBorder(), side: BorderSide(color: tarea.esCompletada ? colorBase : (esMedianoche ? Colors.white54 : Colors.black45), width: 1.5), onChanged: (_) => ref.read(tareaProvider.notifier).toggleTarea(tarea.id)),
+                    leading: Checkbox(value: tarea.esCompletada, activeColor: colorBase, shape: const CircleBorder(), side: BorderSide(color: tarea.esCompletada ? colorBase : (esMedianoche ? Colors.white54 : Colors.black45), width: 1.5), onChanged: (_) => _completarConFeedbackVisual()),
                     title: Row(
                       children: [
                         Expanded(
@@ -1997,14 +2009,22 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                                   Row(children: [
                                     Icon(Icons.access_time, size: 14, color: colorBase.withValues(alpha: 0.9)),
                                     const SizedBox(width: 4),
-                                    Text(
-                                      // 23:59 es el valor implícito cuando no se eligió hora (ver
-                                      // add_tarea_modal._guardarTarea), así que no se muestra.
-                                      DateFormat(
-                                        (tarea.fechaLimite!.hour == 23 && tarea.fechaLimite!.minute == 59) ? 'EEEE, d MMM' : 'EEEE, d MMM • HH:mm',
-                                        'es',
-                                      ).format(tarea.fechaLimite!),
-                                      style: TextStyle(color: colorBase.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w600),
+                                    // Expanded (con ellipsis): agregarle el progreso de
+                                    // recurrencia a esta fila la hizo más larga y puede
+                                    // desbordar con nombres de día largos ("miércoles") +
+                                    // "N de M"; sin esto tronaba con overflow en angostos.
+                                    Flexible(
+                                      child: Text(
+                                        // 23:59 es el valor implícito cuando no se eligió hora (ver
+                                        // add_tarea_modal._guardarTarea), así que no se muestra.
+                                        DateFormat(
+                                          (tarea.fechaLimite!.hour == 23 && tarea.fechaLimite!.minute == 59) ? 'EEEE, d MMM' : 'EEEE, d MMM • HH:mm',
+                                          'es',
+                                        ).format(tarea.fechaLimite!),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(color: colorBase.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w600),
+                                      ),
                                     ),
                                     if (esRecurrente) ...[
                                       const SizedBox(width: 4),
@@ -2053,7 +2073,7 @@ class _TareaCardState extends ConsumerState<TareaCard> {
             ),
           ),
           if (estaAtrasada) Positioned(top: 12, right: 12, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red.shade700, borderRadius: BorderRadius.circular(8), boxShadow: const [BoxShadow(blurRadius: 4, color: Colors.black26, offset: Offset(0, 2))]), child: const Text('ATRASADO', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)))),
-          if (_showOverlayMenu) Positioned.fill(child: GestureDetector(onTap: () => setState(() => _showOverlayMenu = false), child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0), child: Container(color: Colors.white.withValues(alpha: 0.2), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [_buildActionIcon(icon: (tarea.esCompletada || puedeDeshacerRecurrente) ? Icons.undo : Icons.check_rounded, color: const Color(0xFF4CAF50), onTap: () { if (puedeDeshacerRecurrente) { ref.read(tareaProvider.notifier).deshacerRecurrente(tarea.id); } else { ref.read(tareaProvider.notifier).toggleTarea(tarea.id); } setState(() => _showOverlayMenu = false); }), _buildActionIcon(icon: Icons.edit_rounded, color: Colors.blueGrey, onTap: () { setState(() => _showOverlayMenu = false); abrirFormularioTarea(context, tareaAEditar: tarea); }), _buildActionIcon(icon: Icons.delete_rounded, color: Colors.redAccent, onTap: () { setState(() => _showOverlayMenu = false); Future.delayed(const Duration(milliseconds: 150), () { if (!mounted) return; ref.read(tareaProvider.notifier).deleteTarea(tarea.id); mostrarSnackBarSimple(mensaje: 'Tarea eliminada', colorFondo: widget.tema.colorPrincipal, colorTexto: widget.tema.colorSobrePrincipal); }); })]))))),
+          if (_showOverlayMenu) Positioned.fill(child: GestureDetector(onTap: () => setState(() => _showOverlayMenu = false), child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0), child: Container(color: Colors.white.withValues(alpha: 0.2), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [_buildActionIcon(icon: (tarea.esCompletada || puedeDeshacerRecurrente) ? Icons.undo : Icons.check_rounded, color: const Color(0xFF4CAF50), onTap: () { setState(() => _showOverlayMenu = false); if (puedeDeshacerRecurrente) { ref.read(tareaProvider.notifier).deshacerRecurrente(tarea.id); } else { _completarConFeedbackVisual(); } }), _buildActionIcon(icon: Icons.edit_rounded, color: Colors.blueGrey, onTap: () { setState(() => _showOverlayMenu = false); abrirFormularioTarea(context, tareaAEditar: tarea); }), _buildActionIcon(icon: Icons.delete_rounded, color: Colors.redAccent, onTap: () { setState(() => _showOverlayMenu = false); Future.delayed(const Duration(milliseconds: 150), () { if (!mounted) return; ref.read(tareaProvider.notifier).deleteTarea(tarea.id); mostrarSnackBarSimple(mensaje: 'Tarea eliminada', colorFondo: widget.tema.colorPrincipal, colorTexto: widget.tema.colorSobrePrincipal); }); })]))))),
         ],
       ),
     );
@@ -2061,6 +2081,26 @@ class _TareaCardState extends ConsumerState<TareaCard> {
 
   Widget _buildActionIcon({required IconData icon, required Color color, required VoidCallback onTap}) {
     return CircleAvatar(backgroundColor: Colors.white, radius: 28, child: IconButton(icon: Icon(icon, color: color, size: 28), onPressed: onTap));
+  }
+
+  // Punto único para completar una tarea desde esta tarjeta (checkbox y
+  // menú de acciones al mantener presionado). Si esta es la ÚLTIMA
+  // ocurrencia de una recurrente con límite, toggleTarea la archiva de
+  // inmediato — sin este paso previo, la tarjeta desaparecería de la lista
+  // en el mismo frame sin que el usuario llegue a ver el check ni el
+  // tachado (ver _mostrandoCompletadaFinal). Cualquier otra completación
+  // (no recurrente, o una que sigue) no necesita el retraso.
+  void _completarConFeedbackVisual() {
+    if (_mostrandoCompletadaFinal) return; // ya en curso, evita disparar dos veces
+    if (widget.tarea.completarAgotaLimite) {
+      setState(() => _mostrandoCompletadaFinal = true);
+      Future.delayed(const Duration(milliseconds: 650), () {
+        if (!mounted) return;
+        ref.read(tareaProvider.notifier).toggleTarea(widget.tarea.id);
+      });
+    } else {
+      ref.read(tareaProvider.notifier).toggleTarea(widget.tarea.id);
+    }
   }
 
   // Aviso no bloqueante (SnackBar con acción) al completar el último paso
@@ -2072,7 +2112,7 @@ class _TareaCardState extends ConsumerState<TareaCard> {
         content: const Text('Completaste todos los pasos. ¿Marcar la tarea como completada?'),
         action: SnackBarAction(
           label: 'Marcar',
-          onPressed: () => ref.read(tareaProvider.notifier).toggleTarea(tarea.id),
+          onPressed: _completarConFeedbackVisual,
         ),
         duration: const Duration(seconds: 5),
       ),

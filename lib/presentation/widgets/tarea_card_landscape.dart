@@ -27,6 +27,12 @@ class TareaLandscapeCard extends ConsumerStatefulWidget {
 class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
   bool _showOverlayMenu = false;
   Timer? _timerAtraso;
+  // Mismo motivo que TareaCard (home_screen.dart): completar la ÚLTIMA
+  // ocurrencia de una recurrente con límite archiva de inmediato, sacando
+  // la tarjeta de `state` en el mismo frame — sin esto, desaparece antes de
+  // que el usuario vea el check o el tachado. Ver build() y
+  // _completarConFeedbackVisual.
+  bool _mostrandoCompletadaFinal = false;
 
   @override
   void initState() {
@@ -68,9 +74,29 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
     abrirFormularioTarea(context, tareaAEditar: widget.tarea);
   }
 
+  // Punto único para completar una tarea desde esta tarjeta (checkbox y
+  // menú de acciones al mantener presionado). Mismo motivo y mismo patrón
+  // que TareaCard._completarConFeedbackVisual en home_screen.dart.
+  void _completarConFeedbackVisual() {
+    if (_mostrandoCompletadaFinal) return; // ya en curso, evita disparar dos veces
+    if (widget.tarea.completarAgotaLimite) {
+      setState(() => _mostrandoCompletadaFinal = true);
+      Future.delayed(const Duration(milliseconds: 650), () {
+        if (!mounted) return;
+        ref.read(tareaProvider.notifier).toggleTarea(widget.tarea.id);
+      });
+    } else {
+      ref.read(tareaProvider.notifier).toggleTarea(widget.tarea.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tarea = widget.tarea;
+    // _mostrandoCompletadaFinal sobreescribe esCompletada para que el resto
+    // completo de este build reaccione igual que ante una completación
+    // real (ver comentario del campo y TareaCard en home_screen.dart, mismo
+    // patrón).
+    final tarea = _mostrandoCompletadaFinal ? widget.tarea.copyWith(esCompletada: true) : widget.tarea;
     final colorBase = colorUrgenciaTarea(tarea.urgencia, widget.tema);
     final bool esMedianoche = widget.tema == TemaApp.medianoche;
     final Color colorTarjeta = tarea.esCompletada
@@ -118,7 +144,7 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
                           activeColor: colorBase,
                           shape: const CircleBorder(),
                           side: BorderSide(color: tarea.esCompletada ? colorBase : (esMedianoche ? Colors.white54 : Colors.black45), width: 1.5),
-                          onChanged: (_) => ref.read(tareaProvider.notifier).toggleTarea(tarea.id),
+                          onChanged: (_) => _completarConFeedbackVisual(),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -218,12 +244,12 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
                           icon: (tarea.esCompletada || puedeDeshacerRecurrente) ? Icons.undo : Icons.check_rounded,
                           color: const Color(0xFF4CAF50),
                           onTap: () {
+                            setState(() => _showOverlayMenu = false);
                             if (puedeDeshacerRecurrente) {
                               ref.read(tareaProvider.notifier).deshacerRecurrente(tarea.id);
                             } else {
-                              ref.read(tareaProvider.notifier).toggleTarea(tarea.id);
+                              _completarConFeedbackVisual();
                             }
-                            setState(() => _showOverlayMenu = false);
                           },
                         ),
                         _buildActionIcon(
