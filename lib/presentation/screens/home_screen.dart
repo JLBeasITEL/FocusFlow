@@ -2009,6 +2009,13 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                                     if (esRecurrente) ...[
                                       const SizedBox(width: 4),
                                       Icon(Icons.repeat, size: 14, color: colorBase.withValues(alpha: 0.9)),
+                                      if (tarea.textoProgresoRecurrencia != null) ...[
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          tarea.textoProgresoRecurrencia!,
+                                          style: TextStyle(color: colorBase.withValues(alpha: 0.9), fontSize: 12, fontWeight: FontWeight.w600),
+                                        ),
+                                      ],
                                     ],
                                   ]),
                                 if (tieneSubtareas) ...[

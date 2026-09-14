@@ -181,6 +181,13 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
                           if (esRecurrente) ...[
                             const SizedBox(width: 3),
                             Icon(Icons.repeat, size: 12, color: colorBase.withValues(alpha: 0.9)),
+                            if (tarea.textoProgresoRecurrencia != null) ...[
+                              const SizedBox(width: 3),
+                              Text(
+                                tarea.textoProgresoRecurrencia!,
+                                style: TextStyle(color: colorBase.withValues(alpha: 0.9), fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                            ],
                           ],
                         ] else
                           const Spacer(),
