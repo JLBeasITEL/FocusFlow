@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/nota.dart';
@@ -8,6 +7,7 @@ import '../../core/app_messenger.dart';
 import 'post_it_card.dart';
 import 'nota_dialog.dart';
 import 'overflow_scrollbar.dart';
+import '../utils/grid_celda_optima.dart';
 
 // Tarjeta que representa un grupo de notas en el tablero: una pila de
 // post-its con el nombre del grupo "por encima" (banner superior), del
@@ -15,7 +15,7 @@ import 'overflow_scrollbar.dart';
 class TarjetaGrupoNotas extends StatelessWidget {
   final String nombreGrupo;
   final List<NotaPostIt> notas;
-  final int columnasTotales;
+  final double tamanoCelda;
   final VoidCallback onTap;
   // true mientras el tablero está en modo selección de notas sueltas: los
   // grupos no se pueden seleccionar, así que se muestran atenuados y sin
@@ -29,7 +29,7 @@ class TarjetaGrupoNotas extends StatelessWidget {
     super.key,
     required this.nombreGrupo,
     required this.notas,
-    required this.columnasTotales,
+    required this.tamanoCelda,
     required this.onTap,
     this.deshabilitada = false,
     this.resaltada = false,
@@ -39,7 +39,7 @@ class TarjetaGrupoNotas extends StatelessWidget {
   Widget build(BuildContext context) {
     final coloresPila = notas.take(3).map((n) => n.color).toList();
     if (coloresPila.isEmpty) coloresPila.add(coloresPostIt.first);
-    final double factorEscala = (2 / columnasTotales).clamp(0.5, 1.6);
+    final double factorEscala = (tamanoCelda / 164.0).clamp(0.5, 1.6);
     final double tamanoLetra = (18.0 * factorEscala).clamp(13.0, 24.0);
 
     return AnimatedScale(
@@ -287,19 +287,30 @@ class _GrupoNotasDetalleScreenState extends ConsumerState<GrupoNotasDetalleScree
           ? const SizedBox.shrink()
           : LayoutBuilder(
               builder: (context, constraints) {
-                // Mismo criterio de tamaño de celda que el tablero principal
-                // (ver _tamanoMinimoCelda en home_screen.dart): antes esto
-                // usaba siempre 2 columnas fijas, así que en landscape (ancho
-                // grande) las notas quedaban enormes comparadas con las del
-                // tablero.
-                const double anchoTarget = 140;
+                // Mismo criterio que el tablero principal (ver
+                // calcularColumnasOptimas en utils/grid_celda_optima.dart):
+                // considera ancho Y alto disponibles, así en landscape (poca
+                // altura, mucho ancho) no agrega columnas de más solo porque
+                // el ancho lo permite — antes esto solo miraba el ancho y las
+                // notas quedaban chicas aunque sobrara alto en pantalla.
                 const double espaciado = 12;
-                final int columnas = math.max(2, ((constraints.maxWidth + espaciado) / (anchoTarget + espaciado)).floor());
+                const double padHorizontal = 20;
+                const double padTop = 24;
+                const double padBottom = 40;
+                final double anchoDisponible = constraints.maxWidth - padHorizontal * 2;
+                final double altoDisponible = constraints.maxHeight - padTop - padBottom;
+                final int columnas = calcularColumnasOptimas(
+                  totalCeldas: notasDelGrupo.length,
+                  anchoDisponible: anchoDisponible,
+                  altoDisponible: altoDisponible,
+                  espaciado: espaciado,
+                );
+                final double tamanoCelda = columnas > 0 ? (anchoDisponible - espaciado * (columnas - 1)) / columnas : anchoDisponible;
                 return OverflowScrollbar(
                   controller: _scrollController,
                   child: GridView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+                  padding: const EdgeInsets.fromLTRB(padHorizontal, padTop, padHorizontal, padBottom),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: columnas,
                     crossAxisSpacing: espaciado,
@@ -313,7 +324,7 @@ class _GrupoNotasDetalleScreenState extends ConsumerState<GrupoNotasDetalleScree
                       key: ValueKey(nota.id),
                       nota: nota,
                       index: index,
-                      columnasTotales: columnas,
+                      tamanoCelda: tamanoCelda,
                       onTapEditar: () => mostrarDialogoNota(context, ref, idAEditar: nota.id),
                       onDelete: () => _eliminarNota(ref, colorTema, colorSobreTema, nota),
                       onQuitarDeGrupo: () => ref.read(notaProvider.notifier).quitarDeGrupo(nota.id),

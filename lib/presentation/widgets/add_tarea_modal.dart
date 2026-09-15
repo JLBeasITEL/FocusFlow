@@ -80,6 +80,15 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
   TipoRecurrencia _tipoRecurrencia = TipoRecurrencia.ninguna;
   final TextEditingController _intervaloController = TextEditingController();
 
+  // --- LÍMITE DE RECURRENCIA ---
+  // Mutuamente excluyente (repeticiones O fecha, nunca ambos): un solo modo
+  // decide cuál de los dos controles de abajo importa al guardar (ver
+  // _guardarTarea). Solo tiene sentido con _tipoRecurrencia distinto de
+  // ninguna, mismo gate que ya usa _buildSelectorRecurrencia.
+  ModoLimiteRecurrencia _modoLimiteRecurrencia = ModoLimiteRecurrencia.ninguno;
+  final TextEditingController _repeticionesMaximasController = TextEditingController();
+  DateTime? _fechaLimiteRecurrenciaSeleccionada;
+
   // --- ESTADO LOCAL DE SUBTAREAS ---
   // Se editan en memoria (igual que título/descripción) y solo se
   // persisten al presionar "Guardar", junto con el resto del formulario.
@@ -115,6 +124,11 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     if (datosIniciales?.intervalo != null) {
       _intervaloController.text = datosIniciales!.intervalo.toString();
     }
+    _modoLimiteRecurrencia = datosIniciales?.modoLimiteRecurrencia ?? ModoLimiteRecurrencia.ninguno;
+    if (datosIniciales?.repeticionesMaximas != null) {
+      _repeticionesMaximasController.text = datosIniciales!.repeticionesMaximas.toString();
+    }
+    _fechaLimiteRecurrenciaSeleccionada = datosIniciales?.fechaLimiteRecurrencia;
     _subtareasTemp = datosIniciales?.subtareas
             .map((s) => ItemSubtarea(id: s.id, texto: s.texto, completado: s.completado))
             .toList() ??
@@ -223,6 +237,9 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
         subtareas: _subtareasTemp,
         tipoRecurrencia: _tipoRecurrencia,
         intervalo: _tipoRecurrencia == TipoRecurrencia.ninguna ? null : int.tryParse(_intervaloController.text.trim()),
+        modoLimiteRecurrencia: _tipoRecurrencia == TipoRecurrencia.ninguna ? ModoLimiteRecurrencia.ninguno : _modoLimiteRecurrencia,
+        repeticionesMaximas: _modoLimiteRecurrencia == ModoLimiteRecurrencia.repeticiones ? int.tryParse(_repeticionesMaximasController.text.trim()) : null,
+        fechaLimiteRecurrencia: _modoLimiteRecurrencia == ModoLimiteRecurrencia.fecha ? _fechaLimiteRecurrenciaFinal : null,
       );
     }
     return Tarea(
@@ -235,6 +252,9 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
       subtareas: _subtareasTemp,
       tipoRecurrencia: _tipoRecurrencia,
       intervalo: _tipoRecurrencia == TipoRecurrencia.ninguna ? null : int.tryParse(_intervaloController.text.trim()),
+      modoLimiteRecurrencia: _tipoRecurrencia == TipoRecurrencia.ninguna ? ModoLimiteRecurrencia.ninguno : _modoLimiteRecurrencia,
+      repeticionesMaximas: _modoLimiteRecurrencia == ModoLimiteRecurrencia.repeticiones ? int.tryParse(_repeticionesMaximasController.text.trim()) : null,
+      fechaLimiteRecurrencia: _modoLimiteRecurrencia == ModoLimiteRecurrencia.fecha ? _fechaLimiteRecurrenciaFinal : null,
     );
   }
 
@@ -245,6 +265,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     _horasController.dispose();
     _nuevaSubtareaController.dispose();
     _intervaloController.dispose();
+    _repeticionesMaximasController.dispose();
     super.dispose();
   }
 
@@ -632,6 +653,11 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
       // Recurrencia solo tiene sentido con fecha límite (ver _guardarTarea).
       _tipoRecurrencia = TipoRecurrencia.ninguna;
       _intervaloController.clear();
+      // Mismo motivo: el límite de recurrencia no tiene sentido sin
+      // recurrencia.
+      _modoLimiteRecurrencia = ModoLimiteRecurrencia.ninguno;
+      _repeticionesMaximasController.clear();
+      _fechaLimiteRecurrenciaSeleccionada = null;
     });
   }
 
@@ -696,6 +722,106 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     );
   }
 
+  // Selector del límite de la recurrencia (caso de uso: compra a crédito a
+  // 12 meses -> "después de 12 veces"). Mutuamente excluyente con la fecha:
+  // el dropdown decide cuál de los dos controles secundarios se muestra.
+  // Compartido entre portrait y landscape, mismo criterio que
+  // _buildSelectorRecurrencia; el llamador es responsable de no mostrarlo
+  // sin _tipoRecurrencia ya elegido.
+  Widget _buildSelectorLimiteRecurrencia() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: DropdownButtonFormField<ModoLimiteRecurrencia>(
+                initialValue: _modoLimiteRecurrencia,
+                isExpanded: true,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black54),
+                style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
+                decoration: InputDecoration(
+                  labelText: 'Terminar',
+                  prefixIcon: const Icon(Icons.flag_outlined, size: 20),
+                  filled: true, fillColor: Colors.grey.shade50,
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+                ),
+                items: const [
+                  DropdownMenuItem(value: ModoLimiteRecurrencia.ninguno, child: Text('Nunca')),
+                  DropdownMenuItem(value: ModoLimiteRecurrencia.repeticiones, child: Text('N veces')),
+                  DropdownMenuItem(value: ModoLimiteRecurrencia.fecha, child: Text('Una fecha')),
+                ],
+                onChanged: (valor) {
+                  if (valor != null) setState(() => _modoLimiteRecurrencia = valor);
+                },
+              ),
+            ),
+            if (_modoLimiteRecurrencia != ModoLimiteRecurrencia.ninguno) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: _modoLimiteRecurrencia == ModoLimiteRecurrencia.repeticiones
+                    ? TextField(
+                        controller: _repeticionesMaximasController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          labelText: 'Veces',
+                          errorText: _limiteRepeticionesInvalido ? 'Mínimo 1' : null,
+                          filled: true, fillColor: Colors.grey.shade50,
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade600, width: 1.5)),
+                        ),
+                      )
+                    // Mismo lugar/tamaño que el TextField de "Veces" (arriba),
+                    // pero como botón (abre el date picker) en vez de campo de
+                    // texto: mismo esquema de bordes/relleno que el resto del
+                    // formulario para que las dos ramas de "Terminar" luzcan
+                    // como una sola familia de controles, igual que "Repetir".
+                    : OutlinedButton.icon(
+                        onPressed: _elegirFechaLimiteRecurrencia,
+                        icon: const Icon(Icons.event_busy, size: 16),
+                        label: Text(
+                          _fechaLimiteRecurrenciaSeleccionada == null ? 'Fecha' : DateFormat('dd MMM').format(_fechaLimiteRecurrenciaSeleccionada!),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                          backgroundColor: Colors.grey.shade50,
+                          side: BorderSide(color: _limiteFechaInvalido ? Colors.red.shade300 : Colors.grey.shade300),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+              ),
+            ],
+          ],
+        ),
+        if (_modoLimiteRecurrencia == ModoLimiteRecurrencia.fecha && _limiteFechaInvalido)
+          const Padding(
+            padding: EdgeInsets.only(top: 4, left: 4),
+            child: Text('Debe ser igual o posterior a la fecha elegida', style: TextStyle(color: Colors.red, fontSize: 12)),
+          ),
+      ],
+    );
+  }
+
+  // firstDate = la primera fechaLimite ya elegida: no tiene sentido un límite
+  // de recurrencia anterior a la primera ocurrencia.
+  Future<void> _elegirFechaLimiteRecurrencia() async {
+    final base = _fechaFinalActual ?? DateTime.now();
+    final fecha = await showDatePicker(
+      context: context,
+      initialDate: _fechaLimiteRecurrenciaSeleccionada ?? base,
+      firstDate: base,
+      lastDate: DateTime(2100),
+    );
+    if (fecha != null) setState(() => _fechaLimiteRecurrenciaSeleccionada = fecha);
+  }
+
   DateTime? get _fechaFinalActual {
     if (_fechaSeleccionada == null) return null;
     return DateTime(
@@ -707,6 +833,33 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
       _horaSeleccionada?.hour ?? 23,
       _horaSeleccionada?.minute ?? 59,
     );
+  }
+
+  // Normaliza la fecha límite de la recurrencia a las 23:59 del día elegido,
+  // mismo criterio que _fechaFinalActual: no hay selector de hora propio
+  // para este campo.
+  DateTime? get _fechaLimiteRecurrenciaFinal {
+    if (_fechaLimiteRecurrenciaSeleccionada == null) return null;
+    final f = _fechaLimiteRecurrenciaSeleccionada!;
+    return DateTime(f.year, f.month, f.day, 23, 59);
+  }
+
+  // Con modo "repeticiones" hace falta un entero >= 1 para poder guardar.
+  bool get _limiteRepeticionesInvalido {
+    if (_modoLimiteRecurrencia != ModoLimiteRecurrencia.repeticiones) return false;
+    final valor = int.tryParse(_repeticionesMaximasController.text.trim());
+    return valor == null || valor < 1;
+  }
+
+  // Con modo "fecha" hace falta elegir una fecha, y que no caiga antes de la
+  // primera ocurrencia (fechaFinalActual): una recurrencia no puede terminar
+  // antes de empezar. Igual sí se permite (single-occurrence): el límite
+  // puede coincidir exactamente con la primera fecha.
+  bool get _limiteFechaInvalido {
+    if (_modoLimiteRecurrencia != ModoLimiteRecurrencia.fecha) return false;
+    if (_fechaLimiteRecurrenciaFinal == null) return true;
+    if (_fechaFinalActual == null) return false;
+    return _fechaLimiteRecurrenciaFinal!.isBefore(_fechaFinalActual!);
   }
 
   // Con horas estimadas cargadas, la urgencia deja de elegirse a mano:
@@ -752,10 +905,10 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     return tareaTemporal.urgencia;
   }
 
-  void _guardarTarea() {
+  Future<void> _guardarTarea() async {
     final titulo = _tituloController.text.trim();
 
-    if (titulo.isEmpty || _horasSinFecha || _recurrenciaSinIntervalo) return;
+    if (titulo.isEmpty || _horasSinFecha || _recurrenciaSinIntervalo || _limiteRepeticionesInvalido || _limiteFechaInvalido) return;
 
     final fechaFinal = _fechaFinalActual;
 
@@ -777,6 +930,13 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
     final int? intervaloFinal = tipoRecurrenciaFinal == TipoRecurrencia.ninguna ? null : int.tryParse(_intervaloController.text.trim());
     final int? diaAnclaFinal = tipoRecurrenciaFinal == TipoRecurrencia.meses ? fechaFinal!.day : null;
 
+    // Mismo motivo que tipoRecurrenciaFinal: sin recurrencia real, el límite
+    // tampoco tiene sentido, sin importar qué haya quedado elegido en el
+    // selector antes de borrar la fecha o la recurrencia.
+    final ModoLimiteRecurrencia modoLimiteFinal = tipoRecurrenciaFinal == TipoRecurrencia.ninguna ? ModoLimiteRecurrencia.ninguno : _modoLimiteRecurrencia;
+    final int? repeticionesMaximasFinal = modoLimiteFinal == ModoLimiteRecurrencia.repeticiones ? int.tryParse(_repeticionesMaximasController.text.trim()) : null;
+    final DateTime? fechaLimiteRecurrenciaFinal = modoLimiteFinal == ModoLimiteRecurrencia.fecha ? _fechaLimiteRecurrenciaFinal : null;
+
     if (widget.tareaAEditar != null) {
       final tareaModificada = widget.tareaAEditar!.copyWith(
         titulo: titulo,
@@ -789,7 +949,41 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
         tipoRecurrencia: tipoRecurrenciaFinal,
         intervalo: intervaloFinal,
         diaAncla: diaAnclaFinal,
+        modoLimiteRecurrencia: modoLimiteFinal,
+        repeticionesMaximas: repeticionesMaximasFinal,
+        fechaLimiteRecurrencia: fechaLimiteRecurrenciaFinal,
       );
+
+      // El nuevo tope ya quedó por debajo (o en la fecha) de lo que esta
+      // tarea ya había completado (ver Tarea.yaAgotoLimite: ej. tenía 12
+      // cuotas, lleva 8, y se cambia a 6): confirmar con el usuario ANTES de
+      // archivar, en vez de hacerlo en silencio. Cancelar aborta TODO el
+      // guardado completo (el resto de los cambios del formulario tampoco
+      // se persiste) y deja el formulario abierto, para no dejar a medias
+      // una edición que el usuario no llegó a confirmar.
+      if (tareaModificada.yaAgotoLimite) {
+        final confirmar = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('¿Archivar esta tarea?'),
+            content: const Text(
+              'Con este cambio, la tarea ya cumplió su límite de recurrencia y no va a tener más repeticiones. '
+              'Se archivará en vez de guardarse como activa. Podrás restaurarla después desde '
+              '"Configuraciones > Tareas archivadas" si fue un error.',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+              TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Archivar')),
+            ],
+          ),
+        );
+        if (confirmar != true) return;
+        if (!mounted) return;
+        ref.read(tareaProvider.notifier).archivarDirectamente(tareaModificada);
+        Navigator.pop(context);
+        return;
+      }
+
       ref.read(tareaProvider.notifier).updateTarea(tareaModificada);
     } else {
       final nuevaTarea = Tarea(
@@ -803,6 +997,9 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
         tipoRecurrencia: tipoRecurrenciaFinal,
         intervalo: intervaloFinal,
         diaAncla: diaAnclaFinal,
+        modoLimiteRecurrencia: modoLimiteFinal,
+        repeticionesMaximas: repeticionesMaximasFinal,
+        fechaLimiteRecurrencia: fechaLimiteRecurrenciaFinal,
       );
       ref.read(tareaProvider.notifier).addTarea(nuevaTarea);
     }
@@ -1001,6 +1198,10 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
             if (_fechaSeleccionada != null) ...[
               const SizedBox(height: 16),
               _buildSelectorRecurrencia(),
+              if (_tipoRecurrencia != TipoRecurrencia.ninguna) ...[
+                const SizedBox(height: 12),
+                _buildSelectorLimiteRecurrencia(),
+              ],
             ],
 
             if (_mostrarAvanzadas) ...[
@@ -1276,7 +1477,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
 
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: (_horasSinFecha || _recurrenciaSinIntervalo) ? null : _guardarTarea,
+              onPressed: (_horasSinFecha || _recurrenciaSinIntervalo || _limiteRepeticionesInvalido || _limiteFechaInvalido) ? null : _guardarTarea,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.black87, foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1570,6 +1771,10 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
           if (_fechaSeleccionada != null) ...[
             const SizedBox(height: 16),
             _buildSelectorRecurrencia(),
+            if (_tipoRecurrencia != TipoRecurrencia.ninguna) ...[
+              const SizedBox(height: 12),
+              _buildSelectorLimiteRecurrencia(),
+            ],
           ],
         ],
       ),
@@ -1755,7 +1960,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
             ),
             const SizedBox(width: 12),
             ElevatedButton(
-              onPressed: (_horasSinFecha || _recurrenciaSinIntervalo) ? null : _guardarTarea,
+              onPressed: (_horasSinFecha || _recurrenciaSinIntervalo || _limiteRepeticionesInvalido || _limiteFechaInvalido) ? null : _guardarTarea,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.black87, foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 28),

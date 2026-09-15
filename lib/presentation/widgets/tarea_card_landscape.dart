@@ -79,9 +79,9 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
     final bool estaAtrasada = tarea.estaAtrasada;
     final bool tieneSubtareas = tarea.subtareas.isNotEmpty;
     final bool esRecurrente = tarea.tipoRecurrencia != TipoRecurrencia.ninguna;
-    // Mismo criterio que TareaCard (home_screen.dart): una tarea recurrente
-    // nunca queda con esCompletada = true, así que su "undo" se detecta por
-    // tener una completación reciente para deshacer.
+    // Mismo criterio que TareaCard (home_screen.dart): ver el comentario ahí
+    // sobre por qué este flag cubre tanto una recurrente que sigue viva como
+    // la última ocurrencia ya completada (esCompletada=true).
     final bool puedeDeshacerRecurrente = esRecurrente && tarea.fechaLimiteAnterior != null;
     const Color colorTextoClaro = Color(0xFFF1F5F9);
     final Color colorTitulo = tarea.esCompletada ? Colors.black38 : (esMedianoche ? colorTextoClaro : Colors.black87);
@@ -181,6 +181,13 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
                           if (esRecurrente) ...[
                             const SizedBox(width: 3),
                             Icon(Icons.repeat, size: 12, color: colorBase.withValues(alpha: 0.9)),
+                            if (tarea.textoProgresoRecurrencia != null) ...[
+                              const SizedBox(width: 3),
+                              Text(
+                                tarea.textoProgresoRecurrencia!,
+                                style: TextStyle(color: colorBase.withValues(alpha: 0.9), fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                            ],
                           ],
                         ] else
                           const Spacer(),
@@ -211,12 +218,12 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
                           icon: (tarea.esCompletada || puedeDeshacerRecurrente) ? Icons.undo : Icons.check_rounded,
                           color: const Color(0xFF4CAF50),
                           onTap: () {
+                            setState(() => _showOverlayMenu = false);
                             if (puedeDeshacerRecurrente) {
                               ref.read(tareaProvider.notifier).deshacerRecurrente(tarea.id);
                             } else {
                               ref.read(tareaProvider.notifier).toggleTarea(tarea.id);
                             }
-                            setState(() => _showOverlayMenu = false);
                           },
                         ),
                         _buildActionIcon(

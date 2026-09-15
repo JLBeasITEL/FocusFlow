@@ -13,6 +13,7 @@ import '../../services/backup_service.dart';
 import '../../services/notificaciones_service.dart';
 import '../../providers/rutina_provider.dart';
 import '../../providers/tarea_provider.dart';
+import 'tareas_archivadas_screen.dart';
 
 /// Expone la versión y el build number leídos directamente del build
 /// actual (lo que Flutter generó a partir de `version:` en pubspec.yaml),
@@ -29,6 +30,7 @@ class SettingsScreen extends ConsumerWidget {
     // Escuchamos activamente los estados de audio y apariencia
     final temaActual = ref.watch(temaProvider);
     final sonidos = ref.watch(sonidoProvider);
+    final transicionTab = ref.watch(transicionTabProvider);
     final infoPaquete = ref.watch(packageInfoProvider);
     
     // Obtenemos la paleta de colores correspondiente al tema activo
@@ -64,7 +66,22 @@ class SettingsScreen extends ConsumerWidget {
             trailing: Icon(Icons.chevron_right, color: colorPrincipal.withValues(alpha: 0.5)),
             onTap: () => _showThemeDialog(context, ref, colorPrincipal, estiloTitulo),
           ),
-          
+          ListTile(
+            leading: Icon(Icons.swap_horiz_rounded, color: colorPrincipal),
+            title: Text('Animación de pestañas', style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.w600)),
+            // "Solo modo horizontal" porque en vertical el cambio de pestaña
+            // ya lo maneja TabBarView, que trae su propio swipe siguiendo el
+            // dedo en tiempo real: no tiene sentido (ni se ve bien) mezclarlo
+            // con una transición de fundido/deslizamiento como esta, pensada
+            // para un cambio que se dispara de una vez al soltar o tocar.
+            subtitle: Text(
+              '${_getTransicionTabName(transicionTab)} · Solo en modo horizontal',
+              style: TextStyle(color: colorPrincipal.withValues(alpha: 0.7)),
+            ),
+            trailing: Icon(Icons.chevron_right, color: colorPrincipal.withValues(alpha: 0.5)),
+            onTap: () => _showTransicionTabDialog(context, ref, colorPrincipal, estiloTitulo),
+          ),
+
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
             child: Divider(color: colorPrincipal.withValues(alpha: 0.2)),
@@ -105,6 +122,20 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: Text('Restaura tus datos desde un archivo de respaldo', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.7))),
             trailing: Icon(Icons.chevron_right, color: colorPrincipal.withValues(alpha: 0.5)),
             onTap: () => _confirmarImportarRespaldo(context, ref, colorPrincipal, estiloTitulo),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+            child: Divider(color: colorPrincipal.withValues(alpha: 0.2)),
+          ),
+
+          _SectionHeader(title: 'Tareas', color: colorPrincipal),
+          ListTile(
+            leading: Icon(Icons.inventory_2_outlined, color: colorPrincipal),
+            title: Text('Tareas archivadas', style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.w600)),
+            subtitle: Text('Tareas completadas que ya no aparecen en la lista', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.7))),
+            trailing: Icon(Icons.chevron_right, color: colorPrincipal.withValues(alpha: 0.5)),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TareasArchivadasScreen())),
           ),
 
           // === NUEVA SECCIÓN DE SOPORTE ===
@@ -189,6 +220,14 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
+  String _getTransicionTabName(TransicionTab transicion) {
+    switch (transicion) {
+      case TransicionTab.fade: return 'Fundido';
+      case TransicionTab.fadeDeslizamiento: return 'Fundido con deslizamiento';
+      case TransicionTab.horizontal: return 'Deslizamiento horizontal';
+    }
+  }
+
   String _formatSoundName(String rawName) {
     switch (rawName) {
       case 'default_nota': return 'Piano Eco (Por defecto)';
@@ -239,6 +278,37 @@ class SettingsScreen extends ConsumerWidget {
     if (mostrarBadgeNuevo) {
       ref.read(medianocheBadgeProvider.notifier).marcarComoVisto();
     }
+  }
+
+  void _showTransicionTabDialog(BuildContext context, WidgetRef ref, Color colorPrincipal, TextStyle estiloTitulo) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Animación de pestañas', style: estiloTitulo),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'Solo afecta a la pantalla en modo horizontal. En vertical, el cambio de pestaña sigue el swipe nativo.',
+                style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6), fontSize: 12.5, height: 1.3),
+              ),
+            ),
+            ...TransicionTab.values.map((t) => ListTile(
+              title: Text(_getTransicionTabName(t), style: TextStyle(color: colorPrincipal)),
+              trailing: ref.read(transicionTabProvider) == t ? Icon(Icons.check_circle, color: colorPrincipal) : null,
+              onTap: () {
+                ref.read(transicionTabProvider.notifier).cambiar(t);
+                Navigator.pop(context);
+              },
+            )),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showSoundDialog(BuildContext context, WidgetRef ref, bool isNota, Color colorPrincipal, TextStyle estiloTitulo) {
