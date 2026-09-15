@@ -149,11 +149,14 @@ void main() {
     // procesó la edición, aunque el resultado sea un archivado).
     expect(find.text('¿Qué hay que hacer?'), findsNothing);
 
-    expect(container.read(tareaProvider), isEmpty);
-    final archivadas = container.read(archivoTareasProvider);
-    expect(archivadas, hasLength(1));
-    expect(archivadas.first.repeticionesMaximas, 6);
-    expect(archivadas.first.ocurrenciasCompletadas, 8); // no incrementó
-    expect(archivadas.first.esCompletada, isTrue);
+    // Se marca completada EN EL LUGAR (como cualquier tarea normal
+    // completada) — no se archiva de inmediato, eso ocurre recién en la
+    // limpieza diaria (ver tarea_limite_recurrencia_provider_test.dart).
+    final activas = container.read(tareaProvider);
+    expect(activas, hasLength(1));
+    expect(activas.first.repeticionesMaximas, 6);
+    expect(activas.first.ocurrenciasCompletadas, 8); // no incrementó
+    expect(activas.first.esCompletada, isTrue);
+    expect(container.read(archivoTareasProvider), isEmpty);
   });
 }

@@ -27,12 +27,6 @@ class TareaLandscapeCard extends ConsumerStatefulWidget {
 class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
   bool _showOverlayMenu = false;
   Timer? _timerAtraso;
-  // Mismo motivo que TareaCard (home_screen.dart): completar la ÚLTIMA
-  // ocurrencia de una recurrente con límite archiva de inmediato, sacando
-  // la tarjeta de `state` en el mismo frame — sin esto, desaparece antes de
-  // que el usuario vea el check o el tachado. Ver build() y
-  // _completarConFeedbackVisual.
-  bool _mostrandoCompletadaFinal = false;
 
   @override
   void initState() {
@@ -74,29 +68,9 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
     abrirFormularioTarea(context, tareaAEditar: widget.tarea);
   }
 
-  // Punto único para completar una tarea desde esta tarjeta (checkbox y
-  // menú de acciones al mantener presionado). Mismo motivo y mismo patrón
-  // que TareaCard._completarConFeedbackVisual en home_screen.dart.
-  void _completarConFeedbackVisual() {
-    if (_mostrandoCompletadaFinal) return; // ya en curso, evita disparar dos veces
-    if (widget.tarea.completarAgotaLimite) {
-      setState(() => _mostrandoCompletadaFinal = true);
-      Future.delayed(const Duration(milliseconds: 650), () {
-        if (!mounted) return;
-        ref.read(tareaProvider.notifier).toggleTarea(widget.tarea.id);
-      });
-    } else {
-      ref.read(tareaProvider.notifier).toggleTarea(widget.tarea.id);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    // _mostrandoCompletadaFinal sobreescribe esCompletada para que el resto
-    // completo de este build reaccione igual que ante una completación
-    // real (ver comentario del campo y TareaCard en home_screen.dart, mismo
-    // patrón).
-    final tarea = _mostrandoCompletadaFinal ? widget.tarea.copyWith(esCompletada: true) : widget.tarea;
+    final tarea = widget.tarea;
     final colorBase = colorUrgenciaTarea(tarea.urgencia, widget.tema);
     final bool esMedianoche = widget.tema == TemaApp.medianoche;
     final Color colorTarjeta = tarea.esCompletada
@@ -105,9 +79,9 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
     final bool estaAtrasada = tarea.estaAtrasada;
     final bool tieneSubtareas = tarea.subtareas.isNotEmpty;
     final bool esRecurrente = tarea.tipoRecurrencia != TipoRecurrencia.ninguna;
-    // Mismo criterio que TareaCard (home_screen.dart): una tarea recurrente
-    // nunca queda con esCompletada = true, así que su "undo" se detecta por
-    // tener una completación reciente para deshacer.
+    // Mismo criterio que TareaCard (home_screen.dart): ver el comentario ahí
+    // sobre por qué este flag cubre tanto una recurrente que sigue viva como
+    // la última ocurrencia ya completada (esCompletada=true).
     final bool puedeDeshacerRecurrente = esRecurrente && tarea.fechaLimiteAnterior != null;
     const Color colorTextoClaro = Color(0xFFF1F5F9);
     final Color colorTitulo = tarea.esCompletada ? Colors.black38 : (esMedianoche ? colorTextoClaro : Colors.black87);
@@ -144,7 +118,7 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
                           activeColor: colorBase,
                           shape: const CircleBorder(),
                           side: BorderSide(color: tarea.esCompletada ? colorBase : (esMedianoche ? Colors.white54 : Colors.black45), width: 1.5),
-                          onChanged: (_) => _completarConFeedbackVisual(),
+                          onChanged: (_) => ref.read(tareaProvider.notifier).toggleTarea(tarea.id),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -248,7 +222,7 @@ class _TareaLandscapeCardState extends ConsumerState<TareaLandscapeCard> {
                             if (puedeDeshacerRecurrente) {
                               ref.read(tareaProvider.notifier).deshacerRecurrente(tarea.id);
                             } else {
-                              _completarConFeedbackVisual();
+                              ref.read(tareaProvider.notifier).toggleTarea(tarea.id);
                             }
                           },
                         ),

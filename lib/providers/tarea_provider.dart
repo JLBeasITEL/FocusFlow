@@ -55,17 +55,29 @@ class TareaNotifier extends Notifier<List<Tarea>> {
       final ultimoDiaLimpieza = prefs.getString('ultimo_dia_limpieza_tareas');
 
       if (ultimoDiaLimpieza != hoy) {
+        // Una recurrente completada acá es SIEMPRE su última ocurrencia (la
+        // que agotó el límite, ver _completarUltimaOcurrencia/
+        // archivarDirectamente): una recurrente que sigue viva nunca queda
+        // con esCompletada=true (ver comentario de toggleTarea). Esas van al
+        // archivo en vez de borrarse sin más; las demás completadas (tareas
+        // normales, sin recurrencia) se descartan como siempre.
+        final paraArchivar = tareasCargadas.where((tarea) => tarea.esCompletada && tarea.tipoRecurrencia != TipoRecurrencia.ninguna).toList();
+
         // 1. Filtramos para eliminar las completadas de ayer
         tareasCargadas = tareasCargadas.where((tarea) => !tarea.esCompletada).toList();
-        
+
         // 2. Registramos que ya limpiamos hoy
         await prefs.setString('ultimo_dia_limpieza_tareas', hoy);
-        
+
         // 3. Asignamos la lista limpia al estado de la aplicación
         state = tareasCargadas;
-        
+
         // 4. ¡CRÍTICO! Guardamos en la base de datos para borrar las viejas para siempre
         _guardarTareas();
+
+        for (final tarea in paraArchivar) {
+          await ref.read(archivoTareasProvider.notifier).archivar(tarea);
+        }
       } else {
         // Si ya se limpió hoy, simplemente cargamos las tareas normales
         state = tareasCargadas;
@@ -122,30 +134,42 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     NotificacionesService().programarAlertaDefinitiva(tarea);
   }
 
-  // Tareas recurrentes: al completarlas (false -> true) NUNCA se persiste
-  // esCompletada = true mientras sigan activas. En su lugar, en el MISMO
-  // copyWith se recalcula fechaLimite con siguienteFecha() y esCompletada
-  // vuelve a false — atómicamente, para que una tarea recurrente que sigue
-  // viva jamás quede guardada en estado "completada" y termine borrada por
-  // la limpieza diaria de _cargarTareasInterno (ver comentario ahí).
-  // fechaLimiteAnterior guarda la fecha vieja para poder deshacer (ver
-  // deshacerRecurrente) y para que WidgetProgresoService cuente el día como
-  // completado. ocurrenciasCompletadas sube en CUALQUIER completación de una
-  // recurrente (siga o se archive): es histórico real (ver Tarea, comentario
-  // del campo), no una cuenta que solo importe si hay límite puesto.
+  // Tareas recurrentes QUE SIGUEN vivas: al completarlas (false -> true)
+  // NUNCA se persiste esCompletada = true. En su lugar, en el MISMO copyWith
+  // se recalcula fechaLimite con siguienteFecha() y esCompletada vuelve a
+  // false — atómicamente, para que una recurrente que sigue viva jamás
+  // quede guardada en estado "completada" y termine borrada por la limpieza
+  // diaria de _cargarTareasInterno (ver comentario ahí). fechaLimiteAnterior
+  // guarda la fecha vieja para poder deshacer (ver deshacerRecurrente) y
+  // para que WidgetProgresoService cuente el día como completado.
+  // ocurrenciasCompletadas sube en CUALQUIER completación de una recurrente
+  // (siga o sea la última): es histórico real (ver Tarea, comentario del
+  // campo), no una cuenta que solo importe si hay límite puesto.
   //
   // Hay un tercer caso, además de "sigue" y "no recurrente / des-completando":
   // la ocurrencia que se completa agota el límite de la recurrencia (ver
-  // Tarea.completarAgotaLimite). Ahí no hay "siguiente fecha" que valga: la
-  // tarea se archiva (_archivarPorLimiteAgotado) y esta función corta antes
-  // de tocar `state` con el resto de la lógica de abajo.
+  // Tarea.completarAgotaLimite). Ahí SÍ se persiste esCompletada=true, igual
+  // que cualquier tarea normal — se ve tachada en la lista el resto del día
+  // y la limpieza diaria la manda al archivo en vez de borrarla (ver
+  // _completarUltimaOcurrencia y el comentario de _cargarTareasInterno).
+  //
+  // Y un cuarto caso, simétrico al anterior: DESmarcar una recurrente que
+  // está tachada por haber agotado su límite. Un simple flip de esCompletada
+  // dejaría fechaLimite/contador desalineados (fechaLimite quedó igual, el
+  // contador ya subió) — se deshace con la reconstrucción completa de
+  // deshacerRecurrente, la misma que usa el botón de "Deshacer" dedicado.
   void toggleTarea(String id) {
     final tareaActual = state.firstWhere((t) => t.id == id);
     final bool completando = !tareaActual.esCompletada;
     final bool esRecurrente = tareaActual.tipoRecurrencia != TipoRecurrencia.ninguna;
 
     if (completando && esRecurrente && tareaActual.completarAgotaLimite) {
-      _archivarPorLimiteAgotado(tareaActual);
+      _completarUltimaOcurrencia(tareaActual);
+      return;
+    }
+
+    if (!completando && esRecurrente && tareaActual.fechaLimiteAnterior != null) {
+      deshacerRecurrente(id);
       return;
     }
 
@@ -192,47 +216,57 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     }
   }
 
-  // Archiva una tarea recurrente que acaba de agotar su límite: suma la
-  // completación de hoy al histórico, respalda fechaLimite/subtareas
-  // vigentes (mismo propósito que en el caso "sigue": permitir deshacer, ver
-  // restaurarDesdeArchivo) y la saca de la lista activa hacia el archivo. A
-  // propósito NO llama a programarAlertaDefinitiva: no hay una próxima
-  // ocurrencia que vaya a necesitar una alarma, así que solo se cancela la
-  // que ya existía.
-  void _archivarPorLimiteAgotado(Tarea tarea) {
-    final archivada = tarea.copyWith(
-      ocurrenciasCompletadas: tarea.ocurrenciasCompletadas + 1,
-      ocurrenciasCompletadasAnterior: tarea.ocurrenciasCompletadas,
-      fechaLimiteAnterior: tarea.fechaLimite,
-      subtareasAnterior: tarea.subtareas.isEmpty ? null : tarea.subtareas,
-      esCompletada: true,
-    );
-    state = state.where((t) => t.id != tarea.id).toList();
+  // Completa la ÚLTIMA ocurrencia de una recurrente que acaba de agotar su
+  // límite: se marca esCompletada=true y se queda en `state` — se ve tachada
+  // en la lista exactamente igual que cualquier tarea completada normal,
+  // durante el resto del día. Recién la limpieza diaria de
+  // _cargarTareasInterno la manda al archivo (en vez de borrarla, como haría
+  // con una tarea normal), no este método. Respalda fechaLimite/contador
+  // (mismo propósito que el caso "sigue": permitir deshacer con
+  // deshacerRecurrente mientras siga activa, o con restaurarDesdeArchivo una
+  // vez archivada). A propósito NO llama a programarAlertaDefinitiva: no hay
+  // una próxima ocurrencia que vaya a necesitar una alarma, así que solo se
+  // cancela la que ya existía.
+  void _completarUltimaOcurrencia(Tarea tarea) {
+    state = [
+      for (final t in state)
+        if (t.id == tarea.id)
+          t.copyWith(
+            esCompletada: true,
+            ocurrenciasCompletadas: t.ocurrenciasCompletadas + 1,
+            ocurrenciasCompletadasAnterior: t.ocurrenciasCompletadas,
+            fechaLimiteAnterior: t.fechaLimite,
+          )
+        else
+          t,
+    ];
     _guardarTareas();
-    ref.read(archivoTareasProvider.notifier).archivar(archivada);
     NotificacionesService().cancelarAlerta(tarea.id);
   }
 
-  // Archiva una tarea recurrente al EDITARLA cuando el nuevo tope ya quedó
-  // por debajo de lo que ya se había completado (ver Tarea.yaAgotoLimite:
-  // ej. tenía 12 cuotas, lleva 8, y el usuario lo cambia a 6). A diferencia
-  // de _archivarPorLimiteAgotado, acá NO se está completando ninguna
-  // ocurrencia — el histórico (ocurrenciasCompletadas) se queda tal cual
-  // quedó editado, nunca sube. El formulario (add_tarea_modal.dart) es
-  // responsable de confirmar esto con el usuario ANTES de llamar acá.
+  // Mismo tratamiento que _completarUltimaOcurrencia, pero al EDITAR una
+  // tarea cuando el nuevo tope ya quedó por debajo de lo que ya se había
+  // completado (ver Tarea.yaAgotoLimite: ej. tenía 12 cuotas, lleva 8, y el
+  // usuario lo cambia a 6). A diferencia de ese método, acá NO se está
+  // completando ninguna ocurrencia — el histórico (ocurrenciasCompletadas)
+  // se queda tal cual quedó editado, nunca sube. El formulario
+  // (add_tarea_modal.dart) es responsable de confirmar esto con el usuario
+  // ANTES de llamar acá.
   void archivarDirectamente(Tarea tareaEditada) {
-    final archivada = tareaEditada.copyWith(
+    final completada = tareaEditada.copyWith(
+      esCompletada: true,
       // Sin incremento: ocurrenciasCompletadasAnterior == ocurrenciasCompletadas
       // a propósito, para que restaurar esta tarea sea un no-op sobre el
       // contador (ver _reconstruirTrasDeshacer) — nada que "deshacer" ahí,
       // ya que nada se completó.
       ocurrenciasCompletadasAnterior: tareaEditada.ocurrenciasCompletadas,
       fechaLimiteAnterior: tareaEditada.fechaLimite,
-      esCompletada: true,
     );
-    state = state.where((t) => t.id != tareaEditada.id).toList();
+    state = [
+      for (final t in state)
+        if (t.id == tareaEditada.id) completada else t,
+    ];
     _guardarTareas();
-    ref.read(archivoTareasProvider.notifier).archivar(archivada);
     NotificacionesService().cancelarAlerta(tareaEditada.id);
   }
 

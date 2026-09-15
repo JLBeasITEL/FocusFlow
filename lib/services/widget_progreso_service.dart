@@ -53,12 +53,16 @@ class WidgetProgresoService {
       // tarea sin fechaLimite, o con fechaLimite de otro día, no es "del día
       // actual" y no debe sumar ni al total ni a las completadas del anillo.
       final tareasDeHoy = tareas.where((t) => _esHoy(t.fechaLimite)).toList();
-      // Una tarea recurrente completada HOY ya no tiene fechaLimite de hoy
-      // (avanzó a la próxima ocurrencia vía TareaNotifier.toggleTarea, que
-      // nunca la deja en esCompletada=true) — sin contarla aparte, el
-      // anillo de Progreso bajaría en vez de subir al completarla.
+      // Una tarea recurrente completada HOY que SIGUE viva ya no tiene
+      // fechaLimite de hoy (avanzó a la próxima ocurrencia vía
+      // TareaNotifier.toggleTarea) — sin contarla aparte, el anillo de
+      // Progreso bajaría en vez de subir al completarla. !_esHoy(t.fechaLimite)
+      // evita contarla DOS veces cuando en cambio es la ÚLTIMA ocurrencia
+      // (agotó su límite): esa sí queda con esCompletada=true y fechaLimite
+      // SIN cambiar (ver TareaNotifier._completarUltimaOcurrencia), así que
+      // ya la cuenta tareasDeHoy.where(esCompletada) más abajo.
       final recurrentesCompletadasHoy = tareas
-          .where((t) => t.tipoRecurrencia != TipoRecurrencia.ninguna && _esHoy(t.fechaLimiteAnterior))
+          .where((t) => t.tipoRecurrencia != TipoRecurrencia.ninguna && _esHoy(t.fechaLimiteAnterior) && !_esHoy(t.fechaLimite))
           .toList();
       final total = tareasDeHoy.length + recurrentesCompletadasHoy.length;
       final completadas = tareasDeHoy.where((t) => t.esCompletada).length + recurrentesCompletadasHoy.length;

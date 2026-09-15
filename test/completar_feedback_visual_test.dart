@@ -1,10 +1,13 @@
-// Cubre el fix pedido por el usuario: completar la ÚLTIMA ocurrencia de una
-// tarea recurrente con límite debe MOSTRARSE como completada (checkbox
-// marcado, tachado) por un instante antes de archivarse — antes de este fix,
-// TareaNotifier.toggleTarea archivaba en el mismo frame, sacando la tarjeta
-// de la lista sin que el usuario llegara a ver ningún feedback ("desaparece
-// sin más"). Ver _completarConFeedbackVisual en TareaCard (home_screen.dart)
-// y TareaLandscapeCard (tarea_card_landscape.dart).
+// Cubre el diseño pedido por el usuario (2026-09-14): completar la ÚLTIMA
+// ocurrencia de una tarea recurrente con límite debe MOSTRARSE como
+// completada (checkbox marcado, tachado) y quedarse así en la lista activa
+// — igual que cualquier tarea normal completada — en vez de desaparecer al
+// toque o tras un retraso cosmético. El archivado real de verdad ocurre
+// recién en la limpieza diaria (ver TareaNotifier._cargarTareasInterno y
+// tarea_limite_recurrencia_provider_test.dart), no al completar. Prueba
+// ambas tarjetas (TareaCard en home_screen.dart y TareaLandscapeCard), que
+// no necesitan ninguna lógica propia para esto: alcanza con que
+// TareaNotifier.toggleTarea deje esCompletada=true en el lugar.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,12 +44,36 @@ Future<ProviderContainer> _pumpConTarea(WidgetTester tester, Widget Function(Tar
   final tarea = _tareaUltimaOcurrencia();
   final container = ProviderContainer();
   addTearDown(container.dispose);
+  // Dispara y deja asentar el build() inicial (fire-and-forget) de
+  // TareaNotifier ANTES de fijar el estado a mano: sin este respiro, ese
+  // _cargarTareas() inicial puede resolver más tarde y pisar el estado que
+  // este test recién dejó (mismo cuidado que en
+  // tarea_limite_recurrencia_provider_test.dart).
+  container.read(tareaProvider.notifier);
+  await tester.pump();
   container.read(tareaProvider.notifier).state = [tarea];
 
+  // TareaCard/TareaLandscapeCard reciben `tarea` como prop fija: no observan
+  // tareaProvider por su cuenta (eso lo hace su padre real, home_screen.dart,
+  // que sí usa ref.watch). Sin este Consumer envolvente, el checkbox nunca
+  // reflejaría el cambio tras togglear, porque widget.tarea se quedaría
+  // congelado en la instancia de antes del tap.
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MaterialApp(home: Scaffold(body: SizedBox(width: ancho, child: construirTarjeta(tarea)))),
+      child: MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: ancho,
+            child: Consumer(
+              builder: (context, ref, _) {
+                final actual = ref.watch(tareaProvider).firstWhere((t) => t.id == tarea.id);
+                return construirTarjeta(actual);
+              },
+            ),
+          ),
+        ),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -70,39 +97,23 @@ void main() {
   });
 
   void ejercitarTarjeta(String nombre, Widget Function(Tarea) construirTarjeta, {required double ancho}) {
-    group(nombre, () {
-      testWidgets('muestra tachado de inmediato y archiva recién después del retraso', (tester) async {
-        final container = await _pumpConTarea(tester, construirTarjeta, ancho: ancho);
+    testWidgets('$nombre: completar la última ocurrencia la tacha y la deja en la lista, sin archivarla', (tester) async {
+      final container = await _pumpConTarea(tester, construirTarjeta, ancho: ancho);
 
-        await tester.tap(find.byType(Checkbox).first);
-        await tester.pump(); // un solo frame: debe verse YA como completada
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.pumpAndSettle();
 
-        expect(tester.widget<Checkbox>(find.byType(Checkbox).first).value, isTrue);
-        // Todavía no se archivó de verdad: el dato real sigue sin tocar.
-        expect(container.read(tareaProvider), hasLength(1));
-        expect(container.read(tareaProvider).first.esCompletada, isFalse);
-        expect(container.read(archivoTareasProvider), isEmpty);
+      // Checkbox marcado y tachado de inmediato — sin ningún retraso que
+      // esperar, porque ahora es el dato real, no una simulación visual.
+      expect(tester.widget<Checkbox>(find.byType(Checkbox).first).value, isTrue);
 
-        await tester.pump(const Duration(milliseconds: 700));
-        await tester.pumpAndSettle();
-
-        expect(container.read(tareaProvider), isEmpty);
-        expect(container.read(archivoTareasProvider), hasLength(1));
-      });
-
-      testWidgets('tocar el checkbox dos veces seguidas durante el retraso no dispara el archivado dos veces', (tester) async {
-        final container = await _pumpConTarea(tester, construirTarjeta, ancho: ancho);
-
-        await tester.tap(find.byType(Checkbox).first);
-        await tester.pump();
-        await tester.tap(find.byType(Checkbox).first);
-        await tester.pump();
-
-        await tester.pump(const Duration(milliseconds: 700));
-        await tester.pumpAndSettle();
-
-        expect(container.read(archivoTareasProvider), hasLength(1));
-      });
+      // Sigue en la lista activa (no desaparece ni se archiva): el
+      // archivado real ocurre recién en la limpieza diaria.
+      final activas = container.read(tareaProvider);
+      expect(activas, hasLength(1));
+      expect(activas.first.esCompletada, isTrue);
+      expect(activas.first.ocurrenciasCompletadas, 2);
+      expect(container.read(archivoTareasProvider), isEmpty);
     });
   }
 
