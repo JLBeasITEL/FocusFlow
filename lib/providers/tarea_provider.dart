@@ -705,3 +705,219 @@ class VistaAgrupadaNotifier extends Notifier<bool> {
 final vistaAgrupadaProvider = NotifierProvider<VistaAgrupadaNotifier, bool>(() {
   return VistaAgrupadaNotifier();
 });
+
+// --- FILTRO DE TAREAS ---
+// "Día" no compara contra un día de la semana (Tarea no tiene ese campo,
+// solo fechaLimite como DateTime? puntual): compara la fecha límite contra
+// el calendario real (hoy, esta semana) o contra estaAtrasada/null.
+enum FiltroDia { todas, hoy, estaSemana, atrasadas, sinFecha }
+
+extension FiltroDiaLabel on FiltroDia {
+  String get label {
+    switch (this) {
+      case FiltroDia.todas: return 'Todos los días';
+      case FiltroDia.hoy: return 'Hoy';
+      case FiltroDia.estaSemana: return 'Esta semana';
+      case FiltroDia.atrasadas: return 'Atrasadas';
+      case FiltroDia.sinFecha: return 'Sin fecha';
+    }
+  }
+}
+
+enum FiltroSubtareas { todas, conSubtareas, sinSubtareas }
+
+extension FiltroSubtareasLabel on FiltroSubtareas {
+  String get label {
+    switch (this) {
+      case FiltroSubtareas.todas: return 'Todas';
+      case FiltroSubtareas.conSubtareas: return 'Con subtareas';
+      case FiltroSubtareas.sinSubtareas: return 'Sin subtareas';
+    }
+  }
+}
+
+enum FiltroRecurrencia { todas, recurrentes, noRecurrentes }
+
+extension FiltroRecurrenciaLabel on FiltroRecurrencia {
+  String get label {
+    switch (this) {
+      case FiltroRecurrencia.todas: return 'Todas';
+      case FiltroRecurrencia.recurrentes: return 'Recurrentes';
+      case FiltroRecurrencia.noRecurrentes: return 'No recurrentes';
+    }
+  }
+}
+
+enum FiltroCompletado { todas, completas, incompletas }
+
+extension FiltroCompletadoLabel on FiltroCompletado {
+  String get label {
+    switch (this) {
+      case FiltroCompletado.todas: return 'Todas';
+      case FiltroCompletado.completas: return 'Completas';
+      case FiltroCompletado.incompletas: return 'Incompletas';
+    }
+  }
+}
+
+bool _mismoDiaCalendario(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+class FiltroTareas {
+  final Set<int> nivelesUrgencia;
+  final FiltroDia dia;
+  final Set<String> grupos;
+  final FiltroSubtareas subtareas;
+  final FiltroRecurrencia recurrencia;
+  final FiltroCompletado completado;
+
+  const FiltroTareas({
+    this.nivelesUrgencia = const {},
+    this.dia = FiltroDia.todas,
+    this.grupos = const {},
+    this.subtareas = FiltroSubtareas.todas,
+    this.recurrencia = FiltroRecurrencia.todas,
+    this.completado = FiltroCompletado.todas,
+  });
+
+  bool get activo =>
+      nivelesUrgencia.isNotEmpty ||
+      dia != FiltroDia.todas ||
+      grupos.isNotEmpty ||
+      subtareas != FiltroSubtareas.todas ||
+      recurrencia != FiltroRecurrencia.todas ||
+      completado != FiltroCompletado.todas;
+
+  int get cantidadActivos {
+    var n = 0;
+    if (nivelesUrgencia.isNotEmpty) n++;
+    if (dia != FiltroDia.todas) n++;
+    if (grupos.isNotEmpty) n++;
+    if (subtareas != FiltroSubtareas.todas) n++;
+    if (recurrencia != FiltroRecurrencia.todas) n++;
+    if (completado != FiltroCompletado.todas) n++;
+    return n;
+  }
+
+  FiltroTareas copyWith({
+    Set<int>? nivelesUrgencia,
+    FiltroDia? dia,
+    Set<String>? grupos,
+    FiltroSubtareas? subtareas,
+    FiltroRecurrencia? recurrencia,
+    FiltroCompletado? completado,
+  }) {
+    return FiltroTareas(
+      nivelesUrgencia: nivelesUrgencia ?? this.nivelesUrgencia,
+      dia: dia ?? this.dia,
+      grupos: grupos ?? this.grupos,
+      subtareas: subtareas ?? this.subtareas,
+      recurrencia: recurrencia ?? this.recurrencia,
+      completado: completado ?? this.completado,
+    );
+  }
+
+  // Usa tarea.urgencia (getter recalculado) y no urgenciaBase, para que el
+  // filtro coincida con el nivel que la tarjeta realmente muestra.
+  bool coincide(Tarea t) {
+    if (nivelesUrgencia.isNotEmpty && !nivelesUrgencia.contains(t.urgencia)) return false;
+    if (grupos.isNotEmpty && !grupos.contains(t.grupo)) return false;
+
+    switch (completado) {
+      case FiltroCompletado.completas:
+        if (!t.esCompletada) return false;
+      case FiltroCompletado.incompletas:
+        if (t.esCompletada) return false;
+      case FiltroCompletado.todas:
+        break;
+    }
+
+    switch (subtareas) {
+      case FiltroSubtareas.conSubtareas:
+        if (t.subtareas.isEmpty) return false;
+      case FiltroSubtareas.sinSubtareas:
+        if (t.subtareas.isNotEmpty) return false;
+      case FiltroSubtareas.todas:
+        break;
+    }
+
+    switch (recurrencia) {
+      case FiltroRecurrencia.recurrentes:
+        if (t.tipoRecurrencia == TipoRecurrencia.ninguna) return false;
+      case FiltroRecurrencia.noRecurrentes:
+        if (t.tipoRecurrencia != TipoRecurrencia.ninguna) return false;
+      case FiltroRecurrencia.todas:
+        break;
+    }
+
+    switch (dia) {
+      case FiltroDia.hoy:
+        if (t.fechaLimite == null || !_mismoDiaCalendario(t.fechaLimite!, DateTime.now())) return false;
+      case FiltroDia.estaSemana:
+        if (t.fechaLimite == null) return false;
+        final ahora = DateTime.now();
+        final inicioSemana = DateTime(ahora.year, ahora.month, ahora.day).subtract(Duration(days: ahora.weekday - 1));
+        final finSemana = inicioSemana.add(const Duration(days: 7));
+        if (t.fechaLimite!.isBefore(inicioSemana) || !t.fechaLimite!.isBefore(finSemana)) return false;
+      case FiltroDia.atrasadas:
+        if (!t.estaAtrasada) return false;
+      case FiltroDia.sinFecha:
+        if (t.fechaLimite != null) return false;
+      case FiltroDia.todas:
+        break;
+    }
+
+    return true;
+  }
+}
+
+class FiltroTareasNotifier extends Notifier<FiltroTareas> {
+  static const String _key = 'filtro_tareas_v1';
+
+  @override
+  FiltroTareas build() {
+    _cargar();
+    return const FiltroTareas();
+  }
+
+  Future<void> _cargar() async {
+    final prefs = await SharedPreferences.getInstance();
+    final guardado = prefs.getString(_key);
+    if (guardado == null) return;
+    try {
+      final mapa = jsonDecode(guardado) as Map<String, dynamic>;
+      state = FiltroTareas(
+        nivelesUrgencia: Set<int>.from(mapa['nivelesUrgencia'] ?? const []),
+        dia: FiltroDia.values.firstWhere((d) => d.name == mapa['dia'], orElse: () => FiltroDia.todas),
+        grupos: Set<String>.from(mapa['grupos'] ?? const []),
+        subtareas: FiltroSubtareas.values.firstWhere((s) => s.name == mapa['subtareas'], orElse: () => FiltroSubtareas.todas),
+        recurrencia: FiltroRecurrencia.values.firstWhere((r) => r.name == mapa['recurrencia'], orElse: () => FiltroRecurrencia.todas),
+        completado: FiltroCompletado.values.firstWhere((c) => c.name == mapa['completado'], orElse: () => FiltroCompletado.todas),
+      );
+    } catch (_) {
+      // Filtro guardado corrupto: seguimos con el filtro vacío por defecto.
+    }
+  }
+
+  Future<void> actualizar(FiltroTareas nuevo) async {
+    state = nuevo;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode({
+      'nivelesUrgencia': state.nivelesUrgencia.toList(),
+      'dia': state.dia.name,
+      'grupos': state.grupos.toList(),
+      'subtareas': state.subtareas.name,
+      'recurrencia': state.recurrencia.name,
+      'completado': state.completado.name,
+    }));
+  }
+
+  Future<void> limpiar() async {
+    state = const FiltroTareas();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
+  }
+}
+
+final filtroTareasProvider = NotifierProvider<FiltroTareasNotifier, FiltroTareas>(() {
+  return FiltroTareasNotifier();
+});

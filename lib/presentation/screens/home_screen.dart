@@ -12,7 +12,9 @@ import '../../models/tarea.dart';
 import '../../models/nota.dart';
 import '../../models/rutina.dart';
 import '../../providers/nota_provider.dart';
+import '../../providers/configuracion_provider.dart';
 import '../widgets/add_tarea_modal.dart';
+import '../widgets/filtro_tareas_modal.dart';
 import '../../providers/rutina_provider.dart';
 import '../../providers/monedas_provider.dart';
 import '../widgets/rutina_card.dart';
@@ -34,6 +36,7 @@ import '../widgets/rutina_card_landscape.dart';
 import '../widgets/home_sidebar_landscape.dart';
 import '../widgets/overflow_scrollbar.dart';
 import '../../core/temporizador_rutina_dialogo.dart';
+import '../utils/grid_celda_optima.dart';
 
 // Puente para pedirle a HomeScreen que cambie de pestaña desde fuera del
 // árbol de widgets (el handler de clicks del widget de Rutinas en
@@ -80,6 +83,7 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
+
 // Un ítem del tablero de notas: o una nota suelta, o un grupo de notas
 // (ver _buildTabNotas). notasGrupo es la misma lista referenciada en el
 // mapa gruposPorNombre mientras se arma el tablero, así que se completa
@@ -105,6 +109,11 @@ class _ItemTablero {
 class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   int _currentIndex = 0;
+  // Valor de _currentIndex antes del cambio más reciente: solo se usa para
+  // saber hacia qué lado deslizar en TransicionTab.horizontal (si el índice
+  // subió, la pantalla nueva entra desde la derecha; si bajó, desde la
+  // izquierda). Se actualiza junto con _currentIndex en initState.
+  int _indiceAnteriorLandscape = 0;
   // Grupo que se está arrastrando en este momento para reordenarlo (o null
   // si no hay ningún arrastre en curso). Se usa para colapsarlo mientras
   // se mueve y devolverlo a su estado previo al soltarlo.
@@ -148,6 +157,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     // esta pestaña sobreviva a un remount de HomeScreen — ver el comentario
     // de currentTabIndexProvider más arriba.
     _currentIndex = ref.read(currentTabIndexProvider);
+    _indiceAnteriorLandscape = _currentIndex;
     _tabController = TabController(length: 3, vsync: this, initialIndex: _currentIndex);
 
     _tabSolicitadaWidgetSub = ref.listenManual<int?>(tabSolicitadaWidgetProvider, (previo, indice) {
@@ -160,14 +170,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     _tabController.animation?.addListener(() {
       final int proximoIndex = _tabController.animation!.value.round();
       if (_currentIndex != proximoIndex) {
-        setState(() => _currentIndex = proximoIndex);
+        setState(() {
+          _indiceAnteriorLandscape = _currentIndex;
+          _currentIndex = proximoIndex;
+        });
         ref.read(currentTabIndexProvider.notifier).actualizar(proximoIndex);
       }
     });
 
     _tabController.addListener(() {
       if (_tabController.indexIsChanging && _currentIndex != _tabController.index) {
-        setState(() => _currentIndex = _tabController.index);
+        setState(() {
+          _indiceAnteriorLandscape = _currentIndex;
+          _currentIndex = _tabController.index;
+        });
         ref.read(currentTabIndexProvider.notifier).actualizar(_tabController.index);
       }
     });
@@ -268,11 +284,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                 HomeSidebarLandscape(currentIndex: _currentIndex, tema: temaActual),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: switch (_currentIndex) {
-                    0 => _buildContenidoTareasLandscape(tareas, vistaAgrupada, ordenGrupos, temaActual, colorPrincipal),
-                    1 => _buildContenidoRutinasLandscape(temaActual, colorPrincipal),
-                    _ => _buildTabNotas(colorPrincipal, notasGuardadas, esLandscape: true),
-                  },
+                  // Portrait ya permite cambiar de pestaña con swipe porque
+                  // TabBarView lo trae de fábrica; landscape muestra un
+                  // contenido distinto por pestaña (no un TabBarView), así
+                  // que hay que detectar el swipe a mano. onHorizontalDragEnd
+                  // (en vez de seguir el dedo) porque cada pestaña ya tiene
+                  // sus propios gestos (arrastrar una nota, tocar una
+                  // rutina): igual que las flechas del sidebar, solo dispara
+                  // el cambio al soltar, sin competir por el gesto mientras
+                  // se arrastra dentro del contenido.
+                  // Se desactiva mientras hay algo "abierto" encima del grid
+                  // (selección de notas para agrupar, panel de detalle de
+                  // rutina): cambiar de pestaña ahí perdería ese estado sin
+                  // que el usuario lo pidiera.
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onHorizontalDragEnd: (_modoSeleccionNotas || _rutinaLandscapeSeleccionada != null)
+                        ? null
+                        : (details) {
+                            final double velocidad = details.primaryVelocity ?? 0;
+                            if (velocidad.abs() < 250) return;
+                            if (velocidad < 0 && _currentIndex < 2) {
+                              _tabController.animateTo(_currentIndex + 1);
+                            } else if (velocidad > 0 && _currentIndex > 0) {
+                              _tabController.animateTo(_currentIndex - 1);
+                            }
+                          },
+                    child: _construirContenidoTabAnimado(switch (_currentIndex) {
+                      0 => _buildContenidoTareasLandscape(tareas, vistaAgrupada, ordenGrupos, temaActual, colorPrincipal),
+                      1 => _buildContenidoRutinasLandscape(temaActual, colorPrincipal),
+                      _ => _buildTabNotas(colorPrincipal, notasGuardadas, esLandscape: true),
+                    }),
+                  ),
                 ),
               ],
             ),
@@ -280,6 +323,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         ),
       ],
     );
+  }
+
+  // Envuelve el contenido de la pestaña activa en la transición elegida en
+  // Ajustes > Apariencia > Animación de pestañas (transicionTabProvider, ver
+  // configuracion_provider.dart). El ValueKey(_currentIndex) es lo que le
+  // indica a AnimatedSwitcher que hay que animar: cuando cambia, trata el
+  // widget anterior como "saliente" y este como "entrante" en vez de
+  // reconstruir en el lugar.
+  Widget _construirContenidoTabAnimado(Widget contenido) {
+    final child = KeyedSubtree(key: ValueKey<int>(_currentIndex), child: contenido);
+    const duracion = Duration(milliseconds: 220);
+    final transicion = ref.watch(transicionTabProvider);
+
+    switch (transicion) {
+      case TransicionTab.fade:
+        return AnimatedSwitcher(duration: duracion, child: child);
+
+      case TransicionTab.fadeDeslizamiento:
+        return AnimatedSwitcher(
+          duration: duracion,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero).animate(animation),
+              child: child,
+            ),
+          ),
+          child: child,
+        );
+
+      case TransicionTab.horizontal:
+        // +1 si se avanzó de pestaña (entra desde la derecha), -1 si se
+        // retrocedió (entra desde la izquierda). 0 solo puede pasar en el
+        // primer build, donde no hay transición que mostrar todavía.
+        final double direccion = (_currentIndex - _indiceAnteriorLandscape).sign.toDouble();
+        return AnimatedSwitcher(
+          duration: duracion,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(begin: Offset(direccion * 0.2, 0), end: Offset.zero).animate(animation),
+              child: child,
+            ),
+          ),
+          child: child,
+        );
+    }
   }
 
   Widget _buildHeaderLandscape(TemaApp temaActual, Color colorPrincipal, int totalNotas) {
@@ -339,11 +429,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
   Widget _buildContenidoTareasLandscape(List<Tarea> tareas, bool vistaAgrupada, List<String> ordenGrupos, TemaApp temaActual, Color colorPrincipal) {
     if (tareas.isEmpty) {
+      final filtroActivo = ref.read(filtroTareasProvider).activo;
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Text(
-            'Nada por aquí, disfruta de tu día.',
+            filtroActivo ? 'Ninguna tarea coincide con el filtro.' : 'Nada por aquí, disfruta de tu día.',
             textAlign: TextAlign.center,
             style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6), fontSize: 15, height: 1.4),
           ),
@@ -627,7 +718,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
               final double anchoDisponible = constraints.maxWidth - padHorizontal * 2;
               final double altoDisponible = constraints.maxHeight - padTop - padBottom;
 
-              final int columnas = _calcularColumnasOptimas(
+              final int columnas = calcularColumnasOptimas(
                 totalCeldas: totalCeldas,
                 anchoDisponible: anchoDisponible,
                 altoDisponible: altoDisponible,
@@ -658,7 +749,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             builder: (context, candidateData, rejectedData) => TarjetaGrupoNotas(
                               nombreGrupo: item.nombreGrupo!,
                               notas: item.notasGrupo!,
-                              columnasTotales: columnas,
+                              tamanoCelda: tamanoCelda,
                               deshabilitada: _modoSeleccionNotas,
                               resaltada: candidateData.isNotEmpty,
                               onTap: () => Navigator.push(
@@ -673,7 +764,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                           key: ValueKey(item.notaSuelta!.id),
                           crossAxisCellCount: 1,
                           mainAxisCellCount: 1,
-                          child: _buildNotaArrastrable(item.notaSuelta!, notasActuales, columnas, tamanoCelda),
+                          child: _buildNotaArrastrable(item.notaSuelta!, notasActuales, tamanoCelda),
                         ),
                   ],
                 ),
@@ -690,11 +781,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   // arrastre permite soltarla sobre otra nota (cambia de posición en la
   // lista) o sobre una tarjeta de grupo (se suma a ese grupo). Deshabilitado
   // en modo selección para no pelear con el toggle de checkbox.
-  Widget _buildNotaArrastrable(NotaPostIt nota, List<NotaPostIt> notasActuales, int columnas, double tamanoCelda) {
+  Widget _buildNotaArrastrable(NotaPostIt nota, List<NotaPostIt> notasActuales, double tamanoCelda) {
     final Widget tarjeta = PostItCard(
       nota: nota,
       index: notasActuales.indexOf(nota),
-      columnasTotales: columnas,
+      tamanoCelda: tamanoCelda,
       modoSeleccion: _modoSeleccionNotas,
       seleccionada: _notasSeleccionadas.contains(nota.id),
       onToggleSeleccion: () => _alternarSeleccionNota(nota.id),
@@ -725,56 +816,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
         );
       },
     );
-  }
-
-  // Tamaño mínimo de celda (dp): por debajo de esto una nota deja de ser
-  // usable (texto ilegible, clip de borrado imposible de tocar, contenido
-  // desbordado). PostItCard escala su fuente con columnasTotales pero la
-  // clampea en 8pt y tiene paddings fijos que no encogen más allá de
-  // cierto punto, así que celdas por debajo de ~140dp ya no alcanzan para
-  // título + 3 renglones de checklist sin desbordar (visto en landscape,
-  // donde el alto disponible es chico y el algoritmo agregaba columnas de
-  // más para evitar el scroll). Si hay demasiadas notas para entrar todas
-  // sin cruzar este piso, se prioriza el tamaño mínimo y el resto se
-  // alcanza haciendo scroll (el grid ya vive en un SingleChildScrollView).
-  static const double _tamanoMinimoCelda = 140.0;
-
-  // Prueba cada cantidad de columnas viable y elige la que produce las
-  // celdas cuadradas más grandes sin que el total de filas necesite más
-  // alto del disponible: así las notas se ajustan al tamaño de pantalla y
-  // a la orientación del dispositivo dejando el mínimo espacio vacío.
-  int _calcularColumnasOptimas({
-    required int totalCeldas,
-    required double anchoDisponible,
-    required double altoDisponible,
-    required double espaciado,
-  }) {
-    if (totalCeldas <= 0 || anchoDisponible <= 0) return 1;
-    const int minColumnas = 1;
-    final int columnasPorAncho = ((anchoDisponible + espaciado) / (_tamanoMinimoCelda + espaciado)).floor();
-    final int maxColumnas = math.max(minColumnas, math.min(totalCeldas, columnasPorAncho));
-
-    int mejorColumnas = minColumnas;
-    double mejorTamanoCelda = 0;
-
-    for (int c = minColumnas; c <= maxColumnas; c++) {
-      final double tamanoCelda = (anchoDisponible - espaciado * (c - 1)) / c;
-      if (tamanoCelda <= 0) continue;
-      final int filas = (totalCeldas / c).ceil();
-      final double altoNecesario = filas * tamanoCelda + espaciado * (filas - 1);
-
-      if (altoNecesario <= altoDisponible && tamanoCelda > mejorTamanoCelda) {
-        mejorColumnas = c;
-        mejorTamanoCelda = tamanoCelda;
-      }
-    }
-
-    // Si ninguna combinación entra sin scroll (pantalla chica o muchas
-    // notas), nos quedamos con la que exige más columnas: son las celdas
-    // más chicas, pero las que menos alto ocupan.
-    if (mejorTamanoCelda == 0) mejorColumnas = maxColumnas;
-
-    return mejorColumnas;
   }
 
   // Barra sobre el tablero: fuera de modo selección, solo aparece el botón
@@ -957,8 +998,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     final ordenGrupos = ref.watch(ordenGruposProvider);
     final temaActual = ref.watch(temaProvider);
     final notasGuardadas = ref.watch(notaProvider);
+    final filtroTareas = ref.watch(filtroTareasProvider);
 
-    List<Tarea> tareas = List.from(tareasOriginales);
+    List<Tarea> tareas = tareasOriginales.where(filtroTareas.coincide).toList();
 
     // LÓGICA DE ORDENAMIENTO (Mantiene las completadas al final)
     tareas.sort((a, b) {
@@ -1165,6 +1207,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             ),
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () => abrirFiltroTareas(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: filtroTareas.activo ? colorPrincipal : colorPrincipal.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.filter_alt_rounded,
+                                  size: 18,
+                                  color: filtroTareas.activo ? temaActual.colorSobrePrincipal : colorPrincipal,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  filtroTareas.activo ? 'Filtro (${filtroTareas.cantidadActivos})' : 'Filtrar',
+                                  style: TextStyle(
+                                    color: filtroTareas.activo ? temaActual.colorSobrePrincipal : colorPrincipal,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1180,7 +1252,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 32),
                                 child: Text(
-                                  'Nada por aquí, disfruta de tu día.',
+                                  filtroTareas.activo
+                                      ? 'Ninguna tarea coincide con el filtro.'
+                                      : 'Nada por aquí, disfruta de tu día.',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(color: colorPrincipal.withOpacity(0.6), fontSize: 15, height: 1.4),
                                 ),

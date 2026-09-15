@@ -6,6 +6,7 @@ import '../../providers/rutina_provider.dart';
 import '../../providers/nota_provider.dart';
 import '../../providers/monedas_provider.dart';
 import '../../providers/tema_provider.dart';
+import 'filtro_tareas_modal.dart';
 import 'progreso_rutinas_bar.dart';
 import 'grupo_notas_card.dart';
 import 'overflow_scrollbar.dart';
@@ -66,6 +67,7 @@ class _SidebarTareas extends ConsumerWidget {
     final tipoOrden = ref.watch(ordenProvider);
     final vistaAgrupada = ref.watch(vistaAgrupadaProvider);
     final ordenGrupos = ref.watch(ordenGruposProvider);
+    final filtroTareas = ref.watch(filtroTareasProvider);
     final Color colorTexto = tema.colorTextoSuperficie;
     final Color colorPrincipal = tema.colorPrincipal;
 
@@ -111,22 +113,37 @@ class _SidebarTareas extends ConsumerWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: carpetas
-                .map((g) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(color: colorPrincipal.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14)),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.folder_rounded, size: 14, color: colorPrincipal),
-                          const SizedBox(width: 6),
-                          Text(g, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorPrincipal)),
-                          const SizedBox(width: 4),
-                          Text('${mapaCarpetas[g]}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorPrincipal.withValues(alpha: 0.7))),
-                        ],
-                      ),
-                    ))
-                .toList(),
+            children: carpetas.map((g) {
+              // Tocar una carpeta filtra la grilla a solo esas tareas
+              // (reusa filtroTareasProvider.grupos); tocarla de nuevo
+              // limpia el filtro de grupo en vez de dejarlo pegado.
+              final seleccionada = filtroTareas.grupos.contains(g);
+              final colorChip = seleccionada ? tema.colorSobrePrincipal : colorPrincipal;
+              return GestureDetector(
+                onTap: () {
+                  final notifier = ref.read(filtroTareasProvider.notifier);
+                  final esUnicaSeleccionada = filtroTareas.grupos.length == 1 && seleccionada;
+                  notifier.actualizar(filtroTareas.copyWith(grupos: esUnicaSeleccionada ? {} : {g}));
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: seleccionada ? colorPrincipal : colorPrincipal.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.folder_rounded, size: 14, color: colorChip),
+                      const SizedBox(width: 6),
+                      Text(g, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorChip)),
+                      const SizedBox(width: 4),
+                      Text('${mapaCarpetas[g]}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colorChip.withValues(alpha: 0.7))),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ],
         const SizedBox(height: 24),
@@ -146,6 +163,17 @@ class _SidebarTareas extends ConsumerWidget {
             icon: vistaAgrupada ? Icons.folder_rounded : Icons.view_agenda_rounded,
             texto: vistaAgrupada ? 'Agrupadas' : 'Todas juntas',
             colorPrincipal: colorPrincipal,
+          ),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: () => abrirFiltroTareas(context),
+          child: _FilaVista(
+            icon: Icons.filter_alt_rounded,
+            texto: filtroTareas.activo ? 'Filtro (${filtroTareas.cantidadActivos})' : 'Filtrar',
+            colorPrincipal: colorPrincipal,
+            resaltado: filtroTareas.activo,
+            colorSobreResaltado: tema.colorSobrePrincipal,
           ),
         ),
       ],
@@ -250,19 +278,34 @@ class _FilaVista extends StatelessWidget {
   final IconData icon;
   final String texto;
   final Color colorPrincipal;
-  const _FilaVista({required this.icon, required this.texto, required this.colorPrincipal});
+  // Usado por la fila "Filtrar": cuando hay un filtro activo, se pinta con
+  // el color principal de fondo en vez del tinte suave de siempre, igual
+  // que el pill de portrait, para que se note que hay algo filtrando.
+  final bool resaltado;
+  final Color? colorSobreResaltado;
+  const _FilaVista({
+    required this.icon,
+    required this.texto,
+    required this.colorPrincipal,
+    this.resaltado = false,
+    this.colorSobreResaltado,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final colorContenido = resaltado ? (colorSobreResaltado ?? Colors.white) : colorPrincipal;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(color: colorPrincipal.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: resaltado ? colorPrincipal : colorPrincipal.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: colorPrincipal),
+          Icon(icon, size: 16, color: colorContenido),
           const SizedBox(width: 8),
-          Expanded(child: Text(texto, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: colorPrincipal))),
+          Expanded(child: Text(texto, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: colorContenido))),
         ],
       ),
     );
