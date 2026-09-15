@@ -195,9 +195,9 @@ void main() {
     expect(container.read(archivoTareasProvider), isEmpty);
   });
 
-  test('la limpieza diaria archiva las recurrentes completadas y borra el resto', () async {
+  test('la limpieza diaria archiva TODAS las completadas (recurrentes y normales) y solo borra las pendientes', () async {
     // Una recurrente que ya agotó su límite (como la dejaría toggleTarea) y
-    // una tarea normal completada: deben terminar en destinos distintos.
+    // una tarea normal completada: ambas van al archivo, ninguna se borra.
     final recurrenteCompletada = tareaAlBordeDelLimite().copyWith(
       esCompletada: true,
       ocurrenciasCompletadas: 2,
@@ -228,7 +228,7 @@ void main() {
     // reales encadenados: getInstance, el guardado de tareas, y el guardado
     // del archivo) — se hace polling en vez de adivinar cuántos hacen falta.
     container.read(tareaProvider.notifier);
-    for (var intentos = 0; intentos < 20 && container.read(archivoTareasProvider).isEmpty; intentos++) {
+    for (var intentos = 0; intentos < 20 && container.read(archivoTareasProvider).length < 2; intentos++) {
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }
 
@@ -237,8 +237,28 @@ void main() {
     expect(activas.first.id, 'pendiente-1'); // solo sobrevive la que no estaba completada
 
     final archivadas = container.read(archivoTareasProvider);
-    expect(archivadas, hasLength(1));
-    expect(archivadas.first.id, 'cuota-1'); // la normal se descarta, la recurrente se archiva
+    expect(archivadas, hasLength(2));
+    expect(archivadas.map((t) => t.id), containsAll(['cuota-1', 'normal-1']));
+  });
+
+  test('restaurarDesdeArchivo devuelve una tarea normal archivada, solo desmarcándola (conserva su fechaLimite)', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await container.read(tareaProvider.notifier).recargarDesdeDisco();
+    await Future<void>.delayed(Duration.zero);
+
+    final fechaOriginal = DateTime(2026, 1, 10, 18, 0);
+    final archivada = Tarea(id: 'normal-1', titulo: 'Comprar pan', urgenciaBase: 1, esCompletada: true, fechaLimite: fechaOriginal);
+    await container.read(archivoTareasProvider.notifier).archivar(archivada);
+
+    await container.read(tareaProvider.notifier).restaurarDesdeArchivo('normal-1');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(container.read(archivoTareasProvider), isEmpty);
+    final activas = container.read(tareaProvider);
+    expect(activas, hasLength(1));
+    expect(activas.first.esCompletada, isFalse);
+    expect(activas.first.fechaLimite, fechaOriginal); // no se pierde ni se pone en null
   });
 
   test('restaurarDesdeArchivo devuelve una tarea ya archivada a la lista activa con el contador correcto', () async {

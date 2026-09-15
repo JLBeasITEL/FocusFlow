@@ -117,7 +117,7 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             leading: Icon(Icons.inventory_2_outlined, color: colorPrincipal),
             title: Text('Tareas archivadas', style: TextStyle(color: colorPrincipal, fontWeight: FontWeight.w600)),
-            subtitle: Text('Recurrentes que agotaron su límite de repeticiones o de fecha', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.7))),
+            subtitle: Text('Tareas completadas que ya no aparecen en la lista', style: TextStyle(color: colorPrincipal.withValues(alpha: 0.7))),
             trailing: Icon(Icons.chevron_right, color: colorPrincipal.withValues(alpha: 0.5)),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const TareasArchivadasScreen())),
           ),

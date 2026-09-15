@@ -55,13 +55,15 @@ class TareaNotifier extends Notifier<List<Tarea>> {
       final ultimoDiaLimpieza = prefs.getString('ultimo_dia_limpieza_tareas');
 
       if (ultimoDiaLimpieza != hoy) {
-        // Una recurrente completada acá es SIEMPRE su última ocurrencia (la
-        // que agotó el límite, ver _completarUltimaOcurrencia/
-        // archivarDirectamente): una recurrente que sigue viva nunca queda
-        // con esCompletada=true (ver comentario de toggleTarea). Esas van al
-        // archivo en vez de borrarse sin más; las demás completadas (tareas
-        // normales, sin recurrencia) se descartan como siempre.
-        final paraArchivar = tareasCargadas.where((tarea) => tarea.esCompletada && tarea.tipoRecurrencia != TipoRecurrencia.ninguna).toList();
+        // TODA tarea completada de ayer (recurrente o no) va al archivo en
+        // vez de borrarse sin más: el archivo es la consulta general de
+        // "qué desapareció de la lista principal", no solo de recurrentes
+        // que agotaron su límite. Una recurrente completada acá es SIEMPRE
+        // su última ocurrencia (la que agotó el límite, ver
+        // _completarUltimaOcurrencia/archivarDirectamente): una recurrente
+        // que sigue viva nunca queda con esCompletada=true (ver comentario
+        // de toggleTarea).
+        final paraArchivar = tareasCargadas.where((tarea) => tarea.esCompletada).toList();
 
         // 1. Filtramos para eliminar las completadas de ayer
         tareasCargadas = tareasCargadas.where((tarea) => !tarea.esCompletada).toList();
@@ -72,9 +74,12 @@ class TareaNotifier extends Notifier<List<Tarea>> {
         // 3. Asignamos la lista limpia al estado de la aplicación
         state = tareasCargadas;
 
-        // 4. ¡CRÍTICO! Guardamos en la base de datos para borrar las viejas para siempre
+        // 4. ¡CRÍTICO! Guardamos en la base de datos para sacar las completadas
+        // de la lista activa (lista_tareas_v1) de forma permanente.
         _guardarTareas();
 
+        // Recién acá se archivan de verdad: no antes de que _guardarTareas()
+        // haya confirmado que ya salieron de la lista activa.
         for (final tarea in paraArchivar) {
           await ref.read(archivoTareasProvider.notifier).archivar(tarea);
         }
@@ -314,16 +319,25 @@ class TareaNotifier extends Notifier<List<Tarea>> {
     NotificacionesService().programarAlertaDefinitiva(restaurada);
   }
 
-  // Restaura desde el archivo una tarea que agotó su límite (o que
-  // archivarDirectamente archivó al editar el tope por debajo de lo ya
-  // completado): la invoca la pantalla de tareas archivadas. Ver el
-  // comentario de deshacerRecurrente para por qué esto es un método
-  // separado en vez de una rama de esa misma función.
+  // Restaura desde el archivo CUALQUIER tarea archivada (una recurrente que
+  // agotó su límite, una que archivarDirectamente archivó al editar el tope
+  // por debajo de lo ya completado, o una tarea normal que la limpieza
+  // diaria archivó al completarse): la invoca la pantalla de tareas
+  // archivadas. Ver el comentario de deshacerRecurrente para por qué esto es
+  // un método separado en vez de una rama de esa misma función.
+  //
+  // Solo las recurrentes traen fechaLimiteAnterior (respaldo puesto por
+  // _completarUltimaOcurrencia/archivarDirectamente/el caso "sigue" de
+  // toggleTarea): para esas, _reconstruirTrasDeshacer devuelve fechaLimite y
+  // el contador a como estaban antes. Una tarea normal no tiene ese
+  // respaldo -ni falta que le hace-: alcanza con desmarcarla, conservando
+  // su fechaLimite tal cual (usar _reconstruirTrasDeshacer ahí la dejaría
+  // con fechaLimite null, perdiendo la fecha original).
   Future<void> restaurarDesdeArchivo(String id) async {
     final tarea = await ref.read(archivoTareasProvider.notifier).restaurar(id);
-    if (tarea == null || tarea.fechaLimiteAnterior == null) return;
+    if (tarea == null) return;
 
-    final restaurada = _reconstruirTrasDeshacer(tarea);
+    final restaurada = tarea.fechaLimiteAnterior != null ? _reconstruirTrasDeshacer(tarea) : tarea.copyWith(esCompletada: false);
     state = [...state, restaurada];
     _guardarTareas();
     NotificacionesService().programarAlertaDefinitiva(restaurada);

@@ -4,15 +4,16 @@ import '../../providers/tarea_archivada_provider.dart';
 import '../../providers/tarea_provider.dart';
 import '../../providers/tema_provider.dart';
 
-// Vista de solo consulta de tareas recurrentes que agotaron su límite (ver
-// TareaNotifier.toggleTarea/_archivarPorLimiteAgotado): en vez de borrarse
-// sin más, viven acá — y desde acá se pueden restaurar a la lista activa
-// (TareaNotifier.restaurarDesdeArchivo) si se archivaron por error, mismo
-// mecanismo que el botón "Deshacer" de la tarjeta usa mientras la tarea
-// sigue activa (deshacerRecurrente), pero apuntando al archivo. Entrada
-// solo desde Configuraciones (menú de tres puntos), a propósito: es una
-// consulta ocasional, no algo que necesite un acceso fijo en la pantalla
-// principal. No incluye borrado permanente (decisión de producto aparte).
+// Vista de solo consulta de CUALQUIER tarea que desapareció de la lista
+// principal al completarse (ver la limpieza diaria en
+// TareaNotifier._cargarTareasInterno): una tarea normal completada, o una
+// recurrente que agotó su límite (ver TareaNotifier._completarUltimaOcurrencia/
+// archivarDirectamente). En vez de borrarse sin más, viven acá — y desde acá
+// se pueden restaurar a la lista activa (TareaNotifier.restaurarDesdeArchivo)
+// si se completaron/archivaron por error. Entrada solo desde Configuraciones
+// (menú de tres puntos), a propósito: es una consulta ocasional, no algo que
+// necesite un acceso fijo en la pantalla principal. No incluye borrado
+// permanente (decisión de producto aparte).
 class TareasArchivadasScreen extends ConsumerWidget {
   const TareasArchivadasScreen({super.key});
 
@@ -36,7 +37,7 @@ class TareasArchivadasScreen extends ConsumerWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 32),
                   child: Text(
-                    'Todavía no hay tareas archivadas.\nUna tarea recurrente llega aquí cuando agota su límite de repeticiones o de fecha.',
+                    'Todavía no hay tareas archivadas.\nUna tarea llega aquí cuando se completa y desaparece de la lista principal.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: colorPrincipal.withValues(alpha: 0.6), fontSize: 15, height: 1.4),
                   ),
@@ -47,13 +48,6 @@ class TareasArchivadasScreen extends ConsumerWidget {
                 itemCount: archivadas.length,
                 itemBuilder: (context, index) {
                   final tarea = archivadas[index];
-                  // Siempre debería ser true para lo que hoy llega al
-                  // archivo (toggleTarea/_archivarPorLimiteAgotado siempre
-                  // lo fija), pero se chequea igual en vez de asumirlo: es
-                  // el mismo criterio que ya usa la tarjeta activa
-                  // (puedeDeshacerRecurrente) para decidir si mostrar el
-                  // botón de deshacer.
-                  final puedeRestaurar = tarea.fechaLimiteAnterior != null;
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
                     child: ListTile(
@@ -63,13 +57,15 @@ class TareasArchivadasScreen extends ConsumerWidget {
                         tarea.grupo,
                         if (tarea.textoProgresoRecurrencia != null) tarea.textoProgresoRecurrencia!,
                       ].join(' · ')),
-                      trailing: puedeRestaurar
-                          ? TextButton.icon(
-                              onPressed: () => ref.read(tareaProvider.notifier).restaurarDesdeArchivo(tarea.id),
-                              icon: const Icon(Icons.undo, size: 18),
-                              label: const Text('Restaurar'),
-                            )
-                          : null,
+                      // Restaurar siempre disponible: TareaNotifier.restaurarDesdeArchivo
+                      // sabe reconstruir tanto una recurrente (fecha/contador
+                      // de vuelta a como estaban) como una tarea normal (solo
+                      // desmarcarla), así que no hace falta distinguir acá.
+                      trailing: TextButton.icon(
+                        onPressed: () => ref.read(tareaProvider.notifier).restaurarDesdeArchivo(tarea.id),
+                        icon: const Icon(Icons.undo, size: 18),
+                        label: const Text('Restaurar'),
+                      ),
                     ),
                   );
                 },
