@@ -60,7 +60,27 @@ Future<void> mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? id
       : notaActual!.elementosLista.map((e) => ItemLista(texto: e.texto, completado: e.completado)).toList();
 
   List<TextEditingController> controllersLista = itemsTemp.map((e) => TextEditingController(text: e.texto)).toList();
-  List<FocusNode> focusNodesLista = itemsTemp.map((e) => FocusNode()).toList();
+
+  // Cuando el campo de un elemento de la lista recibe foco, lo hace visible
+  // por encima del teclado. Sin esto, el SingleChildScrollView del diálogo
+  // no sabe qué parte del contenido debe mostrar y el campo activo queda
+  // tapado por el teclado al agregar varios elementos.
+  FocusNode crearFocusNodeConAutoScroll() {
+    final nodo = FocusNode();
+    nodo.addListener(() {
+      if (nodo.hasFocus) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final ctx = nodo.context;
+          if (ctx != null) {
+            Scrollable.ensureVisible(ctx, alignment: 0.5, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+          }
+        });
+      }
+    });
+    return nodo;
+  }
+
+  List<FocusNode> focusNodesLista = itemsTemp.map((e) => crearFocusNodeConAutoScroll()).toList();
 
   return showGeneralDialog(
     context: context,
@@ -71,7 +91,10 @@ Future<void> mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? id
     pageBuilder: (context, animation, secondaryAnimation) {
       return StatefulBuilder(
         builder: (context, setStateDialog) {
-          return Center(
+          return AnimatedPadding(
+            duration: const Duration(milliseconds: 100),
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: Center(
             child: SingleChildScrollView(
               child: Material(
                 color: Colors.transparent,
@@ -166,7 +189,7 @@ Future<void> mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? id
                                                   onSubmitted: (val) {
                                                     // Si el usuario presiona Enter estando en el último elemento de la lista, crea uno nuevo automáticamente
                                                     if (i == itemsTemp.length - 1) {
-                                                      final nuevoFocusNode = FocusNode();
+                                                      final nuevoFocusNode = crearFocusNodeConAutoScroll();
                                                       setStateDialog(() {
                                                         itemsTemp.add(ItemLista(texto: ''));
                                                         controllersLista.add(TextEditingController());
@@ -204,7 +227,7 @@ Future<void> mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? id
                                       padding: const EdgeInsets.only(top: 8.0),
                                       child: InkWell(
                                         onTap: () {
-                                          final nuevoFocusNode = FocusNode();
+                                          final nuevoFocusNode = crearFocusNodeConAutoScroll();
                                           setStateDialog(() {
                                             itemsTemp.add(ItemLista(texto: ''));
                                             controllersLista.add(TextEditingController());
@@ -332,12 +355,12 @@ Future<void> mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? id
                                           for (var linea in lineas) {
                                             itemsTemp.add(ItemLista(texto: linea.trim()));
                                             controllersLista.add(TextEditingController(text: linea.trim()));
-                                            focusNodesLista.add(FocusNode());
+                                            focusNodesLista.add(crearFocusNodeConAutoScroll());
                                           }
                                         } else if (itemsTemp.isEmpty) {
                                           itemsTemp.add(ItemLista(texto: ''));
                                           controllersLista.add(TextEditingController());
-                                          focusNodesLista.add(FocusNode());
+                                          focusNodesLista.add(crearFocusNodeConAutoScroll());
                                         }
                                       } else {
                                         tipoActual = TipoNota.texto;
@@ -373,7 +396,7 @@ Future<void> mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? id
                                       tituloController.text = notaActual.titulo;
                                       itemsTemp = notaActual.elementosLista.map((e) => ItemLista(texto: e.texto, completado: e.completado)).toList();
                                       controllersLista = itemsTemp.map((e) => TextEditingController(text: e.texto)).toList();
-                                      focusNodesLista = itemsTemp.map((e) => FocusNode()).toList();
+                                      focusNodesLista = itemsTemp.map((e) => crearFocusNodeConAutoScroll()).toList();
                                       tipoActual = notaActual.tipo;
                                       colorElegido = notaActual.colorValue;
                                       colorDialogo = Color(notaActual.colorValue);
@@ -427,6 +450,7 @@ Future<void> mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? id
                 ),
               ),
             )
+          ),
           );
         }
       );
