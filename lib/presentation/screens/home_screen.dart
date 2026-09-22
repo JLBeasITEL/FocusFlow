@@ -28,6 +28,8 @@ import '../../core/app_messenger.dart';
 import '../../core/colores_estado_rutina.dart';
 import '../widgets/nota_dialog.dart';
 import '../widgets/grupo_notas_card.dart';
+import '../utils/iconos_grupo.dart';
+import '../widgets/horario_hoy_sheet.dart';
 import '../widgets/post_it_card.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import '../../core/colores_estado_tarea.dart';
@@ -388,6 +390,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           if (_currentIndex == 1) ...[
             const _BadgeMonedasRacha(),
             const SizedBox(width: 10),
+            IconButton(
+              icon: Icon(Icons.schedule_rounded, color: colorPrincipal),
+              tooltip: 'Cambiar horario de hoy',
+              onPressed: () => mostrarHorarioDeHoy(context, colorPrincipal),
+            ),
             OutlinedButton.icon(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => GestorRutinasScreen(colorTema: colorPrincipal))),
               icon: Icon(Icons.mode_edit_outline_rounded, size: 16, color: colorPrincipal),
@@ -480,7 +487,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             children: [
               Row(
                 children: [
-                  Icon(Icons.folder_rounded, size: 20, color: colorPrincipal),
+                  Icon(iconoPersonalizadoDeGrupo(ref.watch(iconosGruposProvider), grupo) ?? iconoGrupoPorDefecto, size: 20, color: colorPrincipal),
                   const SizedBox(width: 8),
                   Text(grupo, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: temaActual.colorTituloGrupo ?? temaActual.colorTextoSuperficie)),
                   const SizedBox(width: 8),
@@ -1325,6 +1332,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             proxyDecorator: (child, index, animation) {
                               final grupoArrastrado = listaGrupos[index];
                               final cantidadTareas = mapaGrupos[grupoArrastrado]!.length;
+                              final iconoArrastrado = iconoPersonalizadoDeGrupo(ref.read(iconosGruposProvider), grupoArrastrado) ?? iconoGrupoPorDefecto;
                               return AnimatedBuilder(
                                 animation: animation,
                                 builder: (context, _) {
@@ -1338,7 +1346,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                       child: Row(
                                         children: [
-                                          Icon(Icons.folder_rounded, size: 24, color: colorPrincipal),
+                                          Icon(iconoArrastrado, size: 24, color: colorPrincipal),
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
@@ -1372,6 +1380,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                               final grupo = listaGrupos[index];
                               final tareasDelGrupo = mapaGrupos[grupo]!;
                               final isColapsado = ref.watch(gruposColapsadosProvider).contains(grupo);
+                              final iconoGrupo = iconoPersonalizadoDeGrupo(ref.watch(iconosGruposProvider), grupo);
 
                               // --- COLOR DINÁMICO DEL TEMA ---
                               // Extraemos el color de la interfaz de Flutter.
@@ -1386,6 +1395,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                 tareas: tareasDelGrupo,
                                 isColapsado: isColapsado,
                                 arrastrando: _grupoEnArrastre == grupo,
+                                icono: iconoGrupo,
+                                onCambiarIcono: () => mostrarSelectorIconoGrupo(context, ref, grupo),
                                 esPrimero: index == 0,
                                 colorTema: colorTema,
                                 temaActual: temaActual,
@@ -1422,6 +1433,10 @@ class _GrupoTareasSection extends StatefulWidget {
   // true mientras el usuario arrastra esta carpeta para reordenarla: fuerza
   // el colapso temporalmente sin tocar la preferencia manual (isColapsado).
   final bool arrastrando;
+  // Ícono personalizado de la carpeta (null = carpeta por defecto). Se
+  // cambia con pulsación larga sobre la cabecera.
+  final IconData? icono;
+  final VoidCallback onCambiarIcono;
   final bool esPrimero;
   final Color colorTema;
   final TemaApp temaActual;
@@ -1434,6 +1449,8 @@ class _GrupoTareasSection extends StatefulWidget {
     required this.tareas,
     required this.isColapsado,
     required this.arrastrando,
+    required this.icono,
+    required this.onCambiarIcono,
     required this.esPrimero,
     required this.colorTema,
     required this.temaActual,
@@ -1492,6 +1509,7 @@ class _GrupoTareasSectionState extends State<_GrupoTareasSection> with SingleTic
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onToggle,
+          onLongPress: widget.onCambiarIcono,
           child: Padding(
             padding: EdgeInsets.only(bottom: 12, top: widget.esPrimero ? 0 : 24),
             child: Row(
@@ -1499,7 +1517,7 @@ class _GrupoTareasSectionState extends State<_GrupoTareasSection> with SingleTic
                 AnimatedBuilder(
                   animation: _controller,
                   builder: (context, child) => Icon(
-                    _controller.value < 0.5 ? Icons.folder_rounded : Icons.folder_open_rounded,
+                    widget.icono ?? (_controller.value < 0.5 ? iconoGrupoPorDefecto : iconoGrupoAbiertoPorDefecto),
                     size: 24,
                     color: widget.colorTema,
                   ),
@@ -1648,6 +1666,12 @@ class _SeccionRutinasHoyState extends ConsumerState<_SeccionRutinasHoy> {
                 ),
               ),
               const _BadgeMonedasRacha(),
+              if (rutinasDeHoy.isNotEmpty)
+                IconButton(
+                  icon: Icon(Icons.schedule_rounded, color: colorPrincipal),
+                  tooltip: 'Cambiar horario de hoy',
+                  onPressed: () => mostrarHorarioDeHoy(context, colorPrincipal),
+                ),
               IconButton(
                 icon: Icon(Icons.mode_edit_outline_rounded, color: colorPrincipal),
                 tooltip: 'Configurar Horario Semanal',

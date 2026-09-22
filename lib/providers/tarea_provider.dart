@@ -390,6 +390,7 @@ class TareaNotifier extends Notifier<List<Tarea>> {
 
     await ref.read(ordenGruposProvider.notifier).renombrar(grupoAnterior, grupoNuevo);
     await ref.read(gruposColapsadosProvider.notifier).renombrar(grupoAnterior, grupoNuevo);
+    await ref.read(iconosGruposProvider.notifier).renombrar(grupoAnterior, grupoNuevo);
   }
 
   // Elimina un grupo; las tareas que lo usaban pasan a 'General'.
@@ -405,6 +406,7 @@ class TareaNotifier extends Notifier<List<Tarea>> {
 
     await ref.read(ordenGruposProvider.notifier).eliminar(grupo);
     await ref.read(gruposColapsadosProvider.notifier).eliminar(grupo);
+    await ref.read(iconosGruposProvider.notifier).eliminar(grupo);
   }
 
   // --- MÉTODOS DE SUBTAREAS ---
@@ -920,4 +922,65 @@ class FiltroTareasNotifier extends Notifier<FiltroTareas> {
 
 final filtroTareasProvider = NotifierProvider<FiltroTareasNotifier, FiltroTareas>(() {
   return FiltroTareasNotifier();
+});
+// --- ÍCONOS PERSONALIZADOS DE GRUPOS (CARPETAS) ---
+// Guarda qué ícono eligió el usuario para cada carpeta (grupo de tareas).
+// El valor es la clave de un ícono del catálogo de iconos_grupo.dart (no el
+// codePoint) para que el respaldo sea estable. Ausencia de un grupo en el
+// mapa = ícono por defecto (carpeta). Como el nombre del grupo es la llave,
+// renombrarGrupo/eliminarGrupo en TareaNotifier avisan a este notifier.
+class IconosGruposNotifier extends Notifier<Map<String, String>> {
+  static const String _key = 'tareas_grupos_iconos_v1';
+
+  @override
+  Map<String, String> build() {
+    _cargar();
+    return {};
+  }
+
+  Future<void> _cargar() async {
+    final prefs = await SharedPreferences.getInstance();
+    final guardado = prefs.getString(_key);
+    if (guardado != null) {
+      state = Map<String, String>.from(jsonDecode(guardado));
+    }
+  }
+
+  Future<void> _guardar() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(state));
+  }
+
+  // Fuerza una relectura completa desde SharedPreferences. Se usa tras
+  // restaurar un respaldo.
+  Future<void> recargarDesdeDisco() async {
+    state = {};
+    await _cargar();
+  }
+
+  // Asigna el ícono de un grupo; con null vuelve al ícono por defecto.
+  Future<void> establecer(String grupo, String? clave) async {
+    final nuevo = {...state};
+    if (clave == null) {
+      if (nuevo.remove(grupo) == null) return;
+    } else {
+      nuevo[grupo] = clave;
+    }
+    state = nuevo;
+    await _guardar();
+  }
+
+  Future<void> renombrar(String anterior, String nuevo) async {
+    final clave = state[anterior];
+    if (clave == null) return;
+    state = {...state}..remove(anterior);
+    state = {...state, nuevo: clave};
+    await _guardar();
+  }
+
+  Future<void> eliminar(String grupo) => establecer(grupo, null);
+}
+
+final iconosGruposProvider = NotifierProvider<IconosGruposNotifier, Map<String, String>>(() {
+  return IconosGruposNotifier();
 });

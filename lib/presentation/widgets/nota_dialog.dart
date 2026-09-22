@@ -186,7 +186,10 @@ Future<void> mostrarDialogoNota(BuildContext context, WidgetRef ref, {String? id
                                                   onChanged: (val) => itemsTemp[i].texto = val,
                                                   textCapitalization: TextCapitalization.sentences,
                                                   textInputAction: TextInputAction.next, // Configura el botón del teclado como "Siguiente"
-                                                  onSubmitted: (val) {
+                                                  // onEditingComplete (y no onSubmitted) reemplaza el manejo por defecto,
+                                                  // que hace nextFocus()/unfocus() y retrae el teclado antes de que
+                                                  // el foco pase al nuevo elemento.
+                                                  onEditingComplete: () {
                                                     // Si el usuario presiona Enter estando en el último elemento de la lista, crea uno nuevo automáticamente
                                                     if (i == itemsTemp.length - 1) {
                                                       final nuevoFocusNode = crearFocusNodeConAutoScroll();
