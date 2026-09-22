@@ -6,6 +6,7 @@
 // marcarla como completa, ver su racha, su ícono, título y hora.
 // ============================================================================
 
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/rutina_provider.dart'; // Acceso al provider que maneja el estado global de rutinas
@@ -17,9 +18,12 @@ import '../../core/app_messenger.dart';
 import '../../core/temporizador_rutina_dialogo.dart';
 import 'anillo_temporizador_rutina.dart';
 
-// ConsumerWidget: es un widget "sin estado propio" (stateless) pero que SÍ puede
-// leer/escuchar el provider de Riverpod a través del parámetro `ref`.
-class RutinaCard extends ConsumerWidget {
+// ConsumerStatefulWidget (y no ConsumerWidget, como antes): necesita estado
+// propio para el menú de mantener presionado (_showOverlayMenu), igual que
+// TareaCard en home_screen.dart. onTap (expandir) y onLongPress (menú)
+// conviven en el mismo InkWell sin conflicto: Flutter los distingue por
+// duración del toque.
+class RutinaCard extends ConsumerStatefulWidget {
   // Alto mínimo de la fila inferior: es la zona táctil recomendada del botón
   // de omitir (_BotonOmitirRutina), NO un alto "de la fila" en general. Solo
   // debe aplicarse cuando ese botón realmente va a dibujarse (hayBotonOmitir)
@@ -55,9 +59,22 @@ class RutinaCard extends ConsumerWidget {
   });
 
   @override
+  ConsumerState<RutinaCard> createState() => _RutinaCardState();
+}
+
+class _RutinaCardState extends ConsumerState<RutinaCard> {
+  // Menú de acciones rápidas (completar/editar hora/omitir) que se muestra
+  // difuminando la tarjeta al mantenerla presionada, mismo patrón que
+  // TareaCard en home_screen.dart.
+  bool _showOverlayMenu = false;
+
+  @override
   // build() se ejecuta cada vez que este widget necesita dibujarse o redibujarse.
-  // `context` da acceso al árbol de widgets; `ref` da acceso al estado de Riverpod.
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final rutina = widget.rutina;
+    final colorTema = widget.colorTema;
+    final esExpandida = widget.esExpandida;
+    final onToggleExpansion = widget.onToggleExpansion;
 
     // Variable local: ¿esta rutina está activa (encendida) o desactivada por el usuario?
     final bool activa = rutina.activa;
@@ -136,12 +153,18 @@ class RutinaCard extends ConsumerWidget {
       // Necesario para que el ripple del InkWell respete las esquinas redondeadas.
       clipBehavior: Clip.antiAlias,
 
-      child: InkWell(
+      child: Stack(
+        children: [
+      InkWell(
         // Tocar la tarjeta la expande (o la colapsa si ya estaba expandida).
         // Los controles internos (Checkbox, botón de deshacer, pastilla de
         // omitir) tienen su propio InkWell/gesto y ganan el toque cuando cae
         // sobre ellos, así que no compiten por el mismo tap con este.
         onTap: onToggleExpansion,
+        // Mantener presionada la tarjeta muestra el menú difuminado de
+        // acciones rápidas (completar/editar hora de hoy/omitir), mismo
+        // patrón que TareaCard.
+        onLongPress: () => setState(() => _showOverlayMenu = true),
         child: Padding(
           // Relleno interno de la tarjeta (espacio entre el borde y el contenido).
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -177,8 +200,8 @@ class RutinaCard extends ConsumerWidget {
               // encogiendo visualmente (tamano) sin mover nada más a su
               // alrededor.
               SizedBox(
-                width: _anchoZonaIzquierda,
-                height: _anchoZonaIzquierda,
+                width: RutinaCard._anchoZonaIzquierda,
+                height: RutinaCard._anchoZonaIzquierda,
                 child: Center(
                   child: segundosRestantes != null
                       ? AnilloTemporizadorRutina(
@@ -300,6 +323,102 @@ class RutinaCard extends ConsumerWidget {
           ),
         ),
       ),
+      // ================================================================
+      // MENÚ DE MANTENER PRESIONADO: completar/deshacer, editar la hora de
+      // hoy, u omitir — difumina la tarjeta igual que TareaCard. hoyIndex
+      // siempre existe en rutina.horarios: RutinaCard solo se usa para
+      // listar las rutinas de HOY (ver _SeccionRutinasHoy/panel landscape).
+      if (_showOverlayMenu)
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: () => setState(() => _showOverlayMenu = false),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+              child: Container(
+                color: Colors.white.withValues(alpha: 0.2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    if (activa)
+                      _buildActionIcon(
+                        icon: omitida
+                            ? Icons.settings_backup_restore_rounded
+                            : (rutina.completada ? Icons.undo : Icons.check_rounded),
+                        color: const Color(0xFF4CAF50),
+                        onTap: () async {
+                          setState(() => _showOverlayMenu = false);
+                          if (omitida) {
+                            await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
+                          } else {
+                            await manejarToqueCheckboxRutina(
+                              context: context,
+                              ref: ref,
+                              rutina: rutina,
+                              valor: !rutina.completada,
+                            );
+                          }
+                        },
+                      ),
+                    _buildActionIcon(
+                      icon: Icons.schedule_rounded,
+                      color: colorTema,
+                      onTap: () {
+                        setState(() => _showOverlayMenu = false);
+                        _editarHoraDeHoy(context);
+                      },
+                    ),
+                    if (hayBotonOmitir)
+                      _buildActionIcon(
+                        icon: Icons.block_rounded,
+                        color: colorOmitidaRutina,
+                        onTap: () async {
+                          setState(() => _showOverlayMenu = false);
+                          final int monedas = ref.read(monedasProvider);
+                          final int costo = rutina.omisionesSeguidas + 1;
+                          final bool exito = await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
+                          if (!exito) {
+                            mostrarSnackBarSimple(
+                              mensaje: 'No te alcanzan las monedas de racha para omitir "${rutina.titulo}" '
+                                  '(necesitas $costo, tienes $monedas).',
+                              colorFondo: colorOmitidaRutina,
+                              colorTexto: Colors.white,
+                            );
+                          }
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionIcon({required IconData icon, required Color color, required VoidCallback onTap}) {
+    return CircleAvatar(backgroundColor: Colors.white, radius: 28, child: IconButton(icon: Icon(icon, color: color, size: 28), onPressed: onTap));
+  }
+
+  // Cambia la hora de HOY (y de todos los mismos días de la semana futuros)
+  // de esta rutina. editarRutina ya cancela y reprograma las notificaciones
+  // con el horario nuevo.
+  Future<void> _editarHoraDeHoy(BuildContext context) async {
+    final rutina = widget.rutina;
+    final int hoyIndex = DateTime.now().weekday - 1;
+    final actual = rutina.horarios[hoyIndex]!;
+    final nueva = await showTimePicker(context: context, initialTime: actual);
+    if (nueva == null || nueva == actual) return;
+
+    await ref.read(rutinaProvider.notifier).editarRutina(
+          rutina.copyWith(horarios: {...rutina.horarios, hoyIndex: nueva}),
+        );
+    if (!context.mounted) return;
+    mostrarSnackBarSimple(
+      mensaje: 'Horario de hoy de "${rutina.titulo}" actualizado a ${nueva.format(context)}',
+      colorFondo: widget.colorTema,
+      colorTexto: Colors.white,
     );
   }
 
@@ -333,12 +452,12 @@ class RutinaCard extends ConsumerWidget {
         // Título: ya no comparte fila con nada, ocupa todo el
         // ancho disponible hasta el borde derecho de la tarjeta.
         Text(
-          rutina.titulo,
+          widget.rutina.titulo,
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
             // Si ya está completada, le pone una línea tachada encima del texto.
-            decoration: rutina.completada ? TextDecoration.lineThrough : null,
+            decoration: widget.rutina.completada ? TextDecoration.lineThrough : null,
             // Color del texto: ámbar si se omitió hoy, negro si activa, gris si desactivada.
             color: omitida ? colorOmitidaRutina : (activa ? Colors.black87 : Colors.grey),
           ),
@@ -360,7 +479,7 @@ class RutinaCard extends ConsumerWidget {
               ? Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    rutina.descripcion!,
+                    widget.rutina.descripcion!,
                     style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.3),
                   ),
                 )
@@ -395,7 +514,7 @@ class RutinaCard extends ConsumerWidget {
         if (!filaInferiorVacia) ...[
           const SizedBox(height: 8),
           ConstrainedBox(
-            constraints: BoxConstraints(minHeight: hayBotonOmitir ? _alturaTactilBotonOmitir : 0),
+            constraints: BoxConstraints(minHeight: hayBotonOmitir ? RutinaCard._alturaTactilBotonOmitir : 0),
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -444,7 +563,7 @@ class RutinaCard extends ConsumerWidget {
                   // dejando a la hora pegada al borde izquierdo.
                   const Spacer(),
                   if (hayRacha) ...[
-                    Center(child: _RachaTexto(racha: rutina.racha)),
+                    Center(child: _RachaTexto(racha: widget.rutina.racha)),
                     // Separación con el botón de omitir: evita toques
                     // accidentales ahora que comparten la misma fila.
                     const SizedBox(width: 16),
@@ -452,7 +571,7 @@ class RutinaCard extends ConsumerWidget {
                   // Botón "Omitir por hoy": solo tiene sentido si
                   // todavía está pendiente (ni completada ni ya
                   // omitida) y la rutina está activa.
-                  if (hayBotonOmitir) _BotonOmitirRutina(rutina: rutina),
+                  if (hayBotonOmitir) _BotonOmitirRutina(rutina: widget.rutina),
                 ],
               ),
             ),
@@ -497,11 +616,11 @@ class RutinaCard extends ConsumerWidget {
           children: [
             Expanded(
               child: Text(
-                rutina.titulo,
+                widget.rutina.titulo,
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  decoration: rutina.completada ? TextDecoration.lineThrough : null,
+                  decoration: widget.rutina.completada ? TextDecoration.lineThrough : null,
                   color: omitida ? colorOmitidaRutina : (activa ? Colors.black87 : Colors.grey),
                 ),
                 // Mismo criterio que en modo normal: hasta 2 líneas
@@ -521,7 +640,7 @@ class RutinaCard extends ConsumerWidget {
             ],
             if (hayRacha) ...[
               const SizedBox(width: 12),
-              _RachaTexto(racha: rutina.racha),
+              _RachaTexto(racha: widget.rutina.racha),
             ],
           ],
         ),
@@ -533,7 +652,7 @@ class RutinaCard extends ConsumerWidget {
               ? Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    rutina.descripcion!,
+                    widget.rutina.descripcion!,
                     style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.3),
                   ),
                 )
@@ -553,8 +672,8 @@ class RutinaCard extends ConsumerWidget {
   // envuelve) -- cuanto más corto, menos chance de terminar en ellipsis.
   String _horaConDuracion(BuildContext context) {
     final int hoyIndex = DateTime.now().weekday - 1;
-    final String hora = rutina.horarios[hoyIndex]?.format(context) ?? '--:--';
-    final int duracionHoy = rutina.duraciones[hoyIndex] ?? 0;
+    final String hora = widget.rutina.horarios[hoyIndex]?.format(context) ?? '--:--';
+    final int duracionHoy = widget.rutina.duraciones[hoyIndex] ?? 0;
     return duracionHoy > 0 ? '$hora · ${duracionHoy}m' : hora;
   }
 }
@@ -664,4 +783,4 @@ class _BotonOmitirRutina extends ConsumerWidget {
       ),
     );
   }
-}
+}

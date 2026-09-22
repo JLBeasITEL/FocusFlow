@@ -352,7 +352,7 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                     final grupo = grupos[index];
                     final esGeneral = grupo == 'General';
                     return ListTile(
-                      leading: Icon(iconoPersonalizadoDeGrupo(ref.watch(iconosGruposProvider), grupo) ?? iconoGrupoPorDefecto),
+                      leading: iconoWidgetDeGrupo(ref.watch(iconosGruposProvider), grupo, size: 24, color: Theme.of(dialogContext).colorScheme.primary),
                       title: Text(grupo),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
