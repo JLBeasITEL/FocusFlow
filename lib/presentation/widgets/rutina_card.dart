@@ -359,32 +359,27 @@ class _RutinaCardState extends ConsumerState<RutinaCard> {
                           }
                         },
                       ),
-                    _buildActionIcon(
-                      icon: Icons.schedule_rounded,
-                      color: colorTema,
-                      onTap: () {
-                        setState(() => _showOverlayMenu = false);
-                        _editarHoraDeHoy(context);
-                      },
-                    ),
-                    if (hayBotonOmitir)
+                    // Editar la hora de hoy deja de tener sentido una vez
+                    // que la ocurrencia de hoy ya se completó (mismo
+                    // criterio que ocultarHora en la fila normal: ver
+                    // _construirContenidoNormal/Compacto más abajo).
+                    if (!rutina.completada)
                       _buildActionIcon(
-                        icon: Icons.block_rounded,
-                        color: colorOmitidaRutina,
-                        onTap: () async {
+                        icon: Icons.schedule_rounded,
+                        color: colorTema,
+                        onTap: () {
                           setState(() => _showOverlayMenu = false);
-                          final int monedas = ref.read(monedasProvider);
-                          final int costo = rutina.omisionesSeguidas + 1;
-                          final bool exito = await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
-                          if (!exito) {
-                            mostrarSnackBarSimple(
-                              mensaje: 'No te alcanzan las monedas de racha para omitir "${rutina.titulo}" '
-                                  '(necesitas $costo, tienes $monedas).',
-                              colorFondo: colorOmitidaRutina,
-                              colorTexto: Colors.white,
-                            );
-                          }
+                          _editarHoraDeHoy(context);
                         },
+                      ),
+                    // Mismo botón de omitir que la fila inferior normal
+                    // (_BotonOmitirRutina): la pastilla con el costo en
+                    // monedas, no un ícono suelto, para que el usuario vea
+                    // el mismo control en los dos lugares donde aparece.
+                    if (hayBotonOmitir)
+                      _BotonOmitirRutina(
+                        rutina: rutina,
+                        alCompletar: () => setState(() => _showOverlayMenu = false),
                       ),
                   ],
                 ),
@@ -718,7 +713,11 @@ class _RachaTexto extends StatelessWidget {
 // ============================================================
 class _BotonOmitirRutina extends ConsumerWidget {
   final Rutina rutina;
-  const _BotonOmitirRutina({required this.rutina});
+  // Se llama después de intentar omitir (sin importar si tuvo éxito), antes
+  // que nada más — hoy solo lo usa el menú de mantener presionado, para
+  // cerrarse a sí mismo. La fila inferior normal no lo pasa (queda null).
+  final VoidCallback? alCompletar;
+  const _BotonOmitirRutina({required this.rutina, this.alCompletar});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -746,6 +745,7 @@ class _BotonOmitirRutina extends ConsumerWidget {
           borderRadius: BorderRadius.circular(24),
           onTap: () async {
             final bool exito = await ref.read(rutinaProvider.notifier).toggleOmitida(rutina.id);
+            alCompletar?.call();
             if (!exito) {
               mostrarSnackBarSimple(
                 mensaje:
