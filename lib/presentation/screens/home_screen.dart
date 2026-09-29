@@ -2112,6 +2112,27 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                             ),
                           ),
                         ),
+                        // La etiqueta de urgencia vivía en el `trailing` del
+                        // ListTile: ListTile la centra verticalmente contra
+                        // el alto TOTAL del tile (título + subtítulo), no
+                        // solo contra el título, así que con una tarjeta
+                        // baja (título corto, una sola línea de fecha en el
+                        // subtítulo) terminaba a la misma altura que la
+                        // fecha y a veces se le montaba encima. Moverla acá,
+                        // en su propia fila junto al título (mismo lugar que
+                        // ya usa tarea_card_landscape.dart), hace que la
+                        // fecha del subtítulo de abajo nunca compita por el
+                        // mismo espacio: son dos filas separadas por
+                        // construcción, no por cómo termine calculando el
+                        // ancho ListTile.
+                        if (!tarea.esCompletada) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(color: (widget.tema == TemaApp.clasico || esMedianoche) ? colorBase.withValues(alpha: 0.2) : colorBase, borderRadius: BorderRadius.circular(12)),
+                            child: Text(_getLabelUrgencia(tarea.urgencia), style: TextStyle(color: (widget.tema == TemaApp.clasico || esMedianoche) ? colorBase : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
                         if (tieneSubtareas) ...[
                           const SizedBox(width: 8),
                           GestureDetector(
@@ -2182,7 +2203,6 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                             ),
                           )
                         : null,
-                    trailing: tarea.esCompletada ? null : Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: (widget.tema == TemaApp.clasico || esMedianoche) ? colorBase.withValues(alpha: 0.2) : colorBase, borderRadius: BorderRadius.circular(12)), child: Text(_getLabelUrgencia(tarea.urgencia), style: TextStyle(color: (widget.tema == TemaApp.clasico || esMedianoche) ? colorBase : Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
                   ),
                   AnimatedSize(
                     duration: const Duration(milliseconds: 300),
