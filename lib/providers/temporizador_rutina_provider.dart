@@ -161,6 +161,10 @@ class TemporizadorRutinaNotifier extends Notifier<TemporizadorRutina?> {
       duracionTotalSegundos: duracionTotalSegundos,
     );
     iniciarTick();
+    // "En ejecución" no debe sonar la alarma normal de la rutina si su hora
+    // llega mientras el temporizador sigue corriendo (ver
+    // suspenderNotificacionesDeHoyPorTemporizador en rutina_provider.dart).
+    await ref.read(rutinaProvider.notifier).suspenderNotificacionesDeHoyPorTemporizador(rutinaId);
     await NotificacionesService().mostrarNotificacionOngoingTemporizador(titulo: titulo, venceEn: venceEn);
     await NotificacionesService().programarAlarmaVencimientoTemporizador(
       rutinaId: rutinaId,
