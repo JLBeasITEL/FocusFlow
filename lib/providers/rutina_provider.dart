@@ -10,20 +10,104 @@ import 'monedas_provider.dart';
 import 'temporizador_rutina_provider.dart';
 
 // ============================================================
-// rachaPorMoneda — unidad fija del hito de racha que otorga moneda
+// HITOS DE RACHA QUE OTORGAN MONEDAS
 // ------------------------------------------------------------
-// FIJO en 7, sin importar cuántos días/semana tenga programada la
-// rutina: antes se usaba rutina.horarios.length (diasPorSemana) como
-// divisor, pero eso hacía que rutinas de pocos días/semana festejaran
-// demasiado seguido (con 1 día/semana, CADA completada festejaba,
-// porque cualquier racha % 1 == 0) y que el "hito semanal" no
-// significara lo mismo entre rutinas. Con 7 fijo, el hito es el mismo
-// para todas: racha=7 → 1 moneda, racha=14 → 2 monedas, racha=21 → 3,
-// y así sucesivamente sin tope — compartido por rutina_card.dart (el
-// diálogo de felicitación) y por toggleCompletada (el otorgamiento
-// real), para que ambos disparen exactamente en los mismos hitos.
+// Una "semana de racha" es diasPorSemana completadas seguidas (las
+// claves de horarios, ver Rutina.diasPorSemana): una rutina de 5
+// días/semana cierra su semana a las 5 completadas, una de 7 a las 7.
+// Antes el hito era FIJO en 7 completadas para TODAS las rutinas, así
+// que "una semana de racha" solo era literal en las rutinas diarias
+// (con 3 días/semana, 7 completadas son más de dos semanas reales y la
+// moneda llegaba tarde).
+//
+// rachaPorMoneda (7) sigue siendo el hito de las rutinas de MENOS de
+// diasMinimosParaHitoSemanal días/semana, que conservan el
+// comportamiento histórico: 1 moneda cada 7 completadas, sin
+// multiplicador. Ahí NO se usa diasPorSemana como divisor a propósito:
+// con 1 día/semana cada completada sería un hito (racha % 1 == 0) y la
+// rutina festejaría siempre — ese es justamente el bug que en su
+// momento fijó el divisor en 7 para todas.
+//
+// Ver calcularRecompensaRacha más abajo: es la fuente ÚNICA del
+// cálculo, compartida por toggleCompletada (el otorgamiento real) y por
+// celebracion_racha.dart (el diálogo de felicitación), para que el hito
+// que se festeja y el que se paga no puedan separarse nunca.
 // ============================================================
 const int rachaPorMoneda = 7;
+
+// Mínimo de días/semana para entrar al esquema semanal (hito = la propia
+// semana de la rutina, con base y multiplicador). Por debajo de esto,
+// hito fijo de rachaPorMoneda completadas.
+const int diasMinimosParaHitoSemanal = 5;
+
+// Base del esquema semanal: 7 días/semana (todos los días) vale el doble
+// que 5 o 6, porque no deja ningún día de descanso.
+const int monedasBaseSemanaCompleta = 2;
+const int monedasBaseSemanaParcial = 1;
+
+// Semanas de racha necesarias para cada multiplicador: x2 a partir de la
+// 2ª semana seguida, x3 a partir del mes (4 semanas). No hay nada más
+// alto que x3.
+const int semanasParaMultiplicadorX2 = 2;
+const int semanasParaMultiplicadorX3 = 4;
+
+// ============================================================
+// RecompensaRacha — resultado de calcularRecompensaRacha
+// ------------------------------------------------------------
+// monedas ya viene multiplicado (base * multiplicador): es el número que
+// se acredita y el mismo que muestra el diálogo. base, multiplicador y
+// semanas se exponen aparte solo para poder explicarle al usuario de
+// dónde salió ese número.
+// ============================================================
+class RecompensaRacha {
+  final int monedas;
+  final int base;
+  final int multiplicador;
+  // Semanas completas de racha que cierra este hito. 0 en el esquema
+  // histórico de 7 completadas, donde el hito no representa semanas.
+  final int semanas;
+
+  const RecompensaRacha({
+    required this.monedas,
+    required this.base,
+    required this.multiplicador,
+    required this.semanas,
+  });
+}
+
+// Devuelve null cuando nuevaRacha NO cierra un hito que toque pagar —
+// incluido el hito ya cobrado antes (nuevaRacha <= rachaPagadaHasta: el
+// usuario desmarcó y volvió a marcar sobre el mismo hito, ver ese campo
+// en el modelo Rutina). Función pura: no lee estado ni el reloj, así que
+// el diálogo puede consultarla con la rutina que tenía antes del toggle.
+RecompensaRacha? calcularRecompensaRacha({
+  required int diasPorSemana,
+  required int nuevaRacha,
+  required int rachaPagadaHasta,
+}) {
+  if (nuevaRacha <= 0 || nuevaRacha <= rachaPagadaHasta) return null;
+
+  // Rutinas de pocos días/semana: comportamiento histórico intacto.
+  if (diasPorSemana < diasMinimosParaHitoSemanal) {
+    if (nuevaRacha % rachaPorMoneda != 0) return null;
+    return const RecompensaRacha(monedas: 1, base: 1, multiplicador: 1, semanas: 0);
+  }
+
+  if (nuevaRacha % diasPorSemana != 0) return null;
+  final int semanas = nuevaRacha ~/ diasPorSemana;
+  // >= 7 y no == 7 por defensa: horarios nunca puede tener más de 7
+  // claves (0..6), pero una rutina corrupta no debería caer en "parcial".
+  final int base = diasPorSemana >= 7 ? monedasBaseSemanaCompleta : monedasBaseSemanaParcial;
+  final int multiplicador = semanas >= semanasParaMultiplicadorX3
+      ? 3
+      : (semanas >= semanasParaMultiplicadorX2 ? 2 : 1);
+  return RecompensaRacha(
+    monedas: base * multiplicador,
+    base: base,
+    multiplicador: multiplicador,
+    semanas: semanas,
+  );
+}
 
 // Fuente única de "ahora" para todo este archivo: permite fijar el reloj en
 // tests (override con un valor constante) y, a futuro, es la misma fuente
@@ -864,23 +948,28 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       // ============================================================
       // OTORGAMIENTO DE MONEDAS DE RACHA — cálculo previo al copyWith
       // ------------------------------------------------------------
-      // Solo al MARCAR como completada (no al desmarcar), y usando
-      // EXACTAMENTE el mismo criterio de "racha cumplida" que dispara
-      // el diálogo de felicitación en rutina_card.dart: cada vez que
-      // la racha llega a un nuevo múltiplo de rachaPorMoneda (7, 14,
-      // 21, 28...) se otorga 1 moneda MÁS. A diferencia de antes, el
-      // hito solo paga si supera rachaPagadaHasta — si el usuario
-      // desmarca y vuelve a marcar sobre el mismo múltiplo de 7, ya no
-      // se vuelve a otorgar (ver el campo en el modelo Rutina). Al
-      // desmarcar NO se revierte la moneda ya ganada (decisión de
-      // producto) ni se retrocede rachaPagadaHasta.
+      // Solo al MARCAR como completada (no al desmarcar), delegando en
+      // calcularRecompensaRacha — la MISMA función que consulta el
+      // diálogo de felicitación (celebracion_racha.dart), para que el
+      // hito que festeja y el que paga no puedan separarse. Cuántas
+      // monedas otorga cada hito (base por días/semana × multiplicador
+      // por semanas seguidas) está documentado en esa función. El hito
+      // solo paga si supera rachaPagadaHasta: si el usuario desmarca y
+      // vuelve a marcar sobre el mismo hito, ya no se otorga de nuevo
+      // (ver el campo en el modelo Rutina). Al desmarcar NO se revierten
+      // las monedas ya ganadas (decisión de producto) ni se retrocede
+      // rachaPagadaHasta.
       // ============================================================
       final int nuevaRacha = !rutinaAntes.completada
           ? rutinaAntes.racha + 1
           : (rutinaAntes.racha > 0 ? rutinaAntes.racha - 1 : 0);
-      final bool otorgaMoneda = !rutinaAntes.completada &&
-          nuevaRacha % rachaPorMoneda == 0 &&
-          nuevaRacha > rutinaAntes.rachaPagadaHasta;
+      final RecompensaRacha? recompensa = rutinaAntes.completada
+          ? null
+          : calcularRecompensaRacha(
+              diasPorSemana: rutinaAntes.diasPorSemana,
+              nuevaRacha: nuevaRacha,
+              rachaPagadaHasta: rutinaAntes.rachaPagadaHasta,
+            );
 
       // ============================================================
       // COSTO DE OMISIÓN — escrow de un día (BUG 2)
@@ -915,7 +1004,7 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
             r.copyWith(
               completada: !r.completada,
               racha: nuevaRacha,
-              rachaPagadaHasta: otorgaMoneda ? nuevaRacha : r.rachaPagadaHasta,
+              rachaPagadaHasta: recompensa != null ? nuevaRacha : r.rachaPagadaHasta,
               fechaCompletada: !r.completada ? hoy : null,
               omisionesSeguidas: nuevaOmisionesSeguidas,
               omisionesSeguidasAntesDeMarcar: nuevoEscrowOmisiones,
@@ -937,8 +1026,8 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
       // (y de lo que ya se canceló/reprogramó en Android).
       await _guardarRutinas();
 
-      if (otorgaMoneda) {
-        await ref.read(monedasProvider.notifier).agregar(1);
+      if (recompensa != null) {
+        await ref.read(monedasProvider.notifier).agregar(recompensa.monedas);
       }
 
       final rutinaActualizada = state.firstWhere((r) => r.id == id);
