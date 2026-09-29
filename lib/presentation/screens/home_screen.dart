@@ -28,6 +28,7 @@ import '../../core/app_messenger.dart';
 import '../../core/colores_estado_rutina.dart';
 import '../widgets/nota_dialog.dart';
 import '../widgets/grupo_notas_card.dart';
+import '../utils/iconos_grupo.dart';
 import '../widgets/post_it_card.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import '../../core/colores_estado_tarea.dart';
@@ -480,7 +481,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             children: [
               Row(
                 children: [
-                  Icon(Icons.folder_rounded, size: 20, color: colorPrincipal),
+                  // Igual que en portrait (_GrupoTareasSection): el ícono es
+                  // tocable por sí solo y lleva un badge de lápiz siempre
+                  // visible, para que se note que se puede personalizar sin
+                  // depender del long-press.
+                  GestureDetector(
+                    onTap: () => mostrarSelectorIconoGrupo(context, ref, grupo),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        iconoWidgetDeGrupo(ref.watch(iconosGruposProvider), grupo, size: 20, color: colorPrincipal),
+                        Positioned(
+                          bottom: -3,
+                          right: -5,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 1),
+                            ),
+                            child: Icon(Icons.edit_rounded, size: 9, color: colorPrincipal.withValues(alpha: 0.7)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Text(grupo, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: temaActual.colorTituloGrupo ?? temaActual.colorTextoSuperficie)),
                   const SizedBox(width: 8),
@@ -1325,6 +1351,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                             proxyDecorator: (child, index, animation) {
                               final grupoArrastrado = listaGrupos[index];
                               final cantidadTareas = mapaGrupos[grupoArrastrado]!.length;
+                              final iconosGruposActual = ref.read(iconosGruposProvider);
                               return AnimatedBuilder(
                                 animation: animation,
                                 builder: (context, _) {
@@ -1338,7 +1365,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                       child: Row(
                                         children: [
-                                          Icon(Icons.folder_rounded, size: 24, color: colorPrincipal),
+                                          iconoWidgetDeGrupo(iconosGruposActual, grupoArrastrado, size: 24, color: colorPrincipal),
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: Text(
@@ -1372,6 +1399,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                               final grupo = listaGrupos[index];
                               final tareasDelGrupo = mapaGrupos[grupo]!;
                               final isColapsado = ref.watch(gruposColapsadosProvider).contains(grupo);
+                              final iconosGrupos = ref.watch(iconosGruposProvider);
 
                               // --- COLOR DINÁMICO DEL TEMA ---
                               // Extraemos el color de la interfaz de Flutter.
@@ -1386,6 +1414,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
                                 tareas: tareasDelGrupo,
                                 isColapsado: isColapsado,
                                 arrastrando: _grupoEnArrastre == grupo,
+                                iconosGrupos: iconosGrupos,
+                                onCambiarIcono: () => mostrarSelectorIconoGrupo(context, ref, grupo),
                                 esPrimero: index == 0,
                                 colorTema: colorTema,
                                 temaActual: temaActual,
@@ -1422,6 +1452,11 @@ class _GrupoTareasSection extends StatefulWidget {
   // true mientras el usuario arrastra esta carpeta para reordenarla: fuerza
   // el colapso temporalmente sin tocar la preferencia manual (isColapsado).
   final bool arrastrando;
+  // Íconos personalizados de TODAS las carpetas (grupo -> clave elegida),
+  // no solo la de esta sección: así iconoWidgetDeGrupo puede resolver
+  // ícono-de-Material vs. emoji en un solo lugar (ver iconos_grupo.dart).
+  final Map<String, String> iconosGrupos;
+  final VoidCallback onCambiarIcono;
   final bool esPrimero;
   final Color colorTema;
   final TemaApp temaActual;
@@ -1434,6 +1469,8 @@ class _GrupoTareasSection extends StatefulWidget {
     required this.tareas,
     required this.isColapsado,
     required this.arrastrando,
+    required this.iconosGrupos,
+    required this.onCambiarIcono,
     required this.esPrimero,
     required this.colorTema,
     required this.temaActual,
@@ -1492,16 +1529,46 @@ class _GrupoTareasSectionState extends State<_GrupoTareasSection> with SingleTic
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onToggle,
+          // Atajo para quien ya conoce el feature; el badge de lápiz de
+          // abajo es la vía principal y detectable a simple vista.
+          onLongPress: widget.onCambiarIcono,
           child: Padding(
             padding: EdgeInsets.only(bottom: 12, top: widget.esPrimero ? 0 : 24),
             child: Row(
               children: [
-                AnimatedBuilder(
-                  animation: _controller,
-                  builder: (context, child) => Icon(
-                    _controller.value < 0.5 ? Icons.folder_rounded : Icons.folder_open_rounded,
-                    size: 24,
-                    color: widget.colorTema,
+                // El ícono de la carpeta es tocable por sí solo (gana el tap
+                // sobre el GestureDetector de la cabecera, que solo hace
+                // toggle) y siempre lleva un pequeño badge de lápiz para que
+                // se note, sin tener que descubrir el long-press.
+                GestureDetector(
+                  onTap: widget.onCambiarIcono,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      AnimatedBuilder(
+                        animation: _controller,
+                        builder: (context, child) => iconoWidgetDeGrupo(
+                          widget.iconosGrupos,
+                          widget.grupo,
+                          size: 24,
+                          color: widget.colorTema,
+                          iconoPorDefecto: _controller.value < 0.5 ? iconoGrupoPorDefecto : iconoGrupoAbiertoPorDefecto,
+                        ),
+                      ),
+                      Positioned(
+                        bottom: -4,
+                        right: -6,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1),
+                          ),
+                          child: Icon(Icons.edit_rounded, size: 11, color: widget.colorTema.withValues(alpha: 0.7)),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -2045,6 +2112,27 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                             ),
                           ),
                         ),
+                        // La etiqueta de urgencia vivía en el `trailing` del
+                        // ListTile: ListTile la centra verticalmente contra
+                        // el alto TOTAL del tile (título + subtítulo), no
+                        // solo contra el título, así que con una tarjeta
+                        // baja (título corto, una sola línea de fecha en el
+                        // subtítulo) terminaba a la misma altura que la
+                        // fecha y a veces se le montaba encima. Moverla acá,
+                        // en su propia fila junto al título (mismo lugar que
+                        // ya usa tarea_card_landscape.dart), hace que la
+                        // fecha del subtítulo de abajo nunca compita por el
+                        // mismo espacio: son dos filas separadas por
+                        // construcción, no por cómo termine calculando el
+                        // ancho ListTile.
+                        if (!tarea.esCompletada) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(color: (widget.tema == TemaApp.clasico || esMedianoche) ? colorBase.withValues(alpha: 0.2) : colorBase, borderRadius: BorderRadius.circular(12)),
+                            child: Text(_getLabelUrgencia(tarea.urgencia), style: TextStyle(color: (widget.tema == TemaApp.clasico || esMedianoche) ? colorBase : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
                         if (tieneSubtareas) ...[
                           const SizedBox(width: 8),
                           GestureDetector(
@@ -2115,7 +2203,6 @@ class _TareaCardState extends ConsumerState<TareaCard> {
                             ),
                           )
                         : null,
-                    trailing: tarea.esCompletada ? null : Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: (widget.tema == TemaApp.clasico || esMedianoche) ? colorBase.withValues(alpha: 0.2) : colorBase, borderRadius: BorderRadius.circular(12)), child: Text(_getLabelUrgencia(tarea.urgencia), style: TextStyle(color: (widget.tema == TemaApp.clasico || esMedianoche) ? colorBase : Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
                   ),
                   AnimatedSize(
                     duration: const Duration(milliseconds: 300),

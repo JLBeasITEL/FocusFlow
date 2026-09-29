@@ -34,6 +34,7 @@ const String _claveRutinas = 'lista_rutinas_v2';
 const String _claveTareas = 'lista_tareas_v1';
 const String _claveTareasArchivadas = 'lista_tareas_archivadas_v1';
 const String _claveGrupos = 'lista_grupos_v1';
+const String _claveIconosGrupos = 'tareas_grupos_iconos_v1';
 const String _clavePlantillas = 'lista_plantillas_tareas_v1';
 const String _claveNotas = 'lista_notas_postit_v2';
 const String _claveTema = 'tema_seleccionado';
@@ -55,6 +56,7 @@ class BackupService {
         _claveTareas: _decodificarLista(prefs.getString(_claveTareas)),
         _claveTareasArchivadas: _decodificarLista(prefs.getString(_claveTareasArchivadas)),
         _claveGrupos: _decodificarLista(prefs.getString(_claveGrupos)),
+        _claveIconosGrupos: _decodificarMapa(prefs.getString(_claveIconosGrupos)),
         _clavePlantillas: _decodificarLista(prefs.getString(_clavePlantillas)),
         _claveNotas: _decodificarLista(prefs.getString(_claveNotas)),
         _claveTema: prefs.getInt(_claveTema),
@@ -126,6 +128,12 @@ class BackupService {
       await _restaurarLista(prefs, _claveTareas, backup[_claveTareas]);
       await _restaurarLista(prefs, _claveTareasArchivadas, backup[_claveTareasArchivadas]);
       await _restaurarLista(prefs, _claveGrupos, backup[_claveGrupos]);
+      final iconosGrupos = backup[_claveIconosGrupos];
+      if (iconosGrupos is Map) {
+        await prefs.setString(_claveIconosGrupos, jsonEncode(iconosGrupos));
+      } else {
+        await prefs.remove(_claveIconosGrupos);
+      }
       await _restaurarLista(prefs, _clavePlantillas, backup[_clavePlantillas]);
       await _restaurarLista(prefs, _claveNotas, backup[_claveNotas]);
 
@@ -168,6 +176,7 @@ class BackupService {
     await _recargarSinPropagar('tareas', () => ref.read(tareaProvider.notifier).recargarDesdeDisco());
     await _recargarSinPropagar('tareas archivadas', () => ref.read(archivoTareasProvider.notifier).recargarDesdeDisco());
     await _recargarSinPropagar('grupos', () => ref.read(ordenGruposProvider.notifier).recargarDesdeDisco());
+    await _recargarSinPropagar('iconos de grupos', () => ref.read(iconosGruposProvider.notifier).recargarDesdeDisco());
     await _recargarSinPropagar('plantillas', () => ref.read(plantillaProvider.notifier).recargarDesdeDisco());
     await _recargarSinPropagar('notas', () => ref.read(notaProvider.notifier).recargarDesdeDisco());
     await _recargarSinPropagar('tema', () => ref.read(temaProvider.notifier).recargarDesdeDisco());
@@ -211,6 +220,12 @@ class BackupService {
     if (valorGuardado == null) return [];
     final dynamic decodificado = jsonDecode(valorGuardado);
     return decodificado is List ? decodificado : [];
+  }
+
+  Map<String, dynamic> _decodificarMapa(String? valorGuardado) {
+    if (valorGuardado == null) return {};
+    final dynamic decodificado = jsonDecode(valorGuardado);
+    return decodificado is Map<String, dynamic> ? decodificado : {};
   }
 
   // Igual que _decodificarLista, pero para rutinas: vacía notificacionesActivas

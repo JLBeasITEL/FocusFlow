@@ -116,6 +116,11 @@ Future<void> manejarToqueAnilloTemporizador({
 
   if (confirmar == true) {
     await ref.read(temporizadorRutinaProvider.notifier).cancelar();
+    // Único camino donde "se cancela el temporizador y la rutina sigue
+    // pendiente" es lo que realmente pasó (ver el comentario extenso en
+    // reanudarNotificacionesDeHoySiHaceFalta sobre por qué los demás
+    // caminos que cancelan el temporizador NO llaman esto).
+    await ref.read(rutinaProvider.notifier).reanudarNotificacionesDeHoySiHaceFalta(rutina.id);
   }
 }
 

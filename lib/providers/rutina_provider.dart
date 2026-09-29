@@ -54,6 +54,122 @@ class RutinaNotifier extends Notifier<List<Rutina>> {
     }
   }
 
+  // Offset de ID dedicado para el aviso de reemplazo que
+  // reanudarNotificacionesDeHoySiHaceFalta programa: no pisa el rango del
+  // reset completo (semana 0/1 de colchón => idExactoBase + 0..199999) ni
+  // el del top-up incremental (arranca en 100.000.000, ver
+  // offsetSemanaRelleno en _rellenarColchonSiHaceFalta) — vive cómodo en
+  // el medio, sin colisionar con ninguno de los dos.
+  static const int _offsetReanudacionTemporizador = 500000;
+
+  // ============================================================
+  // "En ejecución" — tercer estado de una rutina, sin campo nuevo en el
+  // modelo: ya existe de hecho como temporizadorRutinaProvider no-nulo para
+  // esta rutina (RutinaCard ya lo trata como un tercer estado visual —
+  // reemplaza el checkbox por el anillo, oculta la hora — ver
+  // "Precedencia acordada" en rutina_card.dart). Estos dos métodos hacen
+  // que la CAPA DE NOTIFICACIONES respete ese mismo estado: si la hora
+  // programada de hoy llega mientras el temporizador de esa rutina sigue
+  // corriendo, no debe sonar encima de algo que el usuario ya está
+  // haciendo.
+  // ------------------------------------------------------------
+  // suspenderNotificacionesDeHoyPorTemporizador cancela los avisos de HOY
+  // apenas arranca el temporizador (llamado SIEMPRE desde
+  // TemporizadorRutinaNotifier.iniciar) — mismo mecanismo que
+  // toggleCompletada usa para cancelar la ocurrencia de hoy al marcar
+  // completa (misma idsPorOcurrencia[hoy]), pero sin tocar completada,
+  // racha ni omisiones: esto es transitorio, no una confirmación.
+  //
+  // reanudarNotificacionesDeHoySiHaceFalta los repone si el usuario
+  // cancela el temporizador SIN terminarlo y la hora de hoy todavía no
+  // pasó. A propósito NO se llama desde TemporizadorRutinaNotifier.cancelar()
+  // en general (ese método no distingue por qué se cancela): se llama
+  // únicamente desde manejarToqueAnilloTemporizador, el único camino
+  // donde "se cancela el temporizador y la rutina sigue pendiente" es
+  // realmente lo que pasó. El resto de los caminos que también cancelan
+  // el temporizador como efecto secundario (completar vía PantallaAlarma,
+  // editar/desactivar/borrar la rutina) ya resuelven la notificación de
+  // hoy por su cuenta (toggleCompletada, o un reset completo que
+  // reprograma todo desde cero) — reanudar ahí encima sería, en el mejor
+  // caso, trabajo redundante que un reset completo vuelve a cancelar de
+  // inmediato, y en el peor, una alarma de más para una rutina que ya no
+  // corresponde.
+  // ============================================================
+  Future<void> suspenderNotificacionesDeHoyPorTemporizador(String rutinaId) async {
+    final candidatos = state.where((r) => r.id == rutinaId);
+    if (candidatos.isEmpty) return;
+    final rutina = candidatos.first;
+
+    final String hoy = _claveFecha(_ahora);
+    final List<int> idsDeHoy = rutina.idsPorOcurrencia[hoy] ?? const [];
+    if (idsDeHoy.isEmpty) return;
+
+    await NotificacionesService().cancelarListaDeIds(idsDeHoy);
+    state = [
+      for (final r in state)
+        if (r.id == rutinaId)
+          r.copyWith(
+            notificacionesActivas: r.notificacionesActivas.where((i) => !idsDeHoy.contains(i)).toList(),
+            idsPorOcurrencia: ({...r.idsPorOcurrencia}..remove(hoy)),
+          )
+        else
+          r,
+    ];
+    await _guardarRutinas();
+  }
+
+  Future<void> reanudarNotificacionesDeHoySiHaceFalta(String rutinaId) async {
+    final candidatos = state.where((r) => r.id == rutinaId);
+    if (candidatos.isEmpty) return;
+    final rutina = candidatos.first;
+
+    final DateTime ahora = _ahora;
+    final int hoyIndex = ahora.weekday - 1;
+    final hora = rutina.horarios[hoyIndex];
+    final String hoy = _claveFecha(ahora);
+
+    // Nada que reanudar si: la rutina ya no está pendiente (se completó u
+    // omitió mientras corría el temporizador), hoy no es uno de sus días
+    // programados, o ya hay algo programado para hoy (p. ej. nunca se
+    // suspendió nada, porque el temporizador arrancó DESPUÉS de la hora).
+    if (!rutina.activa ||
+        rutina.completada ||
+        rutina.omitida ||
+        hora == null ||
+        (rutina.idsPorOcurrencia[hoy]?.isNotEmpty ?? false)) {
+      return;
+    }
+
+    final DateTime fechaHoy = DateTime(ahora.year, ahora.month, ahora.day, hora.hour, hora.minute);
+    // La hora de hoy ya pasó mientras corría el temporizador (se canceló
+    // sobre la hora, o después): no tiene sentido reprogramar una alarma
+    // en el pasado, y zonedSchedule tampoco lo permitiría de forma útil.
+    if (!fechaHoy.isAfter(ahora)) return;
+
+    final int idReemplazo = _generarIdNumerico(rutina.id) + hoyIndex + _offsetReanudacionTemporizador;
+    await NotificacionesService().programarAlertaRutina(
+      id: idReemplazo,
+      titulo: '¡Es hora de tu hábito!',
+      body: 'Es momento de: ${rutina.titulo}',
+      fechaVisual: fechaHoy,
+      iconoCode: rutina.iconoCode,
+      esAlarmaFullScreen: true,
+      esInsistente: true,
+    );
+
+    state = [
+      for (final r in state)
+        if (r.id == rutinaId)
+          r.copyWith(
+            notificacionesActivas: [...r.notificacionesActivas, idReemplazo],
+            idsPorOcurrencia: {...r.idsPorOcurrencia, hoy: [idReemplazo]},
+          )
+        else
+          r,
+    ];
+    await _guardarRutinas();
+  }
+
   // Resuelve cuando _cargarRutinasInterno terminó del todo, incluido su loop
   // de arranque (el for que rellena el colchón de cada rutina activa, ver
   // más abajo). El reconciliador de temporizador lo espera ANTES de leer el

@@ -60,12 +60,20 @@ class TemporizadorRutina {
   }
 }
 
-// Formato mm:ss para mostrar segundosRestantes en el lugar de la hora en
+// Formato para mostrar segundosRestantes en el lugar de la hora en
 // RutinaCard/RutinaLandscapeCard. Vive acá, junto al tipo que formatea, para
 // que ninguna de las dos tarjetas duplique el cálculo.
+// mm:ss por debajo de una hora (igual que antes); a partir de una hora pasa
+// a h:mm:ss (90 minutos → "1:30:00", no "90:00") — la duración del
+// temporizador no tiene tope, así que sin esto un temporizador largo se
+// leía como una cuenta de minutos de dos dígitos cada vez más confusa.
 String formatoCuentaRegresiva(int segundos) {
-  final int minutos = segundos ~/ 60;
+  final int horas = segundos ~/ 3600;
+  final int minutos = (segundos % 3600) ~/ 60;
   final int segs = segundos % 60;
+  if (horas > 0) {
+    return '$horas:${minutos.toString().padLeft(2, '0')}:${segs.toString().padLeft(2, '0')}';
+  }
   return '${minutos.toString().padLeft(2, '0')}:${segs.toString().padLeft(2, '0')}';
 }
 
@@ -161,6 +169,10 @@ class TemporizadorRutinaNotifier extends Notifier<TemporizadorRutina?> {
       duracionTotalSegundos: duracionTotalSegundos,
     );
     iniciarTick();
+    // "En ejecución" no debe sonar la alarma normal de la rutina si su hora
+    // llega mientras el temporizador sigue corriendo (ver
+    // suspenderNotificacionesDeHoyPorTemporizador en rutina_provider.dart).
+    await ref.read(rutinaProvider.notifier).suspenderNotificacionesDeHoyPorTemporizador(rutinaId);
     await NotificacionesService().mostrarNotificacionOngoingTemporizador(titulo: titulo, venceEn: venceEn);
     await NotificacionesService().programarAlarmaVencimientoTemporizador(
       rutinaId: rutinaId,

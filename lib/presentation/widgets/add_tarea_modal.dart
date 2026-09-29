@@ -9,6 +9,7 @@ import '../../models/tarea.dart';
 import '../../models/plantilla.dart';
 import '../../core/app_messenger.dart';
 import 'ayuda_formulario_button.dart';
+import '../utils/iconos_grupo.dart';
 import '../../main.dart' show navigatorKey;
 
 // Punto de entrada único para abrir "Nueva/Editar Tarea": en portrait sigue
@@ -351,10 +352,16 @@ class _AddTareaModalState extends ConsumerState<AddTareaModal> {
                     final grupo = grupos[index];
                     final esGeneral = grupo == 'General';
                     return ListTile(
+                      leading: iconoWidgetDeGrupo(ref.watch(iconosGruposProvider), grupo, size: 24, color: Theme.of(dialogContext).colorScheme.primary),
                       title: Text(grupo),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          IconButton(
+                            icon: const Icon(Icons.emoji_symbols_rounded, size: 20),
+                            tooltip: 'Cambiar ícono',
+                            onPressed: () => mostrarSelectorIconoGrupo(dialogContext, ref, grupo),
+                          ),
                           IconButton(
                             icon: const Icon(Icons.edit_outlined, size: 20),
                             tooltip: 'Renombrar',
