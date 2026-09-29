@@ -4,19 +4,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 // ============================================================
 // MonedasNotifier — "monedas de racha"
 // ------------------------------------------------------------
-// Moneda global (no por rutina) que se gana al alcanzar un hito de
-// racha semanal en CUALQUIER rutina (ver el otorgamiento en
-// toggleCompletada, rutina_provider.dart) y se gasta al omitir una
-// ocurrencia de hoy sin romper la racha (ver toggleOmitida, mismo
-// archivo). Al atar la ganancia a la constancia real, el propio
-// costo de "hacer trampa" queda limitado por qué tan consistente ha
-// sido el usuario, sin necesitar un tope artificial aparte.
+// Moneda global (no por rutina) que se gana al cerrar una semana de
+// racha en CUALQUIER rutina — 1 o 2 monedas según los días/semana de esa
+// rutina, con multiplicador por semanas seguidas (ver
+// calcularRecompensaRacha y su otorgamiento en toggleCompletada,
+// rutina_provider.dart) — y se gasta al omitir una ocurrencia de hoy
+// sin romper la racha (ver toggleOmitida, mismo archivo). Al atar la
+// ganancia a la constancia real, el propio costo de "hacer trampa"
+// queda limitado por qué tan consistente ha sido el usuario, sin
+// necesitar un tope artificial aparte.
 // ============================================================
 class MonedasNotifier extends Notifier<int> {
   static const String _storageKey = 'monedas_racha_v1';
 
   // Regalo de bienvenida para que un usuario nuevo pueda probar la función
-  // de omitir sin tener que esperar a cumplir su primera racha de 7.
+  // de omitir sin tener que esperar a cerrar su primera semana de racha.
   static const int _monedasBienvenida = 3;
 
   @override

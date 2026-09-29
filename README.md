@@ -102,7 +102,7 @@ Cada `Tarea` también tiene una lista de **`subtareas` (`List<ItemSubtarea>`)** 
 Hábito recurrente. Campos clave:
 
 - `horarios`: `Map<int, TimeOfDay>` — día de la semana (0 = lunes … 6 = domingo) → hora programada. Permite horario distinto por día (`esFlexible: true`) o un solo horario para varios días.
-- `racha`: contador de veces completada consecutivamente.
+- `racha`: contador de veces completada consecutivamente. `diasPorSemana` (getter, `horarios.length`) define cada cuántas completadas seguidas se cierra **una semana de racha**, el hito que otorga monedas (ver [Monedas de racha](#monedas-de-racha)).
 - `completada` / `fechaCompletada`: si ya se marcó como hecha *hoy*.
 - `notificacionesActivas: List<int>`: la lista **exacta** de IDs de notificación de Android actualmente programados para esta rutina. Es el campo central de todo el sistema de anti-alarmas-fantasma (ver más abajo).
 
@@ -191,6 +191,24 @@ Este espaciado (`× 100000` por semana, `+1000` para el aviso previo, `+10000/20
 
 - **Reset completo**: siempre `0..3`, recalculado desde cero en cada reset (por eso puede reusar ese mismo rango una y otra vez sin problema — cancela todo antes de volver a programar).
 - **Relleno incremental**: no puede reusar `0..3` sin arriesgarse a pisar una ocurrencia que sigue activa (programar dos veces el mismo ID hace que la segunda llamada a `zonedSchedule` reemplace silenciosamente la primera, perdiéndola). En su lugar usa `1000 + (semanas transcurridas desde 2020-01-01 hasta la fecha del occurrence)`, que para cualquier fecha real de la app cae muy por encima del `0..3` del reset. Al ser una función pura de la fecha del occurrence (no de cuándo corre el código), la misma fecha siempre produce el mismo ID, y dos fechas distintas de un mismo día de la semana siempre difieren en al menos una unidad de semana — así que ni dos rellenos sucesivos ni un relleno seguido de un reset completo pueden generar el mismo ID para ocurrencias distintas.
+
+### Monedas de racha
+
+Las **monedas de racha** (`monedasProvider`, clave `monedas_racha_v1`) son un saldo global —no por rutina— que se gana al cerrar una semana de racha y se gasta en el comodín de *omitir* una ocurrencia de hoy sin romper la racha (costo creciente: `omisionesSeguidas + 1`).
+
+Todo el cálculo vive en una sola función pura, `calcularRecompensaRacha` ([lib/providers/rutina_provider.dart](lib/providers/rutina_provider.dart)), consultada tanto por `toggleCompletada` (que acredita) como por `alternarCompletadaConCelebracion` ([lib/core/celebracion_racha.dart](lib/core/celebracion_racha.dart)) (que festeja), para que el hito que se paga y el que se muestra no puedan separarse:
+
+| Días/semana de la rutina | Hito | Monedas base |
+|---|---|---|
+| 7 | 7 completadas seguidas | 2 |
+| 5 o 6 | `diasPorSemana` completadas seguidas | 1 |
+| 1 a 4 | 7 completadas seguidas (esquema histórico) | 1, sin multiplicador |
+
+Sobre la base se aplica un multiplicador por semanas de racha **seguidas**: **×2** desde la 2ª semana y **×3** desde el mes (4 semanas), sin nada más alto. Así, una rutina diaria paga 2 monedas la primera semana, 4 la segunda y tercera, y 6 de la cuarta en adelante.
+
+Las rutinas de menos de 5 días/semana conservan el hito fijo de 7 completadas a propósito: usar `diasPorSemana` como divisor ahí haría que una rutina de 1 día/semana cobrara en **cada** completada (`racha % 1 == 0`).
+
+`rachaPagadaHasta` registra el hito más alto ya cobrado, para que desmarcar y volver a marcar sobre el mismo hito no pague dos veces. Al desmarcar no se revierten las monedas ya ganadas (decisión de producto) ni retrocede el campo.
 
 ### Cancelación prioritaria al completar
 
@@ -303,3 +321,5 @@ Resumen de lo que se agregó/cambió respecto a la primera versión de esta docu
 - **Código muerto eliminado**: se borraron del repositorio `alarma_screen.dart`, `add_rutina_modal.dart` y `seccion_notas_rapidas.dart` (ninguno estaba referenciado desde ningún otro archivo). También se quitó un `Text` de depuración en `RutinaCard` que mostraba en pantalla los IDs de `notificacionesActivas`.
 - Ajustes menores: `GestorRutinasScreen` ahora espera (`await`) a que `eliminarRutina` termine antes de continuar; en `RutinaNotifier`, el guardado de `notificacionesActivas` y de `toggleCompletada` ahora se espera con `await` en vez de ser "fire-and-forget", para acotar la ventana de desincronización si la app se cierra abruptamente.
 - **Top-up incremental de notificaciones de rutinas** (optimización de lentitud al abrir la app): nuevo campo `ultimaFechaProgramada` en `Rutina`. `_gestionarNotificacionesRutina` se dividió en `_resetCompletoNotificacionesRutina` (el reset completo de siempre) y `_rellenarColchonSiHaceFalta` (solo cancela/reprograma cuando el colchón de 4 semanas realmente lo necesita — ver [Dos caminos: reset completo vs. relleno incremental](#dos-caminos-reset-completo-vs-relleno-incremental)). `_cargarRutinas` y `toggleCompletada` ahora usan el camino incremental; `addRutina`, `editarRutina`, `toggleActiva` y `resincronizarTodasLasAlarmas` siguen forzando el reset completo. `BackupService` también limpia `ultimaFechaProgramada` al exportar, igual que ya hacía con `notificacionesActivas`.
+
+- **Monedas de racha por semana cumplida, con multiplicador**: el hito que otorga monedas dejó de ser fijo en 7 completadas para todas las rutinas y ahora es **la semana de la propia rutina** (`Rutina.diasPorSemana`), pagando 1 moneda por una semana de 5-6 días y 2 por una de 7. Encima se aplica ×2 desde la 2ª semana en racha y ×3 desde el mes. El cálculo se centralizó en `calcularRecompensaRacha` (`rutina_provider.dart`), usada por `toggleCompletada` y por el diálogo de felicitación —que ahora muestra el monto real y el multiplicador— en vez de que cada uno repitiera el criterio. Las rutinas de menos de 5 días/semana conservan el hito histórico de 7 completadas y 1 moneda. Ver [Monedas de racha](#monedas-de-racha).

@@ -3,11 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/rutina.dart';
 import '../providers/rutina_provider.dart';
 
-// Marca/desmarca una rutina como completada hoy y, si el cambio cruza un
-// nuevo múltiplo de rachaPorMoneda (7, 14, 21...), muestra el diálogo de
-// felicitación. Compartido entre RutinaCard (portrait) y
-// RutinaLandscapeCard para no duplicar ni la detección del hito ni el
-// diálogo en sí.
+// Marca/desmarca una rutina como completada hoy y, si el cambio cierra un
+// hito de racha que otorga monedas, muestra el diálogo de felicitación.
+// Compartido entre RutinaCard (portrait) y RutinaLandscapeCard para no
+// duplicar ni la detección del hito ni el diálogo en sí.
 Future<void> alternarCompletadaConCelebracion({
   required BuildContext context,
   required WidgetRef ref,
@@ -20,17 +19,28 @@ Future<void> alternarCompletadaConCelebracion({
   // Usamos rutina.racha (el valor ANTES del toggle) porque el widget que
   // llamó a esta función todavía no se reconstruyó con el nuevo valor.
   final nuevaRacha = rutina.racha + 1;
-  if (nuevaRacha % rachaPorMoneda != 0) return;
-  // Mismo criterio que toggleCompletada (rutina_provider.dart): si este
-  // hito de racha ya se pagó antes (el usuario desmarcó y volvió a marcar
-  // sobre el mismo múltiplo de 7), ya no se otorga una moneda nueva — así
-  // que tampoco corresponde mostrar el diálogo de felicitación, que sin
-  // este chequeo diría "+1 moneda" aunque no se otorgó ninguna.
-  if (nuevaRacha <= rutina.rachaPagadaHasta) return;
+  // MISMA función que usa toggleCompletada para acreditar (ver
+  // rutina_provider.dart), no una copia del criterio: si devuelve null no
+  // se otorgó ninguna moneda —hito no alcanzado, o ya cobrado porque el
+  // usuario desmarcó y volvió a marcar sobre el mismo hito— y entonces
+  // tampoco corresponde festejar. Sin este chequeo el diálogo diría
+  // "+N monedas" aunque no se otorgó ninguna.
+  final RecompensaRacha? recompensa = calcularRecompensaRacha(
+    diasPorSemana: rutina.diasPorSemana,
+    nuevaRacha: nuevaRacha,
+    rachaPagadaHasta: rutina.rachaPagadaHasta,
+  );
+  if (recompensa == null) return;
 
+  // El multiplicador solo se nombra cuando de verdad multiplicó: en la
+  // primera semana (x1) mencionarlo sería ruido.
+  final String plural = recompensa.monedas == 1 ? 'moneda' : 'monedas';
+  final String detalleMultiplicador = recompensa.multiplicador > 1
+      ? '\n×${recompensa.multiplicador} por llevar ${recompensa.semanas} semanas en racha'
+      : '';
   final String textoFelicidades =
       '¡Felicidades! Llevas $nuevaRacha veces seguidas sin fallar con este hábito.\n'
-      '+1 moneda de racha 🪙';
+      '+${recompensa.monedas} $plural de racha 🪙$detalleMultiplicador';
 
   showDialog(
     context: context,

@@ -156,6 +156,17 @@ class Rutina {
   // ============================================================
   final Map<int, int> duraciones;
 
+  // ============================================================
+  // diasPorSemana — cuántos días a la semana está programada
+  // ------------------------------------------------------------
+  // Las claves de horarios son los días programados (0=lunes..6=domingo,
+  // ver rutina_provider.dart), así que su cantidad es el compromiso
+  // semanal de la rutina: 1..7. Define tanto cada cuántas completadas
+  // seguidas se cierra "una semana de racha" como cuántas monedas otorga
+  // ese hito (ver calcularRecompensaRacha en rutina_provider.dart).
+  // ============================================================
+  int get diasPorSemana => horarios.length;
+
   Rutina({
     required this.id,
     required this.titulo,
@@ -340,9 +351,10 @@ class Rutina {
       // código viejo podría cobrar de nuevo el mismo hito con solo
       // desmarcar y volver a marcar tras actualizar. Sembrar con la racha
       // actual bloquea ese re-cobro puntual sin afectar los hitos futuros
-      // (la comparación en toggleCompletada es contra múltiplos de 7 POR
-      // ENCIMA de este valor, así que sembrar con un valor que no es en
-      // sí mismo múltiplo de 7 no cambia cuándo se paga el próximo hito).
+      // (la comparación en toggleCompletada es contra hitos POR ENCIMA de
+      // este valor —múltiplos de diasPorSemana, o de 7 en rutinas de pocos
+      // días/semana—, así que sembrar con un valor que no es en sí mismo
+      // un hito no cambia cuándo se paga el próximo).
       rachaPagadaHasta: json['rachaPagadaHasta'] as int? ?? (json['racha'] as int? ?? 0),
       // Rutinas guardadas ANTES de este campo: -1 (sin valor guardado) es
       // el mismo default que una rutina nueva, seguro sin migración especial.
