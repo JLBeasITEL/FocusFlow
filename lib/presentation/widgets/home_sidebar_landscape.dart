@@ -10,6 +10,7 @@ import 'filtro_tareas_modal.dart';
 import 'progreso_rutinas_bar.dart';
 import 'grupo_notas_card.dart';
 import 'overflow_scrollbar.dart';
+import '../utils/iconos_grupo.dart';
 
 // Panel lateral del layout horizontal (HomeScreen en landscape): muestra un
 // resumen distinto según la pestaña activa (Tareas/Rutinas/Notas), leyendo
@@ -125,6 +126,10 @@ class _SidebarTareas extends ConsumerWidget {
                   final esUnicaSeleccionada = filtroTareas.grupos.length == 1 && seleccionada;
                   notifier.actualizar(filtroTareas.copyWith(grupos: esUnicaSeleccionada ? {} : {g}));
                 },
+                // El tap normal filtra (arriba); mantener presionado el chip
+                // abre el selector de ícono, mismo atajo que usa portrait —
+                // no hay espacio en el chip para un badge de lápiz propio.
+                onLongPress: () => mostrarSelectorIconoGrupo(context, ref, g),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
@@ -134,7 +139,7 @@ class _SidebarTareas extends ConsumerWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.folder_rounded, size: 14, color: colorChip),
+                      iconoWidgetDeGrupo(ref.watch(iconosGruposProvider), g, size: 14, color: colorChip),
                       const SizedBox(width: 6),
                       Text(g, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorChip)),
                       const SizedBox(width: 4),

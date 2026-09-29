@@ -481,7 +481,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             children: [
               Row(
                 children: [
-                  iconoWidgetDeGrupo(ref.watch(iconosGruposProvider), grupo, size: 20, color: colorPrincipal),
+                  // Igual que en portrait (_GrupoTareasSection): el ícono es
+                  // tocable por sí solo y lleva un badge de lápiz siempre
+                  // visible, para que se note que se puede personalizar sin
+                  // depender del long-press.
+                  GestureDetector(
+                    onTap: () => mostrarSelectorIconoGrupo(context, ref, grupo),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        iconoWidgetDeGrupo(ref.watch(iconosGruposProvider), grupo, size: 20, color: colorPrincipal),
+                        Positioned(
+                          bottom: -3,
+                          right: -5,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 1),
+                            ),
+                            child: Icon(Icons.edit_rounded, size: 9, color: colorPrincipal.withValues(alpha: 0.7)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Text(grupo, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: temaActual.colorTituloGrupo ?? temaActual.colorTextoSuperficie)),
                   const SizedBox(width: 8),
